@@ -1,13 +1,11 @@
 package features
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cucumber/godog"
@@ -40,8 +38,11 @@ func (w *world) execStageMarkers() error {
 	e.argv = append([]string{"/workspace/exec-probe"}, "slice-38-argv-marker")
 	e.envExtra["SLICE_38_CALLER"] = "slice-38-env-marker"
 	e.execStdout, e.execStderr = "slice-38-stdout-marker deliberate stdout prefix\n", "slice-38-stderr-marker deliberate stderr prefix\n"
-	e.prefixObserved = make(chan struct{})
-	e.prefixOnce = sync.OnceFunc(func() { close(e.prefixObserved) })
+	var err error
+	e.frozenSnapshot, err = sessionReadRecord(w.sessionSnapshotPath())
+	if err != nil || e.frozenSnapshot.Bytes == "" {
+		return fmt.Errorf("missing original frozen snapshot: %v", err)
+	}
 	return w.execCaptureState("markers staged")
 }
 
@@ -59,7 +60,7 @@ func (w *world) execLaunchFaultFixture(fault string) error {
 	}
 	e := w.exec
 	e.launchFault, e.execExit = fault, 23
-	return w.execHoldOperationLock()
+	return nil
 }
 
 // execHoldOperationLock keeps the session's operation lock open through the
@@ -111,6 +112,11 @@ func (w *world) execLaunchFaultAttempts() error {
 		}
 	}
 	w.exec.launchFault = fault
+	if fault == "operation lock does not become available" {
+		if err := w.execHoldOperationLock(); err != nil {
+			return err
+		}
+	}
 	for _, backend := range []string{"memory", "disk"} {
 		request := execProbeRequest{Fault: fault}
 		if err := w.execInvoke(backend+"-attempt", backend, request); err != nil {
@@ -242,27 +248,15 @@ func (w *world) execControlStreams() error {
 	return w.execFrozenInputsUnchanged()
 }
 
-// execFrozenInputsUnchanged holds the two frozen snapshots byte for byte:
-// the approved snapshot file and the durable intent the session froze at
-// admission.
+// The immutable frozen snapshot survives a normal exit and a teardown.
+// Recovery updates the separate intent as it releases the worker.
 func (w *world) execFrozenInputsUnchanged() error {
-	snapshot, err := os.ReadFile(w.sessionSnapshotPath())
+	snapshot, err := sessionReadRecord(w.sessionSnapshotPath())
 	if err != nil {
 		return err
 	}
-	if strings.Contains(string(snapshot), "slice-38-") {
-		return fmt.Errorf("the frozen snapshot absorbed a synthetic marker")
-	}
-	intent, err := os.ReadFile(w.sessionRecordPath())
-	if err != nil {
-		return err
-	}
-	var record map[string]any
-	if err := json.Unmarshal(intent, &record); err != nil {
-		return err
-	}
-	if record["stage"] != "owned" || record["container_id"] != w.exec.worker {
-		return fmt.Errorf("the frozen intent lost its original binding: %s", intent)
+	if snapshot != w.exec.frozenSnapshot {
+		return fmt.Errorf("the original frozen snapshot changed")
 	}
 	return nil
 }
@@ -276,13 +270,13 @@ func (w *world) execMarkerExclusion() error {
 	for _, key := range sortedExecResultKeys(w.exec.results) {
 		b := w.exec.results[key]
 		r := b.result()
-		text := r.stdout + r.stderr
+		stdout, stderr := r.stdout, r.stderr
 		if w.eventPrefixStreams(key) {
-			text = strings.Replace(text, w.exec.execStdout, "", 1)
-			text = strings.Replace(text, w.exec.execStderr, "", 1)
+			stdout = strings.TrimPrefix(stdout, w.exec.execStdout)
+			stderr = strings.TrimPrefix(stderr, w.exec.execStderr)
 		}
 		for _, marker := range w.exec.markers {
-			if strings.Contains(text, marker) {
+			if strings.Contains(stdout, marker) || strings.Contains(stderr, marker) {
 				return fmt.Errorf("%s: controller diagnostics disclosed %s\n%s", key, marker, w.execReport(key))
 			}
 		}
@@ -312,7 +306,7 @@ func (w *world) execRunFreshStatus() error {
 	if w.exec.statusOut != "" || w.exec.statusErr != "" || w.exec.statusExit != 0 {
 		return nil
 	}
-	if err := w.runEnv(w.doctor.checkout, w.env(), w.bin, "status", "--json", w.exec.id); err != nil {
+	if err := w.runEnv(w.doctor.checkout, w.env(), w.bin, "status", "--json"); err != nil {
 		return err
 	}
 	w.exec.statusExit, w.exec.statusOut, w.exec.statusErr = w.exit, w.stdout, w.stderr

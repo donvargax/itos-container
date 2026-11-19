@@ -18,7 +18,7 @@ import (
 // command assembly's exec probe through both local backends, and a probe
 // that does not exist yet is captured as data for the behaviour assertions
 // in Then, which must fail first, never the setup.
-func (w *world) execSteps(sc *godog.ScenarioContext) {
+func (w *world) execSteps(sc lifecycleStepRegistrar) {
 	sc.Step(`^an exec admission fixture with condition "([^"]*)"$`, func(condition string) error {
 		return w.execFixture(condition)
 	})
@@ -94,7 +94,7 @@ func (w *world) execRefused(rule string, exit int) error {
 
 func (w *world) execRefusalUnchanged() error {
 	e := w.exec
-	after, err := w.sessionProtected()
+	after, err := w.execProtected()
 	if err != nil {
 		return err
 	}
@@ -354,7 +354,7 @@ func (w *world) execPrimaryUntouched() error {
 }
 
 func (w *world) execGrantUnchanged() error {
-	after, err := w.sessionProtected()
+	after, err := w.execProtected()
 	if err != nil {
 		return err
 	}
@@ -406,14 +406,24 @@ func (w *world) execFrozenSettingsUsed() error {
 			if q.Body["User"] != w.exec.frozenUser || q.Body["WorkingDir"] != w.exec.frozenWorkspace {
 				return fmt.Errorf("%s: exec did not use the frozen identity and workspace\n%s", backend, w.execReport(backend))
 			}
-			env := make([]string, 0, len(q.Body["Env"].([]any)))
-			for _, value := range q.Body["Env"].([]any) {
+			entries, ok := q.Body["Env"].([]any)
+			if !ok {
+				return fmt.Errorf("%s: exec create did not carry the frozen environment", backend)
+			}
+			env := make([]string, 0, len(entries))
+			for _, value := range entries {
 				env = append(env, fmt.Sprint(value))
 			}
 			if !execEnvEqual(env, w.exec.frozenEnv) {
 				return fmt.Errorf("%s: exec did not use exactly the frozen environment\n%s", backend, w.execReport(backend))
 			}
-			for _, key := range []string{"Privileged", "HostConfig", "NetworkMode", "Mounts", "DetachKeys"} {
+			if value := q.Body["Privileged"]; value != nil && value != false {
+				return fmt.Errorf("%s: exec requested elevated privileges", backend)
+			}
+			if value := q.Body["DetachKeys"]; value != nil && value != "" {
+				return fmt.Errorf("%s: exec requested detach keys", backend)
+			}
+			for _, key := range []string{"HostConfig", "NetworkMode", "Mounts"} {
 				if _, present := q.Body[key]; present {
 					return fmt.Errorf("%s: exec create carried %s", backend, key)
 				}

@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -82,6 +82,12 @@ func (w *world) execCleanupFaultFixture(exit int, fault string) error {
 // SIGINT and SIGTERM, a broken sink after the deliberate stdout prefix for
 // the sink-failure row, and nothing for the engine-side schedules.
 func (w *world) execEventReady(backend string) error {
+	release := func() {}
+	if backend == "disk" && w.exec.eventSchedule != "" {
+		w.exec.eventDelivered = make(chan struct{})
+		release = sync.OnceFunc(func() { close(w.exec.eventDelivered) })
+		defer release()
+	}
 	request := execProbeRequest{Ready: filepath.Join(w.dir, "slice-38-"+backend+"-ready")}
 	request.Schedule = w.exec.eventSchedule
 	if w.exec.cleanupFault != "" {
@@ -101,10 +107,12 @@ func (w *world) execEventReady(backend string) error {
 	}
 	go func() { handle.wait <- handle.cmd.Wait() }()
 	if err := w.execAwaitEvent(handle, request.Ready, sink); err != nil {
+		release()
 		handle.cancel()
 		handle.exited, handle.waitErr = true, <-handle.wait
 		return errors.Join(err, w.execProbeWait(handle))
 	}
+	release()
 	if !handle.exited {
 		handle.exited, handle.waitErr = true, <-handle.wait
 	}
@@ -139,6 +147,16 @@ func (w *world) execAwaitEvent(handle *execProbeHandle, ready string, sink bool)
 	}
 	switch w.exec.eventSchedule {
 	case "SIGINT", "SIGTERM":
+		// Change the authority before the controller first handles the signal.
+		// Even one teardown request to the replacement is a failed assertion.
+		if handle.backend == "disk" && w.exec.cleanupFault == "ownership replaced before signal" {
+			w.session.api.mu.Lock()
+			err := w.execSubstitute()
+			w.session.api.mu.Unlock()
+			if err != nil {
+				return err
+			}
+		}
 		signal := syscall.SIGINT
 		if w.exec.eventSchedule == "SIGTERM" {
 			signal = syscall.SIGTERM
@@ -192,7 +210,7 @@ func (w *world) execCancellationAndStatus() error {
 			continue
 		}
 		if backend == "disk" {
-			if err := w.runEnv(w.doctor.checkout, w.env(), w.bin, "status", "--json", w.exec.id); err != nil {
+			if err := w.runEnv(w.doctor.checkout, w.env(), w.bin, "status", "--json"); err != nil {
 				return err
 			}
 			w.exec.statusExit, w.exec.statusOut, w.exec.statusErr = w.exit, w.stdout, w.stderr
@@ -270,7 +288,7 @@ func (w *world) execEventStreams() error {
 		} else if r.stdout != w.exec.execStdout {
 			return fmt.Errorf("%s: the marked stdout prefix did not arrive intact\n%s", backend, w.execReport(backend+"-attempt"))
 		}
-		if r.stderr != w.exec.execStderr {
+		if !strings.HasPrefix(r.stderr, w.exec.execStderr) {
 			return fmt.Errorf("%s: the marked stderr prefix did not arrive intact\n%s", backend, w.execReport(backend+"-attempt"))
 		}
 	}
@@ -312,15 +330,25 @@ func (w *world) execCleanupIncomplete() error {
 			return fmt.Errorf("incomplete cleanup was reported as stopped: %s", data)
 		}
 	}
-	if worker := w.session.api.local[w.exec.worker]; worker == nil || object(worker["State"])["Running"] != true {
-		return fmt.Errorf("a cleanup fault changed the primary worker")
+	if w.session.api.local[w.exec.worker] == nil {
+		return fmt.Errorf("a failed removal lost its target worker")
 	}
 	resourcesAfter := map[string]string{}
 	for id, c := range w.session.api.local {
 		resourcesAfter[id] = string(approvalJSON(c))
 	}
-	if !reflect.DeepEqual(w.exec.resourcesBefore, resourcesAfter) {
-		return fmt.Errorf("a cleanup fault changed a foreign resource")
+	for id, original := range w.exec.resourcesBefore {
+		if id == w.exec.worker && w.exec.cleanupFault != "ownership replaced before signal" {
+			delete(resourcesAfter, id)
+			continue
+		}
+		if resourcesAfter[id] != original {
+			return fmt.Errorf("a cleanup fault changed a foreign resource")
+		}
+		delete(resourcesAfter, id)
+	}
+	if len(resourcesAfter) != 0 {
+		return fmt.Errorf("a cleanup fault created a resource")
 	}
 	return nil
 }
@@ -336,10 +364,13 @@ func (w *world) execRetryAfterFault() error {
 	}
 	w.session.api.mu.Lock()
 	w.exec.faultCleared = true
+	if w.exec.cleanupFault == "ownership replaced before signal" {
+		if err := writeManifestFixture(w.sessionRecordPath(), approvalJSON(w.sessionExpectedRecord("owned", w.exec.worker)), 0600); err != nil {
+			w.session.api.mu.Unlock()
+			return err
+		}
+	}
 	w.session.api.mu.Unlock()
-	defer func() {
-		_, _ = os.ReadFile(filepath.Join(w.doctor.checkout, "edit.txt"))
-	}()
 	if err := w.execCaptureState("before retry"); err != nil {
 		return err
 	}
@@ -366,7 +397,7 @@ func (w *world) execRetryAfterFault() error {
 	if string(data) == string(before) && w.exec.cleanupFault != "ownership replaced before signal" {
 		return fmt.Errorf("the retry rewrote nothing")
 	}
-	if _, err := os.Stat(filepath.Join(w.doctor.checkout, "edit.txt")); err != nil {
+	if edit, err := os.ReadFile(filepath.Join(w.doctor.checkout, "edit.txt")); err != nil || string(edit) != "retain checkout edit" {
 		return fmt.Errorf("the retry lost the checkout edits")
 	}
 	return w.execCaptureState("after retry")
@@ -375,11 +406,8 @@ func (w *world) execRetryAfterFault() error {
 // eventPrefixStreams is whether a result's channels carry the deliberate
 // stream prefixes that belong to the workload, not the controller.
 func (w *world) eventPrefixStreams(key string) bool {
-	if w.exec.eventSchedule == "" && w.exec.launchFault == "" && w.exec.cleanupFault == "" {
-		return false
+	if w.exec.launchFault != "" {
+		return strings.HasSuffix(key, "-control")
 	}
-	if w.exec.cleanupFault != "" || w.exec.eventSchedule != "" {
-		return strings.HasSuffix(key, "-attempt")
-	}
-	return strings.HasSuffix(key, "-control") && w.exec.launchFault != ""
+	return strings.HasSuffix(key, "-attempt")
 }

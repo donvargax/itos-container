@@ -6,11 +6,11 @@ package features
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cucumber/godog"
@@ -44,7 +44,6 @@ func (w *world) execCancellationSteps(sc *godog.ScenarioContext) {
 		}
 		e := w.exec
 		e.stopBoundary = boundary
-		e.stopReady, e.stopRelease = make(chan struct{}), make(chan struct{})
 		return nil
 	})
 	sc.Step(`^exec pauses and a separate stop completes before the exec continuation resumes through both local backends$`, w.execStopWinsRace)
@@ -107,40 +106,48 @@ func (w *world) execPrimaryUntouchedByCancellation() error {
 // its stop inside the assembly over the same port fakes; the disk backend's
 // stop is this harness's own invocation of the real stop command.
 func (w *world) execStopWinsRace() error {
-	release := sync.OnceFunc(func() { close(w.exec.stopRelease) })
-	for _, backend := range []string{"memory", "disk"} {
-		w.exec.stopSignaled = false
-		handle, err := w.execProbeStart(backend+"-attempt", backend, execProbeRequest{})
-		if err != nil {
-			return err
-		}
-		go func() { handle.wait <- handle.cmd.Wait() }()
+	if err := w.execInvoke("memory-attempt", "memory", execProbeRequest{}); err != nil {
+		return err
+	}
+	// The command assembly pauses after releasing its operation lock. Holding
+	// an HTTP create or start request would leave stop waiting on that lock.
+	request := execProbeRequest{
+		Ready:   filepath.Join(w.dir, "slice-38-exec-paused"),
+		Release: filepath.Join(w.dir, "slice-38-stop-finished"),
+	}
+	handle, err := w.execProbeStart("disk-attempt", "disk", request)
+	if err != nil {
+		return err
+	}
+	go func() { handle.wait <- handle.cmd.Wait() }()
+	tick := time.NewTicker(10 * time.Millisecond)
+	defer tick.Stop()
+	for {
 		select {
-		case <-w.exec.stopReady:
-			if backend == "disk" {
-				if err := w.execRunIndependentStop(); err != nil {
-					handle.exited, handle.waitErr = true, <-handle.wait
-					release()
-					return err
-				}
-			}
-			release()
-			handle.exited, handle.waitErr = true, <-handle.wait
 		case err := <-handle.wait:
-			// A probe without the exec command never pauses; its early exit is
-			// recorded as data and the behaviour assertions fail on it.
 			handle.exited, handle.waitErr = true, err
-		case <-time.After(20 * time.Second):
-			_ = handle.cmd.Process.Kill()
+			return w.execProbeWait(handle)
+		case <-tick.C:
+			data, err := os.ReadFile(request.Ready)
+			if os.IsNotExist(err) {
+				continue
+			}
+			if err == nil && string(data) != "ready" {
+				continue
+			}
+			if err == nil {
+				err = w.execRunIndependentStop()
+			}
+			if err == nil {
+				err = os.WriteFile(request.Release, []byte("release"), 0600)
+			}
+			if err != nil {
+				handle.cancel()
+			}
 			handle.exited, handle.waitErr = true, <-handle.wait
-			release()
-			return fmt.Errorf("%s: exec never reached its stop barrier", backend)
-		}
-		if err := w.execProbeWait(handle); err != nil {
-			return err
+			return errors.Join(err, w.execProbeWait(handle))
 		}
 	}
-	return nil
 }
 
 // execRunIndependentStop invokes the real stop command against the same

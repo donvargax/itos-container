@@ -38,7 +38,7 @@ type execProbeRequest struct {
 	Schedule            string
 	ExitObservation     string
 	CleanupFault        string
-	Ready               string
+	Ready, Release      string
 	FollowStatus        bool
 }
 
@@ -150,6 +150,9 @@ func (w *world) execProbeStartPumped(key, backend string, request execProbeReque
 	}
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = w.doctor.checkout
+	if w.exec.callerRoot != "" {
+		cmd.Dir = w.exec.callerRoot
+	}
 	cmd.Env = w.coverageEnv(sessionChildEnvironment(os.Environ()))
 	for name, value := range w.doctor.env {
 		cmd.Env = setEnv(cmd.Env, name, value)
@@ -157,7 +160,7 @@ func (w *world) execProbeStartPumped(key, backend string, request execProbeReque
 	for name, value := range w.exec.envExtra {
 		cmd.Env = setEnv(cmd.Env, name, value)
 	}
-	cmd.Env = setEnv(cmd.Env, "ITOS_ROOT", w.doctor.checkout)
+	cmd.Env = setEnv(cmd.Env, "ITOS_ROOT", cmd.Dir)
 	cmd.Env = setEnv(cmd.Env, "SLICE_38_EXEC_INPUT", input)
 	handle := &execProbeHandle{key: key, backend: backend, request: request, cmd: cmd, cancel: cancel, pre: pre, wait: make(chan error, 1)}
 	if sink {

@@ -195,6 +195,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 	w.runSteps(sc)
 	w.execInvocationSteps(sc)
 	w.execSteps(sc)
+	w.execNativeSteps(sc)
 	w.execCancellationSteps(sc)
 	w.execFaultSteps(sc)
 	w.execEventSteps(sc)

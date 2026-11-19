@@ -20,11 +20,13 @@ import (
 // exists it reports nothing, which the Then steps capture as missing
 // behaviour evidence, never as a setup failure.
 type execWorld struct {
+	native                           *nativeExec
 	condition, id, worker, leasePath string
+	callerRoot                       string
 	argv                             []string
 	stdin                            string
 	results                          map[string]execBackend
-	before, immutable                map[string]string
+	immutable                        map[string]string
 	resourcesBefore                  map[string]string
 	lease                            *execLease
 	restore                          []func()
@@ -37,19 +39,17 @@ type execWorld struct {
 	execStdout, execStderr           string
 	event, boundary                  string
 	stopBoundary                     string
-	stopReady, stopRelease           chan struct{}
-	stopSignaled                     bool
 	independentStopExit              int
 	markers                          []string
 	launchFault                      string
 	eventSchedule                    string
+	eventDelivered                   chan struct{}
 	exitObservation                  string
 	cleanupFault                     string
 	markedDelivered                  int
 	faultCleared                     bool
 	captures                         []map[string]string
-	prefixObserved                   chan struct{}
-	prefixOnce                       func()
+	frozenSnapshot                   sessionRecord
 	opLockLease                      *execLease
 	statusExit                       int
 	statusOut, statusErr             string
@@ -148,24 +148,10 @@ func (w *world) execAdmissionCondition(condition string) error {
 		e.id = e.worker
 	case "another project with same basename":
 		other := filepath.Join(w.dir, "slice-38-other-project", filepath.Base(w.doctor.checkout))
-		if err := os.MkdirAll(other, 0700); err != nil {
+		if err := w.writeDoctorCheckout(other); err != nil {
 			return err
 		}
-		key := w.execIndexKey(other)
-		dir := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container", "sessions", key, e.id)
-		if err := os.MkdirAll(dir, 0700); err != nil {
-			return err
-		}
-		record := map[string]any{"schema": 1, "id": e.id, "project": w.approval.project, "intent": w.session.reference,
-			"state": "running", "workload_exit": nil, "last_problem": nil}
-		if err := os.WriteFile(filepath.Join(dir, "record.json"), approvalJSON(record), 0600); err != nil {
-			return err
-		}
-		for _, name := range []string{"controller.lock", "operation.lock"} {
-			if err := os.WriteFile(filepath.Join(dir, name), nil, 0600); err != nil {
-				return err
-			}
-		}
+		e.callerRoot = other
 	case "different effective host user":
 		intent := w.sessionExpectedRecord("owned", e.worker)
 		uid, _ := strconv.Atoi(w.approval.uid)
@@ -235,12 +221,6 @@ func (w *world) execAdmissionCondition(condition string) error {
 func (w *world) execSnapshotText() string {
 	a := w.approval
 	return string(approvalJSON(map[string]any{"schema": 1, "project": a.project, "generation": "1", "fingerprint": a.fingerprint, "settings": a.settings}))
-}
-
-// execIndexKey is the protected session index key of an arbitrary checkout,
-// encoded independently of the product's own lookup.
-func (w *world) execIndexKey(checkout string) string {
-	return approvalHash(map[string]any{"index": w.approval.uid, "checkout": checkout})
 }
 
 // execHoldLease keeps an exclusive advisory lock on the session's controller
@@ -430,22 +410,29 @@ func execWatchPaths(paths ...string) (*sessionReadWatch, error) {
 // successful or refused exec must leave alone.
 func (w *world) execCaptureBefore() error {
 	var err error
-	w.exec.before, err = w.sessionProtected()
+	w.exec.immutable, err = w.execProtected()
 	if err != nil {
 		return err
-	}
-	w.exec.immutable = map[string]string{}
-	for path, value := range w.exec.before {
-		if path == w.exec.leasePath {
-			continue
-		}
-		w.exec.immutable[path] = value
 	}
 	w.exec.resourcesBefore = map[string]string{}
 	for id, c := range w.session.api.local {
 		w.exec.resourcesBefore[id] = string(approvalJSON(c))
 	}
 	return nil
+}
+
+// sessionProtected ordinarily excludes the live intent that run creates.
+// Exec refusal and normal exit must preserve this existing intent as well.
+func (w *world) execProtected() (map[string]string, error) {
+	tree, err := w.sessionProtected()
+	if err != nil {
+		return nil, err
+	}
+	record, err := sessionReadRecord(w.sessionRecordPath())
+	if err == nil {
+		tree[w.sessionRecordPath()] = string(approvalJSON(record))
+	}
+	return tree, err
 }
 
 func (w *world) execSubstitutionArmed() bool {

@@ -1,7 +1,10 @@
 package features
 
 import (
+	"encoding/binary"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -19,7 +22,6 @@ func (a *sessionAPI) serveExecCreate(out http.ResponseWriter, request *http.Requ
 		http.Error(out, "session fixture refuses request "+doctorCanary, http.StatusForbidden)
 		return
 	}
-	a.execStopBarrier()
 	id := strings.TrimSuffix(strings.TrimPrefix(entry.Path, "/containers/"), "/exec")
 	if a.w.doctor.real == nil && id != a.w.exec.worker {
 		a.requests[index].Status = http.StatusForbidden
@@ -39,11 +41,11 @@ func (a *sessionAPI) serveExecCreate(out http.ResponseWriter, request *http.Requ
 		switch e.launchFault {
 		case "create accepted but response lost":
 			a.requests[index].Status = http.StatusOK
-			a.hijackClose(out, request)
+			a.hijackClose(out)
 			return
 		case "create ignores cancellation past ten seconds", "original 120-second startup budget expires before start":
 			a.requests[index].Status = http.StatusOK
-			a.hijackUntilGone(out, request)
+			a.hijackUntilGone(out)
 			return
 		}
 	}
@@ -53,10 +55,10 @@ func (a *sessionAPI) serveExecCreate(out http.ResponseWriter, request *http.Requ
 		"AttachStdin": body["AttachStdin"], "AttachStdout": body["AttachStdout"], "AttachStderr": body["AttachStderr"],
 		"Tty": body["Tty"], "ExitCode": nil, "ExitPresent": false}
 	if e := a.w.exec; e != nil {
-		if e.execLie == "returned exec belongs to another container" {
+		if e.substituteAuthority != "" && e.execLie == "returned exec belongs to another container" {
 			instance["Container"] = strings.Repeat("f", 64)
 		}
-		if e.execLie == "returned exec ID differs from the created ID" {
+		if e.substituteAuthority != "" && e.execLie == "returned exec ID differs from the created ID" {
 			instance["ID"] = approvalHash(map[string]any{"slice-38-lying-exec": execID})
 		}
 		programme := []any{}
@@ -121,7 +123,6 @@ func (a *sessionAPI) serveExec(out http.ResponseWriter, request *http.Request, e
 			http.Error(out, "session fixture refuses request "+doctorCanary, http.StatusForbidden)
 			return
 		}
-		a.execStopBarrier()
 		if e := a.w.exec; e != nil {
 			// Launch faults on the start mutation: an accepted start whose
 			// attach stream is lost, a marked API error, and a start reply
@@ -132,7 +133,7 @@ func (a *sessionAPI) serveExec(out http.ResponseWriter, request *http.Request, e
 			case "start accepted but attach response lost":
 				a.requests[index].Status = http.StatusOK
 				instance["Running"] = true
-				a.hijackClose(out, request)
+				a.hijackClose(out)
 				return
 			case "start accepted but marked API error returned":
 				a.requests[index].Status = http.StatusInternalServerError
@@ -142,12 +143,12 @@ func (a *sessionAPI) serveExec(out http.ResponseWriter, request *http.Request, e
 			case "start ignores cancellation past ten seconds":
 				a.requests[index].Status = http.StatusOK
 				instance["Running"] = true
-				a.hijackUntilGone(out, request)
+				a.hijackUntilGone(out)
 				return
 			}
 		}
-		a.requests[index].Status = http.StatusOK
-		a.execStart(out, request, instance)
+		a.requests[index].Status = http.StatusSwitchingProtocols
+		a.execStart(out, instance)
 	case strings.HasSuffix(id, "/json") && entry.Method == "GET":
 		instance, known := a.execs[strings.TrimSuffix(id, "/json")]
 		if !known {
@@ -157,7 +158,10 @@ func (a *sessionAPI) serveExec(out http.ResponseWriter, request *http.Request, e
 		}
 		observed := approvalClone(instance)
 		running, _ := observed["Running"].(bool)
-		exit := map[string]any{"ID": observed["ID"], "Running": running, "Container": observed["Container"], "ProcessConfig": map[string]any{"argv": observed["Cmd"], "environment": observed["Env"]}}
+		exit := map[string]any{"ID": observed["ID"], "Running": running, "ContainerID": observed["Container"]}
+		if len(a.w.exec.markers) != 0 {
+			exit["fixture_detail"] = "slice-38-api-body-marker"
+		}
 		if present, _ := observed["ExitPresent"].(bool); present {
 			if code, ok := observed["ExitCode"]; ok {
 				exit["ExitCode"] = code
@@ -178,42 +182,52 @@ func (a *sessionAPI) serveExec(out http.ResponseWriter, request *http.Request, e
 // execStart hijacks the connection and streams the instance's programmed
 // output as stdcopy frames, then settles its exit observation. The event the
 // row schedules may cut the attachment short after the deliberate prefix.
-func (a *sessionAPI) execStart(out http.ResponseWriter, request *http.Request, instance map[string]any) {
+func (a *sessionAPI) execStart(out http.ResponseWriter, instance map[string]any) {
 	hijacker, ok := out.(http.Hijacker)
 	if !ok {
-		a.problem = errString("session fixture cannot hijack exec stream")
+		a.problem = errors.New("session fixture cannot hijack exec stream")
 		return
 	}
-	conn, _, err := hijacker.Hijack()
+	conn, buffered, err := hijacker.Hijack()
 	if err != nil {
-		a.problem = errString(err.Error())
+		a.problem = err
+		return
+	}
+	_, err = buffered.WriteString("HTTP/1.1 101 UPGRADED\r\nConnection: Upgrade\r\nUpgrade: tcp\r\nContent-Type: application/vnd.docker.raw-stream\r\n\r\n")
+	if err == nil {
+		err = buffered.Flush()
+	}
+	if err != nil {
+		a.problem = err
+		_ = conn.Close()
 		return
 	}
 	instance["Running"] = true
 	event := a.w.exec.eventSchedule
-	prefix := func() bool {
-		if e := a.w.exec; e != nil && e.prefixOnce != nil {
-			e.prefixOnce()
-		}
-		return event == ""
-	}
+	delivered := a.w.exec.eventDelivered
+	streams := a.execProgrammedStreams(instance)
 	go func() {
 		defer func() { _ = conn.Close() }()
-		for _, stream := range a.execProgrammedStreams(instance) {
+		for _, stream := range streams {
 			frame := make([]byte, 8)
 			frame[0] = stream[0]
-			putUint32(frame[4:], uint32(len(stream)-1))
+			binary.BigEndian.PutUint32(frame[4:], uint32(len(stream)-1))
 			_, _ = conn.Write(append(frame, stream[1:]...))
 		}
-		if prefix() {
+		if event == "" {
 			a.settleExec(instance)
 			return
 		}
+		if delivered != nil {
+			<-delivered
+		}
 		switch event {
-		case "attachment transport lost":
-			// The engine's side of the attachment dies after the prefix; the
-			// controller observes a lost attachment, not an exit.
-			return
+		case "output sink failure":
+			// Force a write after the harness has broken the sink.
+			_, _ = conn.Write([]byte{1, 0, 0, 0, 0, 0, 0, 1, 'x'})
+			a.settleExec(instance)
+		case "SIGINT", "SIGTERM":
+			a.settleExec(instance)
 		case "primary exit and exec removed before inspection":
 			a.mu.Lock()
 			delete(a.local, a.w.exec.worker)
@@ -266,32 +280,29 @@ func (a *sessionAPI) deliverMarked(out http.ResponseWriter, status int) {
 }
 
 // hijackClose accepts the request and drops the connection without a reply.
-func (a *sessionAPI) hijackClose(out http.ResponseWriter, request *http.Request) {
+func (a *sessionAPI) hijackClose(out http.ResponseWriter) {
 	conn, _, err := out.(http.Hijacker).Hijack()
 	if err != nil {
-		a.problem = errString(err.Error())
+		a.problem = err
 		return
 	}
 	_ = conn.Close()
-	<-request.Context().Done()
 }
 
 // hijackUntilGone accepts the request and holds the reply open until the
 // controller abandons the connection, so its cancellation deadline expires
 // against an answer that never comes.
-func (a *sessionAPI) hijackUntilGone(out http.ResponseWriter, request *http.Request) {
+func (a *sessionAPI) hijackUntilGone(out http.ResponseWriter) {
 	conn, _, err := out.(http.Hijacker).Hijack()
 	if err != nil {
-		a.problem = errString(err.Error())
+		a.problem = err
 		return
 	}
 	defer func() { _ = conn.Close() }()
-	timer := time.NewTimer(2 * time.Minute)
-	defer timer.Stop()
-	select {
-	case <-request.Context().Done():
-	case <-timer.C:
-	}
+	a.mu.Unlock()
+	defer a.mu.Lock()
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Minute))
+	_, _ = io.Copy(io.Discard, conn)
 }
 
 // serveExecKill applies a signal to the owned worker: the local fixture has
@@ -307,12 +318,6 @@ func (a *sessionAPI) serveExecKill(out http.ResponseWriter, entry sessionRequest
 	}
 	if e := a.w.exec; e != nil && !e.faultCleared {
 		switch e.cleanupFault {
-		case "ownership replaced before signal":
-			if a.w.execSubstitutionArmed() {
-				if err := a.w.execSubstitute(); err != nil {
-					a.problem = err
-				}
-			}
 		case "engine unavailable through teardown deadline":
 			a.requests[index].Status = http.StatusServiceUnavailable
 			e.markedDelivered++
@@ -324,35 +329,15 @@ func (a *sessionAPI) serveExecKill(out http.ResponseWriter, entry sessionRequest
 		object(c["State"])["Status"] = "exited"
 		object(c["State"])["Running"] = false
 	}
+	for _, instance := range a.execs {
+		if instance["Running"] == true && instance["Container"] == id {
+			instance["Running"] = false
+			if a.w.exec.exitObservation == "23" || a.w.exec.exitObservation == "0" {
+				instance["ExitPresent"] = true
+				instance["ExitCode"] = instance["programmedExit"]
+			}
+		}
+	}
 	a.requests[index].Status = http.StatusNoContent
 	out.WriteHeader(http.StatusNoContent)
-}
-
-// execStopBarrier pauses an exec transition so an independent stop can
-// complete first. The handler releases the recorder's lock while it waits:
-// the stop's own requests must reach the fixture.
-func (a *sessionAPI) execStopBarrier() {
-	e := a.w.exec
-	if e == nil || e.stopBoundary == "" || e.stopReady == nil || e.stopSignaled {
-		return
-	}
-	e.stopSignaled = true
-	ready, release := e.stopReady, e.stopRelease
-	a.mu.Unlock()
-	close(ready)
-	<-release
-	a.mu.Lock()
-}
-
-func errString(text string) error { return &execFixtureError{text} }
-
-type execFixtureError struct{ message string }
-
-func (e *execFixtureError) Error() string { return e.message }
-
-func putUint32(data []byte, value uint32) {
-	data[0] = byte(value >> 24)
-	data[1] = byte(value >> 16)
-	data[2] = byte(value >> 8)
-	data[3] = byte(value)
 }
