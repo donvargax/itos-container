@@ -2357,17 +2357,13 @@ items:
       The existing item covers this exact gap. The approvalProblem step should fail if an approval
       or hardlink prerequisite refusal prompts for consent, even when the diagnostic and exit code
       are correct.
-  - id: p1-detect-checkout-socket-backend
+  - id: T-64
     title: Detect the available checkout socket backend
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      Give doctor, approve and run one shared selection rule. Prefer Landlock ABI 9 or later, then
-      an available runsc runtime. Test both backends, confirmed absence and failed detection through
-      the engine port and its adapters. Broken down from p1-checkout-socket-kernel-enforcement.
+    kind: task
   - id: p1-build-landlock-worker-init
     title: Build the trusted Landlock worker init
     phase: 1
@@ -2384,7 +2380,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-detect-checkout-socket-backend]
+    depends_on: [T-64]
     kind: idea
     why: >
       Let the person see which backend a run would use before approving it. Cover Landlock, gVisor
@@ -2395,7 +2391,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-detect-checkout-socket-backend]
+    depends_on: [T-64]
     kind: idea
     why: >
       Show the selected backend during review and record it in the approval. When neither backend is
