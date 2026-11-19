@@ -2421,3 +2421,16 @@ items:
       Launch and verify the worker under runsc when Landlock ABI 9 is unavailable. Prove
       ID-SOCKETS-02 and ID-SOCKETS-03 in hosted CI with their positive controls, and verify that a
       runsc failure stops startup. Broken down from p1-checkout-socket-kernel-enforcement.
+  - id: p1-runtty-22-late-sighup-fixture
+    title: Make ID-RUNTTY-22 deliver SIGHUP during owned teardown
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The fixture failed on slice-37 and again during T-64’s required coverage run, blocking proof
+      for charter step 5, late host socket protection. Wait for an observable post-start event
+      before closing the client terminal, then deliver SIGHUP once the fixture observes teardown of
+      the owned worker. The scenario must still report the disconnect, return workload exit 17,
+      attempt terminal restoration and complete cleanup.
