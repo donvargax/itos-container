@@ -86,6 +86,34 @@ func TestDecodeRejectsInvalidJSONTokens(t *testing.T) {
 	}
 }
 
+func TestHomeOfflineApprovalPreservesSupportedPolicyVersions(t *testing.T) {
+	codec := JSON{}
+	base := codec.Candidate(porttest.Ready(), "2000", "3000")
+	for _, requested := range []bool{false, true} {
+		for version := 0; version <= 4; version++ {
+			var s settings
+			if err := json.Unmarshal([]byte(base.Canonical), &s); err != nil {
+				t.Fatal(err)
+			}
+			s.Policy.Version = version
+			if requested {
+				s.Profile = "offline-home-v1"
+				s.Home = &home{Storage: "volume", Target: "/home/itos", Lifetime: "project", Mode: "0700"}
+			}
+			c := candidate(s)
+			record := port.Record{Candidate: c, Generation: "1"}
+			got, failure := codec.Decode(c, codec.Encode(record))
+			if version >= 1 && version <= 3 {
+				if failure != "" || got != record {
+					t.Fatal("supported offline approval refused", requested, version, failure)
+				}
+			} else if failure != "state.invalid" || got != (port.Record{}) {
+				t.Fatal("unsupported policy version accepted", requested, version, failure)
+			}
+		}
+	}
+}
+
 func TestDecodeRejectsSelfConsistentInvalidProfile(t *testing.T) {
 	testRejectsSelfConsistentInvalidSettings(t, func(s *settings) { s.Profile = "other" })
 }

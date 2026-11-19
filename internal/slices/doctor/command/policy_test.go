@@ -121,3 +121,17 @@ func TestOfflinePolicyHasNoAllowLine(t *testing.T) {
 		t.Fatalf("stdout %q", stdout.String())
 	}
 }
+
+func TestPolicyPlainHomeStorageAndRefusal(t *testing.T) {
+	var out, diagnostic bytes.Buffer
+	ui := cli.UI{Stdout: &out, Stderr: &diagnostic}
+	result := port.Result{Policy: &port.Policy{Version: 1, Manifest: "a.json", Network: port.Network{Mode: "offline"}, Home: &port.Home{Storage: "volume"}}}
+	if code := presentPolicy(&ui, result, false); code != 0 || !strings.Contains(out.String(), "home.storage: volume\n") {
+		t.Fatal(code, out.String())
+	}
+	out.Reset()
+	diagnostic.Reset()
+	if code := presentPolicy(&ui, port.Result{Issues: []port.Issue{{Kind: port.HomeStorage, Path: []string{"home", "storage"}}}}, false); code != 2 || !strings.Contains(diagnostic.String(), "use home.storage volume, or omit home") {
+		t.Fatal(code, diagnostic.String())
+	}
+}

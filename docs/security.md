@@ -40,7 +40,47 @@ Continuous enforcement is deferred to milestone 2 under
 [decision](decisions/0019-checkout-socket-milestone-limit.md) and
 [Landlock/gVisor research](plans/checkout-socket-enforcement.md).
 
+## Allowlist egress and its limits
+
+An approved allowlist run uses an isolated internal IPv4 bridge with no gateway.
+The worker joins only that network; the proxy joins it and an owned egress bridge.
+Its HTTP proxy variables are conveniences, while network isolation must prevent
+direct routes independently of client cooperation. The controller verifies each
+created resource before starting the worker and never falls back to another route.
+Doctor and approve inspect both cached images and the installed static Linux amd64
+controller outside the checkout. They never pull an image or execute a helper.
+
+Status derives the grant from each session's validated original snapshot, even
+when current requests or approval change or disappear. It names allowlist-v1 and
+its original canonical names, for completed sessions too. Offline entries omit
+the egress object. Approval, status and this document disclose the same limits:
+
+- No TLS interception: the proxy verifies the CONNECT name and the first ClientHello's SNI.
+- It cannot see the HTTP Host inside TLS or anything after that hello, a second hello after a HelloRetryRequest included, so fronting remains a limit, as does a hello the upstream reads differently, and it cannot stop data sent to an allowed service.
+- Clients that omit SNI or send ECH, and SSH over 443, are refused.
+- The proxy logs each refusal, but a stored log is no proof that every refusal was kept: a log that ends early reads as a complete one.
+
+The proxy config ID observed at launch is execution evidence stored beside the
+protected intent, independently of the approved proxy manifest digest. Recovery
+requires that original observation and never derives it from current policy,
+approval or a replacement cached image. The snapshot and fingerprint do not change.
+Cleanup stops the worker and proxy, streams the refusal log into the protected
+session directory, then removes the proxy, networks and anchor. A failed copy
+retains the stopped proxy and its log for recovery. Slice-28 owns the additional
+native proxy-failure and log-gap reporting proof. None of this closes the late
+checkout Unix-socket gap described above.
+
 ## Approval boundary
+
+The opt-in harness-home profile retains a named volume for one checkout
+until a person consents at a terminal to its reset or deletion. What a run leaves
+there, including harness settings, hooks and session files, is hostile worker
+data that the next run of the same checkout starts with. Its scope is bounded to
+that checkout; the consented reset removes it. Persistence does not confer host
+approval or recovery authority. Local memory and disk/SDK fixtures exercise the
+ownership and recovery decisions; native CI evidence is required before claiming
+container isolation or filesystem behavior;
+see [decision 0030](decisions/0030-persistent-harness-home.md).
 
 [Slice-4's approval scenarios](../features/approval.feature) exercise the implemented
 approval flow with temporary host state and a synthetic Engine API. The host identity is
@@ -54,11 +94,10 @@ a hash. Without a terminal, bare approve refuses and names the optional
 `--fingerprint <value>` route only for offline grants without credentials. `doctor`
 prints the fingerprint; for those grants the option approves only matching settings.
 Under q-52 an egress allowlist or credential grant requires the person at a real
-terminal. Allowlist approval refuses every `--fingerprint`, even a matching value or
+terminal. Network and credential approval refuse every `--fingerprint`, even a matching value or
 an already-approved request, with `approve.terminal-required` and a fix naming bare
 `itos container approve` at a terminal. Bare nonterminal or JSON requests retain
-`approve.confirmation-required` and name only that interactive form. Credential grant
-support will extend the same rule when it lands. Unchanged terminal approvals do not
+`approve.confirmation-required` and name only that interactive form. Unchanged terminal approvals do not
 prompt again; approval is asked again only when the settings fingerprint changes.
 
 Approval's plain review, differences and status, including the effective settings
@@ -74,9 +113,37 @@ route remains available for offline grants without credentials. This is the rema
 host-agent limitation after q-52, rather than permission to automate network consent.
 
 Allowlist approval binds the canonical names, `allowlist-v1` profile and pinned proxy
-image, and reviews the handshake and refusal-log limits. Run still refuses every
-version 2 policy, including an approved one. These records and local fixture tests
-provide no new runtime enforcement evidence.
+image, and reviews the handshake and refusal-log limits. A matching version-2 grant
+now starts the owned proxy and its networks before the worker. Existing matching
+allowlist-v1 records remain valid without a new prompt. Local fixture tests cover
+the wiring; the real-engine scenarios in CI must pass at the pushed head before
+claiming runtime enforcement.
+
+Credential approval binds sorted kinds, literal sources and fixed targets, never credential
+contents or their hashes. Adding, removing or repointing a grant requires fresh consent;
+valid content rotation at the same path does not. Metadata is checked before and after
+engine inspection and after consent, including remembered grants. The policy root's
+pinned device and inode must match the independent source walk's checkout node. The
+shared filesystem rule accepts only ext4, btrfs and xfs; all other types, including NFS
+and 9p, refuse. Root and selected-state text above 4095 bytes refuses before source
+observation with a diagnostic naming that boundary and limit.
+
+The credential review and help describe prospective exposure. Each listed file will be
+readable by the worker; approval does not restrict token provider permissions. Delivery
+will copy current source bytes into memory-backed staging retained until that worker's
+teardown and never write the original. Workload output and traffic are not redacted.
+An allowlisted host can receive credential bytes. A refused hostname can itself contain
+credential bytes and is retained in proxy and host refusal logs; credential absence from
+those logs is not established. Approval help makes these limits visible before a grant
+is reviewed. **Delivery is still unavailable:** run refuses version 3 before manifest,
+engine or host-state access, even for approved settings or no-grant version-3 policies.
+
+Status shows only a session's validated protected frozen grants, without reading current
+requests, active approval or source data. It cannot repair missing grants from current
+requests. Seeded historical sessions prove presentation, not successful delivery. These
+metadata observations do not prove atomic host state or continuous protection from
+trusted-host transient changes. [Decision 0029](decisions/0029-credential-approval.md)
+records the integration and remaining run handoff.
 
 The fingerprint is SHA-256 of canonical effective JSON. Approval records
 live under `$XDG_STATE_HOME/itos-container` (default `$HOME/.local/state/itos-container`),

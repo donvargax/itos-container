@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"strconv"
+	"strings"
 
 	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
 	manifest "github.com/donvargax/itos-container/internal/engine/manifest/port"
@@ -34,12 +35,24 @@ func (j JSON) Decode(data []byte) (port.Record, port.Outcome) {
 	if value.Fields["schema"].Kind != manifest.Number {
 		return bad()
 	}
-	switch value.Fields["schema"].Text {
-	case "1":
-		if len(value.Fields) != 14 {
+	homeFields := 0
+	if h, exists := value.Fields["home"]; exists {
+		homeFields = 1
+		if h.Kind != manifest.Object || len(h.Fields) != 4 {
 			return bad()
 		}
-	case "2", "3":
+		for _, key := range []string{"id", "scope", "name", "created"} {
+			if h.Fields[key].Kind != manifest.String {
+				return bad()
+			}
+		}
+	}
+	switch value.Fields["schema"].Text {
+	case "1":
+		if len(value.Fields) != 14+homeFields {
+			return bad()
+		}
+	case "2", "3", "4":
 		a := value.Fields["anchor"]
 		count := 15
 		if value.Fields["schema"].Text == "3" {
@@ -48,7 +61,19 @@ func (j JSON) Decode(data []byte) (port.Record, port.Outcome) {
 				return bad()
 			}
 		}
-		if len(value.Fields) != count || a.Kind != manifest.Object || len(a.Fields) != 7 {
+		if value.Fields["schema"].Text == "4" {
+			count = 16
+			if !credentialFields(value.Fields["credentials"]) {
+				return bad()
+			}
+			if e, ok := value.Fields["egress"]; ok {
+				count++
+				if !egressFields(e) {
+					return bad()
+				}
+			}
+		}
+		if len(value.Fields) != count+homeFields || a.Kind != manifest.Object || len(a.Fields) != 7 {
 			return bad()
 		}
 		for _, k := range []string{"session", "name", "source", "device", "inode", "created", "stage"} {
@@ -66,10 +91,13 @@ func (j JSON) Decode(data []byte) (port.Record, port.Outcome) {
 	if !port.HexID(record.Project) || !port.HexID(record.NameToken()) {
 		return bad()
 	}
+	if homeFields != 0 && !record.Home.Valid() {
+		return bad()
+	}
 	if record.Schema >= 2 {
 		b := port.Binding{}
 		b.Checkout.Device, b.Checkout.Inode = record.Anchor.Device, record.Anchor.Inode
-		if !record.ValidAnchor(b) || !record.ValidEgressShape() {
+		if !record.ValidAnchor(b) || !record.ValidEgressShape() || !record.CredentialShape() {
 			return bad()
 		}
 		if (record.Stage == "intent" || record.Stage == "owned") && record.Anchor.Stage != "owned" {
@@ -118,7 +146,8 @@ func (j JSON) Snapshot(data []byte) (port.Binding, port.Outcome) {
 }
 func binding(r approval.Record, f approval.Frozen) port.Binding {
 	var settings struct {
-		Checkout struct {
+		Credentials []approval.CredentialGrant
+		Checkout    struct {
 			Root, Device, Inode string
 			GitDevice           string `json:"git_device"`
 			GitInode            string `json:"git_inode"`
@@ -129,11 +158,25 @@ func binding(r approval.Record, f approval.Frozen) port.Binding {
 			WorkspaceFolder string          `json:"workspaceFolder"`
 			ContainerEnv    json.RawMessage `json:"containerEnv"`
 		}
+		Profile string
+		Home    *struct{ Storage string }
+		Policy  struct {
+			Network struct {
+				Mode  string
+				Allow []string
+			}
+		}
 	}
 	_ = json.Unmarshal([]byte(r.Canonical), &settings)
 	b := port.Binding{Frozen: f, UID: r.UID, GID: r.GID, Endpoint: settings.Engine.Endpoint, EngineID: settings.Engine.ID, ImageReference: settings.Image.Reference, ImageID: settings.Image.ID}
+	copy(b.Credentials[:], settings.Credentials)
+	b.CredentialNetwork = settings.Policy.Network.Mode == "allowlist" && len(settings.Credentials) > 0
 	b.Checkout.Root, b.Checkout.Device, b.Checkout.Inode = settings.Checkout.Root, settings.Checkout.Device, settings.Checkout.Inode
 	b.Checkout.GitDevice, b.Checkout.GitInode = settings.Checkout.GitDevice, settings.Checkout.GitInode
 	b.Workspace, b.Environment = settings.Manifest.WorkspaceFolder, string(settings.Manifest.ContainerEnv)
+	b.Home = settings.Home != nil
+	if settings.Profile == "allowlist-v1" || settings.Profile == "allowlist-home-v1" {
+		b.Egress.Names = strings.Join(settings.Policy.Network.Allow, "\n")
+	}
 	return b
 }

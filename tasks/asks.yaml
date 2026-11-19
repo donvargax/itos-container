@@ -287,3 +287,66 @@ questions:
     item: "slice-27"
     question: "slice-27: its implementer (attempt 3) stopped saying the T-51 refusal-log writer and the p1-acceptance-static-binary prerequisite are still unowned. Are they?"
     answer: "No (the coordinator, on the person's instruction, 2026-11-16). Every dependency of slice-27 is done and on main: slice-26, T-39, T-40, T-51 (the disk adapter that streams the proxy's log into egress-refusals.jsonl) and T-52, which is p1-acceptance-static-binary promoted (merged b56572e). The branch merged main after both. slice-27 goes on with its runtime implementation; the red evidence of run 43531516406 for ID-EGRESS-12 to 19 stands."
+  - id: q-72
+    item: "slice-32"
+    question: "slice-32: the drafter (attempt 1) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-32-drafter-1.result.json"
+    answer: "A dedicated host directory holding only auth.json, mounted read-write as a directory (the coordinator, on the person's standing instruction, 2026-11-16, for the person to ratify; decision 0025's question 1, and the charter's step 2 is amended to match). A rename over auth.json on either side is then seen by the other; the host's Codex reaches the directory through a symlink the person sets up, and the lock file is shared too. It is the option that keeps the person's decision of 2026-11-06: the host's existing login shared read-write, never a login per container, the exposure and corruption risk accepted. Not chosen: pinning an old Codex, a worker login or API key, copy in and back. slice-32's spec owes a real-engine scenario with a synthetic rename-replacing writer on each side, what approval binds, and the controller's checks against a symlink or non-regular file planted as auth.json, with the window that remains disclosed in docs/security.md. Real credentials stay barred until question 5 is answered."
+  - id: q-73
+    item: "slice-34"
+    question: "slice-34: the implementer (attempt 1) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-34-implementer-1.result.json"
+    answer: "The per-checkout persistent volume that decision 0028 proposes, with reset and delete only by terminal consent (the coordinator, on the person's standing instruction, 2026-11-16, for the person to ratify). The charter's step 3 permits a volume or a tmpfs; a tmpfs discards the harness's session state when each run ends, and keeping it so a session can be resumed is what the home is for. The limit to disclose in docs/security.md: what a run leaves in the home is hostile worker data the next run of the same checkout starts with, bounded to that checkout's scope and removed by the consented reset. slice-34 implements HOME-01 to 24 as drafted."
+  - id: q-74
+    item: "slice-27"
+    question: "slice-27: the implementer (attempt 6) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-27-implementer-6.result.json"
+    answer: "No (the coordinator, on the person's standing instruction, 2026-11-16). The engine warm-up is T-54's, which is in progress on its own pull request; it is not unowned and stays out of slice-27. slice-27's runs at e2301b9 are red only on the slow first create (ID-OFFLINE-29 and ID-ANCHORS-09, every egress row passing), and those jobs are re-run. slice-27 changes nothing for it."
+  - id: q-75
+    item: "T-54"
+    question: "T-54: the implementer (attempt 2) needs a decision before it can go on; the question and its options are in .git/itos/loop/T-54-implementer-2.result.json"
+    answer: "The warm-up exercises the product's own create; no limit moves (the coordinator, on the person's standing instruction, 2026-11-16). In run 43788741012 at 7c1a6ab the plain warm-up create took 70, 430 and 80 ms on the three shards, and ID-OFFLINE-29 still failed with create forward-to-answer 0.989 s: a plain create is fast, so the cost is the first create of the shape the product sends. T-54 warms with a throwaway product run under production limits, or a create carrying the product's request shape, and prints the plain and the product-shaped timings side by side. ID-LIFECYCLE-12's failure in that run is a separate transport-loss race, not T-54's."
+  - id: q-76
+    item: "slice-34"
+    question: "slice-34: its implementer (attempt 2) stopped for engine red evidence of @ID-HOME-13. Does the dispatched run supply it?"
+    answer: "Not yet (the coordinator, 2026-11-16). Run 43791198654 at 9f892b6, dispatched with red_scenarios=@ID-HOME-13, excluded the scenario in all three engine shards as belonging to another shard: features/harness-home.feature is in no shard's feature list, and TestEngineShards fails on every platform for the same reason. slice-34 first assigns the feature to an engine shard with the inventory pins, in its own ci commit, then stops again for the red run, which the coordinator dispatches."
+  - id: q-77
+    item: "slice-30"
+    question: "slice-30: its implementer (attempt 5) finished the implementation and stopped before committing it, on gosec G101 findings against the disclosure sentences in internal/engine/approval/port/credentials.go. May those lines carry a nolint?"
+    answer: "Yes (the coordinator, on the person's standing instruction, 2026-11-16). G101 flags the constants because their names hold the word credential; each is a sentence shown to the person at approval and holds no secret. They take the annotation the tree already uses for a justified gosec finding, //nolint:gosec with the reason, on those lines alone; the linter's configuration is unchanged. The attempt's test commits are pushed (80adc1e) and its staged implementation is kept for the next attempt to commit."
+  - id: q-78
+    item: "slice-34"
+    question: "slice-34: its implementer (attempt 3) stopped again for engine red evidence of @ID-HOME-13, with the feature now in the offline shard. Does the new run supply it?"
+    answer: "Yes (the coordinator, 2026-11-16). Run 43797097484 at 68be535, dispatched with red_scenarios=@ID-HOME-13, ran the scenario in the offline engine shard and it failed at the run's first observation, the product refusing the home key with policy.unknown_key and exit 2; nothing failed in setup. That is accepted red evidence for @ID-HOME-13. @ID-HOME-14, 15 and 23 have no steps yet: slice-34 binds them, stops once more for one run of the three, and then implements."
+  - id: q-79
+    item: "T-55"
+    question: "T-55: the implementer (attempt 2) needs a decision before it can go on; the question and its options are in .git/itos/loop/T-55-implementer-2.result.json"
+    answer: "Not the limits yet: one throwaway launch inside the suite (the coordinator, on the person's standing instruction, 2026-11-16). Run 43798922441's warm-ups took 100 to 120 ms plain and 200 to 280 ms with the product's request shape on the three shards, and ID-LIFECYCLE-08 still failed, its create answered 1.016 s after forwarding. Creates outside the suite are fast and the first one inside it is slow, so what is cold is on the suite's own path. Before the first engine row, the suite makes one throwaway launch of the built product through the same recorder and fixture, under production limits, and prints that create's interval. No fixture limit, assertion, retry or skipped row moves; the limits are considered only if the first row is still slow after that."
+  - id: q-80
+    item: "slice-34"
+    question: "slice-34: its implementer (attempt 4) stopped for engine red evidence of @ID-HOME-14, 15 and 23. Does the dispatched run supply it?"
+    answer: "Yes (the coordinator, 2026-11-16). Run 43815326065 at 5fe482e, dispatched with the three tags, ran eight cases in the offline engine shard and all failed at their first product run, the product refusing the home key with policy.unknown_key and exit 2; no step was undefined and no fixture failed. With run 43797097484 for @ID-HOME-13, all four engine scenarios have red evidence. Since the key is refused outright, steps after the first run have not executed yet; the green run after the implementation is their first execution. slice-34 implements."
+  - id: q-81
+    item: "slice-34"
+    question: "slice-34: its implementer (attempt 5) stopped on Windows and macOS test failures in the red-evidence dispatch (errno 13 against Windows's EACCES; a Unix executable bit), as a wrong gate. Do they gate slice-34?"
+    answer: "No (the coordinator, 2026-11-16). Those jobs ran because a red-evidence dispatch runs every platform; a pull request's run tests on ubuntu-latest only, and that run judges slice-34. The Windows and macOS failures predate the branch and belong to p2-repair-platform-ci-fixtures, which records that nothing shows they block the harness-home step. slice-34 leaves those tests alone and implements its runtime."
+  - id: q-82
+    item: "slice-34"
+    question: "slice-34: its implementer (attempt 6) returned blocked with the runtime unfinished and said no decision or red evidence is owed. Is anything owed before it goes on?"
+    answer: "Nothing (the coordinator, 2026-11-16). The attempt stopped unfinished, not blocked: its bindings and documentation commits are on the branch and its runtime draft is kept for the next attempt. slice-34 goes on with the runtime, the remaining local bindings and the code proof."
+  - id: q-83
+    item: "slice-37"
+    question: "slice-37: its implementer (attempt 1) stopped for engine red evidence of @ID-RUNTTY-06, 07, 08, 09, 12 and 13. Does the dispatched run supply it?"
+    answer: "Yes (the coordinator, 2026-11-16). Run 43837837169 at 23270b6 ran fourteen cases of the six scenarios on the engine tier and all failed at the terminal launch, the product answering 'run: unknown flag --tty' with exit 2; no step was undefined and no fixture failed. Since the flag is refused outright, the steps after the launch have not executed yet; the green run after the implementation is their first execution. slice-37 implements."
+  - id: q-84
+    item: "slice-28"
+    question: "slice-28: its implementer (attempt 3) stopped for engine red evidence of @ID-EGRESSLIFE-10, 12 and 13. Does the dispatched run supply it?"
+    answer: "No (the coordinator, 2026-11-16). Run 43837841004 at bc42d2b ran seven cases and every one ended in a nil pointer dereference inside the step code (features/run_preflight_process_test.go:275, startRun), before any assertion: a fault of the harness on the native path, not the product's missing behaviour. slice-28 repairs that, defines the steps still missing for @ID-EGRESSLIFE-06, 07 and 11, and stops once more for one run of all six."
+  - id: q-85
+    item: "slice-38"
+    question: "slice-38: its implementer (attempt 1) returned blocked with a partial checkpoint (two test commits; EXEC-03 to 16, the runtime and CI evidence unfinished) and named nothing it waits on. Is anything owed before it goes on?"
+    answer: "Nothing (the coordinator, 2026-11-16, as q-82 for slice-34). The attempt stopped unfinished, not blocked: its two commits (9a477b1, bbac71b) are on the branch at 52fe0e5 with main merged in. slice-38 goes on with the remaining step definitions, the runtime and the code proof."
+  - id: q-86
+    item: "slice-28"
+    question: "slice-28: its implementer (attempt 4) stopped for engine red evidence on @ID-EGRESSLIFE-06, 07, 10, 11, 12 and 13 at 4b8cc34. Is the evidence accepted?"
+    answer: "Yes (the coordinator, 2026-11-16). Dispatch 43952255861 at 4b8cc34, Engine shard (other): ten cases, 86 steps, 54 passed, 10 failed, 22 skipped, none undefined, no panic; each case fails at an assertion after its product run. slice-28 goes on to the implementation; the run and each failure are in its steer file."
+  - id: q-87
+    item: "slice-28"
+    question: "slice-28: the implementer (attempt 9) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-28-implementer-9.result.json"

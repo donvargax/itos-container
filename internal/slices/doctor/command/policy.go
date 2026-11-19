@@ -13,6 +13,7 @@ import (
 type policyProblem = port.Problem
 
 type effectivePolicy struct {
+	Home        *port.Home        `json:"home,omitempty"`
 	Version     int               `json:"version"`
 	Manifest    string            `json:"manifest"`
 	Network     effectiveNetwork  `json:"network"`
@@ -38,7 +39,7 @@ func presentPolicy(u *cli.UI, result port.Result, withJSON bool) int {
 	if result.Policy != nil {
 		grants := slices.Clone(result.Policy.Credentials)
 		slices.SortFunc(grants, func(a, b port.Credential) int { return strings.Compare(a.Kind, b.Kind) })
-		policy = &effectivePolicy{result.Policy.Version, result.Policy.Manifest, effectiveNetwork{result.Policy.Network.Mode, result.Policy.Network.Allow}, grants}
+		policy = &effectivePolicy{result.Policy.Home, result.Policy.Version, result.Policy.Manifest, effectiveNetwork{result.Policy.Network.Mode, result.Policy.Network.Allow}, grants}
 	}
 	if withJSON {
 		u.JSON(struct {
@@ -58,6 +59,9 @@ func presentPolicy(u *cli.UI, result port.Result, withJSON bool) int {
 		}
 		for _, grant := range policy.Credentials {
 			_, _ = fmt.Fprintf(u.Stdout, "credentials.%s.source: %s\n", grant.Kind, printable(grant.Source))
+		}
+		if policy.Home != nil {
+			_, _ = fmt.Fprintln(u.Stdout, "home.storage:", policy.Home.Storage)
 		}
 		_, _ = fmt.Fprintln(u.Stdout, "Host readiness and approval were not checked")
 	}

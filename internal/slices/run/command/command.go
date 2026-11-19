@@ -7,6 +7,7 @@ import (
 	approvalport "github.com/donvargax/itos-container/internal/engine/approval/port"
 	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	session "github.com/donvargax/itos-container/internal/engine/session/port"
+	terminal "github.com/donvargax/itos-container/internal/engine/terminal/port"
 	"github.com/donvargax/itos-container/internal/slices/run/port"
 	"strconv"
 	"strings"
@@ -20,6 +21,8 @@ var errWorkloadExitUnknown = errors.New("workload exit is unknown; cleanup is co
 
 // CLI lets Kong retain the first separator and every subsequent literal word.
 type CLI struct {
+	TTY           bool                   `name:"tty" help:"Attach terminal stdin and stdout to the workload."`
+	Terminal      terminal.Provider      `kong:"-"`
 	Context       context.Context        `kong:"-"`
 	Snapshots     approvalport.Snapshots `kong:"-"`
 	Approval      port.Approval          `kong:"-"`
@@ -34,7 +37,10 @@ func (CLI) Help() string {
 	return "\nUse itos container run -- <command> [arguments...].\n\n" +
 		"    Wrapper --json or ITOS_JSON=1 returns one schema-1 refusal object.\n" +
 		"    Arguments after -- belong only to the workload.\n" +
-		"    Run the literal command in one approved offline worker; streams remain separate.\n" +
+		"    Run the literal command in one approved offline or allowlist worker.\n" +
+		"    Foreground streams remain separate unless --tty selects terminal stdin and stdout.\n" +
+		"    With --tty, stdout carries the raw merged worker terminal; diagnostics stay on stderr.\n" +
+		"    Stdin supplies window size; control keys are workload input. Disconnect stops owned work.\n" +
 		"    The worker uses the frozen workspace, host UID:GID and temporary HOME/TMPDIR.\n" +
 		"    A Unix socket anywhere in the checkout, including .git, refuses startup before worker creation.\n" +
 		"    Host sockets created or swapped into the checkout after inspection remain reachable during a run.\n" +
@@ -79,10 +85,40 @@ func (c CLI) Run(ui *cli.UI) int {
 	}
 	startup, end := budget.Start(ctx, budget.StartupDuration, "startup")
 	defer end()
+	var lease terminal.Lease
+	if c.TTY {
+		var err error
+		lease, err = acquireTerminal(startup, c.Terminal)
+		if err != nil {
+			if interrupted, ok := context.Cause(ctx).(session.Interrupt); ok {
+				// A host signal that landed during acquisition keeps the
+				// run.cancelled result every later startup phase reports.
+				result := session.RunResult{Signal: interrupted.Signal, Deadline: time.Now().Add(30 * time.Second)}
+				if terminalRollbackFailed(err) {
+					result.Restore = session.TerminalRestore
+				}
+				return reportRun(ui, result)
+			}
+			return reportRunError(ui, session.RunResult{}, err)
+		}
+	}
+	result, err := c.run(ctx, startup, args, session.Streams{In: ui.In, Out: ui.Stdout, Err: ui.Stderr, Terminal: lease})
+	if result.Deadline.IsZero() {
+		result.Deadline = time.Now().Add(30 * time.Second)
+	}
+	// The runner restores after its bounded drain. The command also owns the
+	// lease on preflight returns; Close retains the same restoration result.
+	if lease != nil && lease.Close().RestoreErr != nil {
+		result.Restore = session.TerminalRestore
+	}
+	return reportRunError(ui, result, err)
+}
+
+func (c CLI) run(ctx, startup context.Context, args []string, streams session.Streams) (session.RunResult, error) {
 	frozen, err := domain.PreflightContext(startup, c.Approval, c.Snapshots)
 	if err != nil {
 		if interrupted, ok := context.Cause(ctx).(session.Interrupt); ok {
-			return reportRun(ui, session.RunResult{Signal: interrupted.Signal, Deadline: time.Now().Add(30 * time.Second)})
+			return session.RunResult{Signal: interrupted.Signal}, nil
 		}
 		var timed budget.Failure
 		if errors.As(err, &timed) {
@@ -90,19 +126,25 @@ func (c CLI) Run(ui *cli.UI) int {
 			if timed.Phase != "" {
 				outcome = session.StartupTimeout
 			}
-			return reportRun(ui, session.RunResult{Result: session.Result{Outcome: outcome}, Operation: timed.Operation, Deadline: time.Now().Add(30 * time.Second)})
+			return session.RunResult{Result: session.Result{Outcome: outcome}, Operation: timed.Operation}, nil
 		}
-		return ui.Fail(err, false)
+		return session.RunResult{}, err
 	}
 	if interrupted, ok := context.Cause(ctx).(session.Interrupt); ok {
-		return reportRun(ui, session.RunResult{Signal: interrupted.Signal, Deadline: time.Now().Add(30 * time.Second)})
+		return session.RunResult{Signal: interrupted.Signal}, nil
 	}
-	result := c.Runner.Run(budget.WithStartup(ctx, startup), frozen, args, session.Streams{In: ui.In, Out: ui.Stdout, Err: ui.Stderr})
-	return reportRun(ui, result)
+	return c.Runner.Run(budget.WithStartup(ctx, startup), frozen, args, streams), nil
 }
 
 func reportRun(ui *cli.UI, result session.RunResult) int {
+	return reportRunError(ui, result, nil)
+}
+
+func reportRunError(ui *cli.UI, result session.RunResult, err error) int {
 	code := 0
+	if err != nil {
+		code = cli.Code(err, ui.Classify)
+	}
 	if result.Outcome != "" {
 		code, _ = Classify(runFailure{result.Outcome, result.Reference, result.SessionID, false})
 	}
@@ -121,6 +163,9 @@ func reportRun(ui *cli.UI, result session.RunResult) int {
 			code = 143
 		}
 	}
+	if result.Restore != "" {
+		code, _ = Classify(runFailure{result.Restore, result.Reference, result.SessionID, false})
+	}
 	if result.Exited && result.Exit != 0 {
 		code = result.Exit
 	}
@@ -138,6 +183,9 @@ func reportRun(ui *cli.UI, result session.RunResult) int {
 		defer cancel()
 	}
 	_, _ = budget.Call(ctx, "diagnostic output", func(context.Context) struct{} {
+		if err != nil {
+			ui.Fail(err, false)
+		}
 		if result.Signal != "" {
 			ui.Fail(cancelFailure{result.Signal, workloadOutcome(result)}, false)
 		}
@@ -146,7 +194,9 @@ func reportRun(ui *cli.UI, result session.RunResult) int {
 		}
 		if result.Outcome != "" {
 			failure := runFailure{result.Outcome, result.Reference, result.SessionID, false}
-			if result.MountDiagnostic.Check != "" {
+			if session.HexID(result.HomeID) && (result.Outcome == session.HomeRefused || result.Outcome == session.HomeUnavailable) {
+				ui.Fail(homeFailure{failure, result.HomeID}, false)
+			} else if result.MountDiagnostic.Check != "" {
 				ui.Fail(mountFailure{failure, result.MountDiagnostic}, false)
 			} else if result.Operation != "" {
 				ui.Fail(operationFailure{failure, result.Operation}, false)
@@ -156,6 +206,9 @@ func reportRun(ui *cli.UI, result session.RunResult) int {
 		}
 		if result.Teardown != "" {
 			ui.Fail(runFailure{result.Teardown, result.Reference, result.SessionID, false}, false)
+		}
+		if result.Restore != "" {
+			ui.Fail(runFailure{result.Restore, result.Reference, result.SessionID, false}, false)
 		}
 		if result.Reference != "" && result.Cleanup != session.Complete {
 			ui.Fail(runFailure{result.Cleanup, result.Reference, result.SessionID, true}, false)
@@ -183,6 +236,13 @@ type operationFailure struct {
 	operation string
 }
 
+type homeFailure struct {
+	runFailure
+	id string
+}
+
+func (f homeFailure) Unwrap() error { return f.runFailure }
+
 func (f operationFailure) Unwrap() error { return f.runFailure }
 
 type cancelFailure struct{ signal, workload string }
@@ -200,6 +260,21 @@ func (runFailure) Error() string { return "owned run could not be completed" }
 
 // Classify supplies run's stable rules and human guidance to the generic UI.
 func Classify(err error) (int, []cli.Problem) {
+	var terminalFailure *terminal.Failure
+	if errors.As(err, &terminalFailure) {
+		code, rule := 3, "run.terminal-unavailable"
+		fix := "Repair the host terminal and retry."
+		if terminalFailure.Kind == terminal.InvalidTerminal {
+			code, rule = 2, "run.terminal-required"
+			fix = "Use terminal stdin and stdout, or omit --tty."
+		}
+		problems := []cli.Problem{{Rule: rule, Exit: code, Message: rule + ": " + fix, Fix: fix}}
+		if terminalFailure.RestoreErr != nil {
+			code = 75
+			problems = append(problems, cli.Problem{Rule: "run.terminal-restore", Exit: 75, Message: "run.terminal-restore: terminal rollback failed", Fix: fix})
+		}
+		return code, problems
+	}
 	var timed budget.Failure
 	if errors.As(err, &timed) {
 		rule := "run.call-timeout"
@@ -225,7 +300,7 @@ func Classify(err error) (int, []cli.Problem) {
 		}
 		code, cause := 75, "temporary"
 		switch run.outcome {
-		case session.Refused, session.Unsafe, session.RegistrationOwnership, session.MountRefused:
+		case session.HomeRefused, session.Refused, session.Unsafe, session.RegistrationOwnership, session.MountRefused:
 			code, cause = 1, "ownership"
 		case session.Invalid:
 			code, cause = 2, "configuration"
@@ -233,9 +308,11 @@ func Classify(err error) (int, []cli.Problem) {
 			code, cause = 70, "internal"
 		case session.Environment, session.EnvironmentMissing, session.MountUnavailable:
 			code, cause = 3, "environment"
+		case session.ProxyFailed, session.ProxyExited:
+			code = 1
 		case session.IsolationUnverified:
 			code = 1
-		case session.IntentWrite, session.OwnershipWrite, session.CompletionWrite,
+		case session.HomeUnavailable, session.IntentWrite, session.OwnershipWrite, session.CompletionWrite,
 			session.MountWrite, session.MountUncertain,
 			session.Uncertain, session.Incomplete, session.IsolationInspection, session.ExecutionFailed, session.StreamTimeout, session.EngineLost, session.TeardownTimeout:
 			// Known transient failures retain their temporary classification.
@@ -264,6 +341,12 @@ func Classify(err error) (int, []cli.Problem) {
 		if session.HexID(run.sessionID) {
 			fix = "Use the same effective project: itos container stop " + run.sessionID
 			message += "; " + fix
+		}
+		var home homeFailure
+		if errors.As(err, &home) {
+			guidance := "Retained home " + home.id + "; inspect with itos container status --homes. After session cleanup, the person may consent to discarding its state with: itos container stop --home " + home.id + " --reset"
+			fix += ". " + guidance
+			message += "; " + guidance
 		}
 		return code, []cli.Problem{{Rule: rule, Exit: code, Message: message, Fix: fix}}
 	}
@@ -310,7 +393,7 @@ func Classify(err error) (int, []cli.Problem) {
 	case errors.Is(err, domain.ErrJSONUnsupported):
 		return cli.CodeUsage, []cli.Problem{{
 			Rule: "run.json-unsupported", Exit: cli.CodeUsage,
-			Message: "run does not support wrapper JSON mode",
+			Message: "run does not support wrapper JSON mode; remove the wrapper --json option and the inherited ITOS_JSON=1 request.",
 			Fix:     "Remove the wrapper --json option and the inherited ITOS_JSON=1 request.",
 		}}
 	case errors.Is(err, domain.ErrCommandRequired):

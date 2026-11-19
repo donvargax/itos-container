@@ -662,10 +662,12 @@ Feature: Named credential requests and read-only source inspection
   #   This proves controller inspection only, not arbitrary workload/log redaction.
   # All new native metadata scenarios are Linux-only, non-engine; no privileged
   # chown, host mount, real source or production test switch is needed for setup.
-  # Pin the native fixtures below /tmp for the root-owned sticky ancestor control.
+  # Native positive fixtures use /var/tmp on a filesystem named by q-64, retaining
+  # the real root-owned sticky ancestor. Slice-30 supersedes
+  # the doctor/approve gate rows with credentials-approval.feature admission cases.
 
   @slice-29 @ID-CREDENTIALS-13 @linux
-  Scenario Outline: valid version 3 remains gated from ordinary doctor approval and run
+  Scenario Outline: valid version 3 remains gated from run
     Given a private credential inspection fixture
     And credential source "token" has layout "private regular file"
     And the credential fixture requests these sources:
@@ -685,10 +687,6 @@ Feature: Named credential requests and read-only source inspection
 
     Examples:
       | grants    | command                                                                                       |
-      | requested | doctor --json                                                                                 |
-      | none      | doctor --json                                                                                 |
-      | requested | approve --fingerprint 0000000000000000000000000000000000000000000000000000000000000000 --json |
-      | none      | approve --fingerprint 0000000000000000000000000000000000000000000000000000000000000000 --json |
       | requested | run -- credential-fixture-never-executed                                                      |
       | none      | run -- credential-fixture-never-executed                                                      |
 
@@ -1077,7 +1075,7 @@ Feature: Named credential requests and read-only source inspection
       | fdinfo mount ID unavailable             |
       | observation deadline reached            |
 
-  # The root-owned sticky /tmp ancestor of every private fixture is a positive
+  # The root-owned sticky /var/tmp ancestor of every private fixture is a positive
   # control for the inherited directory rule. User-owned sticky is no exception.
   # Parent modes are 0720, 0702 and 01777 respectively; only fixture paths change.
   @slice-29 @ID-CREDENTIALS-21 @linux

@@ -15,7 +15,7 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// The engine tier runs as three shards (T-45), each a native runner and daemon of
+// The engine tier runs as four shards (T-45, T-59), each a native runner and daemon of
 // whole feature files. Nothing here runs an engine, Docker or a product command:
 // the workflow is parsed, the real feature files are selected as data, and fixture
 // features run with memory-only steps, as the schedule regressions do.
@@ -54,6 +54,57 @@ func engineFeatureFiles(dir string) ([]string, error) {
 	return slices.Sorted(maps.Keys(files)), nil
 }
 
+// shardOtherFiles is the other shard's fixed set of files (T-59): every engine feature
+// this tree keeps outside offline, lifecycle and egress.
+var shardOtherFiles = []string{
+	"anchors.feature", "checkout-overlap.feature", "doctor.feature", "hardlinks.feature",
+	"recovery.feature", "run_terminal.feature", "session.feature", "sockets.feature",
+}
+
+// egressShardFiles is the egress shard's complete pinned set: egress.feature, plus
+// egress_lifecycle.feature while the engine inventory has it, so slice-28's file joins
+// this shard when it lands on this tree (T-59's placement). The pin is this explicit
+// allowlist, never the inventory's leftover: a new engine file is not allowed to hide
+// in egress (slice-37's run_terminal.feature belongs in other, never here) and fails
+// visibly until a shard's set or a new shard takes it.
+func egressShardFiles(engine []string) []string {
+	files := []string{"egress.feature"}
+	if slices.Contains(engine, "egress_lifecycle.feature") {
+		files = append(files, "egress_lifecycle.feature")
+	}
+	return files
+}
+
+// The offline and lifecycle shards each pin their complete set of feature files.
+var (
+	shardOfflineFiles   = []string{"harness-home.feature", "offline.feature"}
+	shardLifecycleFiles = []string{"lifecycle.feature"}
+)
+
+// shardFileIssue reports how the shard's parsed files got differ from its pinned
+// set want, or "" when got is that set, whatever the list's order or whitespace.
+func shardFileIssue(shard string, got, want []string) string {
+	slices.Sort(got)
+	if slices.Equal(got, want) {
+		return ""
+	}
+	return "shard " + shard + " files: the pinned set is " + strings.Join(want, " ") +
+		", whatever the list's order or whitespace"
+}
+
+// egressShardIssue reports how the egress shard's parsed files got differ from its
+// pinned set for the engine inventory engine, or "" when got is that set, whatever
+// the list's order or whitespace.
+func egressShardIssue(got, engine []string) string {
+	return shardFileIssue("egress", got, egressShardFiles(engine))
+}
+
+// shardReportLine is the one-line shard report of the real partition: every file the
+// entry names, on one line, whatever whitespace or line breaks its YAML value used.
+func shardReportLine(shard string, count, ids int, files []string) string {
+	return fmt.Sprintf("shard %s: %d row(s), %d ID(s) in %s", shard, count, ids, strings.Join(files, " "))
+}
+
 // realEngineFeatures is engineFeatureFiles over this folder, read once.
 var realEngineFeatures = sync.OnceValues(func() ([]string, error) { return engineFeatureFiles(".") })
 
@@ -87,7 +138,7 @@ func engineShardIssues(data []byte) []string {
 		names = append(names, entry.Shard)
 	}
 	slices.Sort(names)
-	require(slices.Equal(names, []string{"lifecycle", "offline", "other"}), "exactly three named shards: lifecycle, offline and other")
+	require(slices.Equal(names, []string{"egress", "lifecycle", "offline", "other"}), "exactly four named shards: egress, lifecycle, offline and other")
 	want, err := realEngineFeatures()
 	if err != nil {
 		issues = append(issues, "feature inventory: "+err.Error())
@@ -107,6 +158,25 @@ func engineShardIssues(data []byte) []string {
 	}
 	for name, count := range placed {
 		require(count < 2, "feature in two shards: "+name)
+	}
+	for _, entry := range include {
+		var pinned []string
+		switch entry.Shard {
+		case "offline":
+			pinned = shardOfflineFiles
+		case "lifecycle":
+			pinned = shardLifecycleFiles
+		case "other":
+			pinned = shardOtherFiles
+		case "egress":
+			require(err == nil, "shard egress files: the pin needs the engine inventory")
+			pinned = egressShardFiles(want)
+		default:
+			continue
+		}
+		if issue := shardFileIssue(entry.Shard, strings.Fields(entry.Features), pinned); issue != "" {
+			issues = append(issues, issue)
+		}
 	}
 
 	enabled := ""
@@ -184,7 +254,73 @@ func TestEngineShards(t *testing.T) {
 		}
 	})
 	t.Run("partition", func(t *testing.T) { testShardPartition(t, workflow.Jobs[shardJobID].Strategy.Matrix.Include) })
+	t.Run("home red inventory", func(t *testing.T) {
+		ids := []string{"@ID-HOME-13", "@ID-HOME-14", "@ID-HOME-15", "@ID-HOME-23"}
+		for _, entry := range workflow.Jobs[shardJobID].Strategy.Matrix.Include {
+			selection, err := selectScenarios("", ".", shardEnvironment(map[string]string{
+				shardFeaturesVariable: entry.Features,
+				"GITHUB_EVENT_NAME":   "workflow_dispatch",
+				redVariable:           strings.Join(ids, " "),
+			}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if entry.Shard == "offline" {
+				if selection.count != 9 || selection.skip != "" || !slices.Equal(selection.ids, ids) {
+					t.Errorf("offline must select all nine home engine rows and four IDs: count=%d ids=%v skip=%q", selection.count, selection.ids, selection.skip)
+				}
+			} else if selection.count != 0 || !strings.Contains(selection.skip, "other engine shard") {
+				t.Errorf("shard %s must leave home rows to offline: count=%d skip=%q", entry.Shard, selection.count, selection.skip)
+			}
+		}
+	})
 	t.Run("selector", testShardSelector)
+	t.Run("multiline egress report", func(t *testing.T) {
+		// A YAML literal block names the same two files a space-separated list does, and
+		// the report still lists them all on one line. This control runs before slice-28
+		// lands: it formats an in-memory entry and selects nothing.
+		const multiline = `jobs:
+  engine-shard:
+    strategy:
+      matrix:
+        include:
+          - shard: egress
+            features: |
+              egress_lifecycle.feature
+              egress.feature
+`
+		var workflow engineWorkflow
+		if err := yaml.Unmarshal([]byte(multiline), &workflow); err != nil {
+			t.Fatal(err)
+		}
+		include := workflow.Jobs[shardJobID].Strategy.Matrix.Include
+		if len(include) != 1 || include[0].Shard != "egress" {
+			t.Fatalf("the multiline entry did not parse as one egress shard: %v", include)
+		}
+		line := shardReportLine(include[0].Shard, 27, 27, strings.Fields(include[0].Features))
+		if strings.Contains(line, "\n") {
+			t.Errorf("the report is not one line: %q", line)
+		}
+		if !strings.HasSuffix(line, " in egress_lifecycle.feature egress.feature") {
+			t.Errorf("the report does not list every file of the literal block: %q", line)
+		}
+	})
+	t.Run("not-yet-listed egress file", func(t *testing.T) {
+		// A new engine file must have an explicit shard assignment.
+		const unassigned = "unassigned.feature"
+		engine, err := realEngineFeatures()
+		if err != nil {
+			t.Fatal(err)
+		}
+		engine = append(slices.Clone(engine), unassigned)
+		issue := egressShardIssue([]string{"egress.feature", unassigned}, engine)
+		if issue == "" {
+			t.Error("the egress pin allowed a not-yet-listed engine file")
+		}
+		if strings.Contains(issue, unassigned) {
+			t.Errorf("the pinned set includes the unrelated file: %q", issue)
+		}
+	})
 	t.Run("broken workflows", func(t *testing.T) {
 		if issues := engineShardIssues(data); len(issues) != 0 {
 			t.Errorf("the unmodified workflow is not clean: %v", issues)
@@ -194,7 +330,7 @@ func TestEngineShards(t *testing.T) {
 }
 
 // Each shard selects exactly its files' rows of the unsharded selection, and the
-// three together select that selection once.
+// four together select that selection once.
 func testShardPartition(t *testing.T, include []shardEntry) {
 	t.Helper()
 	unsharded, err := selectScenarios("", ".", shardEnvironment(nil))
@@ -248,7 +384,7 @@ func testShardPartition(t *testing.T, include []shardEntry) {
 			t.Errorf("shard %s selects %d row(s) %v (skip %q); its files hold %d row(s) %v of the unsharded selection",
 				entry.Shard, selection.count, selection.ids, selection.skip, wantCount, wantIDs)
 		}
-		t.Logf("shard %s: %d row(s), %d ID(s) in %s", entry.Shard, selection.count, len(selection.ids), entry.Features)
+		t.Log(shardReportLine(entry.Shard, selection.count, len(selection.ids), files))
 		total += selection.count
 		union = append(union, selection.ids...)
 		byShard[entry.Shard] = selection.ids
@@ -277,15 +413,17 @@ func testShardPartition(t *testing.T, include []shardEntry) {
 }
 
 // A valid in-memory workflow lets every negative control run before the real
-// workflow has its shards. The other shard holds every engine feature the first
-// two do not, so the baseline stays valid as feature files are added.
+// workflow has its shards. The offline, lifecycle and other shards hold their fixed
+// file sets and the egress shard its pinned allowlist, so a new engine file fails the
+// baseline visibly until a shard's set or a new shard takes it.
 func shardBaseline(t *testing.T) []byte {
 	t.Helper()
 	engine, err := realEngineFeatures()
 	if err != nil {
 		t.Fatal(err)
 	}
-	other := slices.DeleteFunc(slices.Clone(engine), func(name string) bool { return name == "offline.feature" || name == "lifecycle.feature" })
+	other := slices.Clone(shardOtherFiles)
+	egress := egressShardFiles(engine)
 	text := fmt.Sprintf(`jobs:
   engine-shard:
     name: Engine shard (${{ matrix.shard }})
@@ -296,9 +434,10 @@ func shardBaseline(t *testing.T) []byte {
       fail-fast: false
       matrix:
         include:
-          - {shard: offline, features: offline.feature}
+          - {shard: offline, features: "offline.feature harness-home.feature"}
           - {shard: lifecycle, features: lifecycle.feature}
           - {shard: other, features: "%s"}
+          - {shard: egress, features: "%s"}
     steps:
       - name: Engine scenarios
         timeout-minutes: 5
@@ -318,7 +457,7 @@ func shardBaseline(t *testing.T) []byte {
         env:
           SHARD_RESULT: ${{ needs.engine-shard.result }}
         run: test "$SHARD_RESULT" = success
-`, strings.Join(other, " "))
+`, strings.Join(other, " "), strings.Join(egress, " "))
 	if issues := engineShardIssues([]byte(text)); len(issues) != 0 {
 		t.Fatalf("invalid negative-control baseline: %v", issues)
 	}
@@ -365,10 +504,29 @@ func testBrokenShardWorkflows(t *testing.T) {
 		{"a path", "feature path", replaceFeatures("other", "doctor.feature", "features/doctor.feature")},
 		{"an absolute path", "feature path", replaceFeatures("other", "doctor.feature", "/doctor.feature")},
 		{"an empty shard", "empty shard", editShard(func(j *workflowJob) { j.Strategy.Matrix.Include[2].Features = " " })},
-		{"a fourth shard", "exactly three named shards", editShard(func(j *workflowJob) {
+		{"the old three-shard layout", "exactly four named shards", editShard(func(j *workflowJob) {
+			j.Strategy.Matrix.Include = j.Strategy.Matrix.Include[:3]
+		})},
+		{"a fifth shard", "exactly four named shards", editShard(func(j *workflowJob) {
 			j.Strategy.Matrix.Include = append(j.Strategy.Matrix.Include, shardEntry{Shard: "extra", Features: "doctor.feature"})
 		})},
-		{"a renamed shard", "exactly three named shards", editShard(func(j *workflowJob) { j.Strategy.Matrix.Include[0].Shard = "first" })},
+		{"a renamed shard", "exactly four named shards", editShard(func(j *workflowJob) { j.Strategy.Matrix.Include[0].Shard = "first" })},
+		{"a file swapped between egress and other", "shard egress files", func(w *engineWorkflow) {
+			replaceFeatures("egress", "egress.feature", "anchors.feature")(w)
+			replaceFeatures("other", "anchors.feature", "egress.feature")(w)
+		}},
+		{"an unrelated file in the egress shard", "shard egress files", func(w *engineWorkflow) {
+			replaceFeatures("egress", "egress.feature", "egress.feature recovery.feature")(w)
+			replaceFeatures("other", "recovery.feature", "")(w)
+		}},
+		{"a file moved from other to offline", "shard offline files", func(w *engineWorkflow) {
+			replaceFeatures("other", "hardlinks.feature", "")(w)
+			replaceFeatures("offline", "offline.feature", "offline.feature hardlinks.feature")(w)
+		}},
+		{"a file moved from other to lifecycle", "shard lifecycle files", func(w *engineWorkflow) {
+			replaceFeatures("other", "hardlinks.feature", "")(w)
+			replaceFeatures("lifecycle", "lifecycle.feature", "lifecycle.feature hardlinks.feature")(w)
+		}},
 		{"the aggregate without always()", "aggregate guard", editAggregate(func(j *workflowJob) { j.If = eventGuard })},
 		{"the aggregate without the event guard", "aggregate guard", editAggregate(func(j *workflowJob) { j.If = "${{ always() }}" })},
 		{"the aggregate needing more", "aggregate needs", editAggregate(func(j *workflowJob) { j.Needs = []string{shardJobID, "platform"} })},

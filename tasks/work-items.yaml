@@ -2,8 +2,13 @@
 phases:
   1: null
 queue:
-  - p1-harness-home
-  - p1-interactive-tty
+  - slice-28
+  - slice-32
+  - slice-35
+  - slice-40
+  - slice-41
+  - slice-31
+  - slice-36
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
@@ -186,6 +191,11 @@ items:
       per-slice red-evidence and history notes out of it (the commits and run numbers already record
       them), keep only the standing harness rules, and add a doc-caps entry with headroom over the
       shortened size so later slices cannot grow it back.
+
+      This item already covers scenario guidance in features/README.md. Include a review rule there:
+      when a spec claims an exact mount option string produces a particular behavior, cite the
+      relevant engine source or a native CI observation. The executable /tmp spec shows why omitting
+      noexec is insufficient evidence.
   - id: T-10
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
@@ -590,6 +600,17 @@ items:
       is the worker's and the anchor's today and is not T-40's to change. But T-40 adds two network
       creates per egress run, so slice-27 makes the stuck session reachable and nested checkouts
       then stay blocked. The item is p3; its phase is worth revisiting once slice-27 is queued.
+
+      Include a controller killed after publishing the stage intent and claim but before issuing
+      VolumeCreate. This item already covers safe retirement when durable evidence proves a create
+      was never issued. A name-only lookup that finds no volume cannot rule out a late allocation.
+      Any broader reclaim rule needs the person’s decision.
+
+      This recovery item already covers uncertain creates that leave a session stuck. Add the case
+      where VolumeCreate was dispatched, its reply was lost, and later lookups continue to find no
+      volume. HOME-10 covers a volume that eventually appears. The person must settle what evidence
+      permits releasing the claim while a delayed allocation is still possible. Elapsed time and
+      repeated name-only misses do not establish that the create has finished.
   - id: slice-16
     title: Run refuses overlapping worker checkouts
     phase: 1
@@ -748,19 +769,13 @@ items:
     status: done
     depends_on: []
     kind: task
-  - id: p3-release-notes-skip-merges
+  - id: T-61
     title: Release notes leave out merges of main into an item branch
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
-    kind: idea
-    why: >
-      v0.1.0's generated notes (2026-11-09) list 'Merge main into slice-13', 'slice-14' and
-      'slice-11' under Features: release-notes counts a merge commit whose subject carries a feat
-      type, or classifies merges by their first parent's type. A merge of main into an item branch
-      changes nothing a user sees; leave such merges out, and keep the merge that lands an item (its
-      own subject names the item).
+    kind: task
   - id: p2-profile-non-engine-feature-suite
     title: Profile the non-engine feature suite and cut its roughly 300 s wall time
     phase: 1
@@ -906,25 +921,16 @@ items:
     title: A home of the harness's own inside the container, seeded so a first run neither stops nor calls home
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      Milestone two, step 3 (docs/charter.md). A writable volume or tmpfs, never the host home and
-      never the checkout; Claude's onboarding flags and Codex's update checks, analytics and plugins
-      off (its own sandbox off, the container being the sandbox); executable /tmp. Open for the
-      spec: a named volume per checkout (keeps sessions, so resume works across runs) or a tmpfs
-      (keeps nothing); the coordinator recommends the volume.
   - id: p1-interactive-tty
     title: "run and exec with a TTY: raw mode, resizes, Ctrl-C as input, no harness left running after a disconnect"
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      Milestone two, step 4 (docs/charter.md), built on slice-12's cancellation rules. A terminal or
-      multiplexer outside the sandbox is the window onto an agent inside it.
   - id: T-38
     title: "Record the egress proxy decision: library, topology, delivery, failure closure and refusal log"
     phase: 1
@@ -964,25 +970,14 @@ items:
     title: run reaches only the approved names through the proxy; every other route out is closed
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [slice-26, T-39, T-40, T-51, T-52]
     kind: slice
-    why: >
-      Was p1-egress-run-through-proxy.
-      The first user-visible egress behaviour, charter step 1 (contract AC-09, AC-10, AC-13).
-      Scenarios first, with the real-engine ones in CI only, run against a fake endpoint the proxy
-      allows and never a real model or credential. With an approved allowlist, itos container run
-      reaches an allowed host name over CONNECT on 443. A direct route out (ignoring proxy
-      variables, a literal IP, the default gateway, UDP, another port) fails independent of client
-      cooperation. A name outside the list, or a spelling variant, is refused. Offline runs are
-      unchanged. It wires the approved allowlist from the approval slice, the proxy package and the
-      lifecycle port into the run slice, and doctor says what a run will use. Each property is
-      proven by a scenario that fails without it. Broken down from p1-egress-allowlist-proxy.
   - id: slice-28
     title: Refusals are logged, a proxy failure stops the run, and cleanup removes the proxy and network
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-27]
     kind: slice
     why: >
@@ -1048,36 +1043,13 @@ items:
     status: done
     depends_on: []
     kind: task
-  - id: p2-approval-no-record-step-checks-frozen-input
+  - id: T-63
     title: The step 'no approval record or frozen input is produced' also checks that no frozen input exists
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
-    kind: idea
-    why: >
-      approvalNoRecord (features/approval_assertions_test.go:331, registered at
-      features/approval_steps_test.go:156) returns success as soon as the approval record path is
-      absent. It never looks for frozen input, so a build that left a frozen file behind would still
-      pass. Seven live scenarios use this text at the approval boundary: six in approval.feature
-      (lines 303, 419, 449, 468, 514, 655) and one in hardlinks.feature (line 215). It is also
-      reused as the 'replacement target is unchanged' fallback. The step name promises a check the
-      code does not make, and slice-26 will add refusal scenarios in the same area. Make the step
-      assert both that the record is absent and that no frozen input was published, for example by
-      comparing the whole state tree as ID-POLICY-61's tree check does. Then run all seven
-      scenarios; any that now fail show a real leak to fix in the product, never a reason to loosen
-      the step. This is a test-support change with no new behavior and needs a ledger task and its
-      checks. Phase 2: it hardens existing proof and does not block charter step 1.
-
-      The same task covers this gap: a step name promises more than its code checks, in the same
-      approval assertion files. I checked it. approvalProblem
-      (features/approval_assertions_test.go:85, registered for 'it reports prerequisite problem …
-      before requesting consent' at features/approval_steps_test.go:138) checks the exit code and
-      the rule, and never that no consent prompt appeared. The step is used at approval.feature:654
-      and hardlinks.feature:193. Add a check that no consent prompt was shown, or rename the step to
-      what it checks, to that item's test-support change. Run the same scenarios afterwards: one
-      that fails then shows a real product leak, and the step is not loosened. Slice-26 adds
-      refusals here, so the check matters more then.
+    kind: task
   - id: p2-pin-ledger-check-shell
     title: Pin the shell itos runs ledger and CI checks with, so a check passes locally only if it passes in CI
     phase: 1
@@ -1470,30 +1442,13 @@ items:
     status: done
     depends_on: []
     kind: task
-  - id: p2-harness-env-clears-columns
+  - id: T-60
     title: The feature harness environment clears COLUMNS, so help scenarios do not depend on the caller's terminal width
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
-    kind: idea
-    why: >
-      No item covers this. world.env() (features/steps_test.go:223) copies the caller's environment
-      and drops only GIT_, ITOS_, ITOS_CONTAINER_, GITHUB_, GH_, CI and PATH, so an inherited
-      COLUMNS reaches the product and Kong wraps help to it. Measured under COLUMNS=30:
-      ID-APPROVAL-29 fails a correct build at its step 'its standard output says "an agent on the
-      host can approve"', because the wrap splits the phrase. Only ID-APPROVAL-56 names its own
-      width (COLUMNS=200). Six other help scenarios are exposed: completion --help, count --help,
-      doctor --help in manifest.feature and policy.feature, and the product status/stop help in
-      recovery.feature. A suite that fails a correct build on a caller's terminal setting breaks the
-      charter's rule that suite and proof reliability fixes stay inside the first milestone. Fix:
-      have env() drop COLUMNS, or set a fixed wide value, and add a harness regression committed red
-      that runs a help scenario under a narrow inherited COLUMNS and fails before the fix. Check
-      that fixtures building their environment from os.Environ() directly, such as
-      sessionChildEnvironment, do not reintroduce it. Keep every scenario and assertion unchanged
-      and leave ID-APPROVAL-56's explicit width alone. Phase p2: nothing blocks the current step,
-      and CI normally exports no COLUMNS. The harness came from go-template-itos, so once this lands
-      the coordinator files it there as a backport issue.
+    kind: task
   - id: p2-approve-allowlist-added-removed-names
     title: Approve's review shows an allowlist change as the names added and removed
     phase: 1
@@ -1573,6 +1528,11 @@ items:
       static steps; weigh it against p2-ci-go-build-cache-rolling-key, because each GOOS adds its
       own build-cache entries. Claims no support for macOS or Windows: it is a gate on code that
       already ships.
+
+      This item already proposes Windows and Darwin static checks in the Linux PR job.
+      Cross-compilation and standard go vet would have accepted the overlap test because both path
+      APIs are valid. The assertion failed only when Windows produced a drive-letter path. Commit
+      91d84d5 fixed the fixture to use the Linux paths the test models.
   - id: p3-workspace-copy-mode
     title: A run can work on a copy of the checkout instead of a live mount, and hand its result back as commits
     phase: 1
@@ -1685,6 +1645,17 @@ items:
       failure. The reading confirms or refutes the hypothesis on the next cold run. The remedy is
       not this item's: it belongs to p2-first-engine-row-slow-create, added by the same triage, and
       the warm cache to p2-ci-go-build-cache-rolling-key.
+
+      This item already publishes timing notices on green and failed engine runs. Include
+      registration duration and elapsed time from registration completion to create submission for
+      passing controls, so a failed control can be compared with a passing row from the same run.
+      Use the same phase boundaries and units for both outcomes.
+
+      This item already covers registration timing and the launch details visible in CI annotations.
+      When registration times out, include the last observed step (reservation, storage
+      registration, or admission publication) and its elapsed time on the launch line. That gives
+      the reader evidence the five-call engine journal cannot supply and fits q-65’s instrumentation
+      decision.
   - id: T-46
     title: Pull requests stop waiting for Codex reviews, which ended on 2026-11-09
     phase: 1
@@ -1710,26 +1681,14 @@ items:
     title: Approval binds and shows credential grants; a changed grant needs a new approval, and only at a terminal
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [slice-29, slice-26]
     kind: slice
-    why: >
-      Was p1-credentials-approval-grant.
-      Charter step 2 plus q-52: approve shows exactly which credential kinds and host paths the
-      worker will receive and asks for yes at a real terminal. --fingerprint is refused, with a fix
-      naming the interactive form, for any grant that includes credentials (and, per slice-26, an
-      egress allowlist). The canonical approved-settings record gains the grants as a set of names,
-      kinds and paths and never contents. Adding, removing or repointing a grant invalidates an
-      existing approval, and run refuses with the change explained. Reordering does not. Offline
-      approvals keep their identity. Status shows grants without secrets. Records, presentation and
-      refusal only: nothing is delivered to a worker yet. It follows the policy slice for the
-      validated grants and slice-26 for the shared canonical record and refusal rule. Broken down
-      from p1-credentials-passed-in.
   - id: T-48
     title: The session engine port delivers a per-command secret or single-file mount to a worker without it entering the create configuration
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [T-47, slice-29]
     kind: task
   - id: slice-31
@@ -1753,7 +1712,7 @@ items:
   - id: slice-32
     title: run bind-mounts the approved Codex auth.json, and its lock file when present, read-write as single files
     phase: 1
-    owner: null
+    owner: donvargax
     status: todo
     depends_on: [slice-30, T-48]
     kind: slice
@@ -1852,6 +1811,11 @@ items:
       later stop's copy would differ, and which rename lands last would matter. Whoever drafts this
       item must revisit that argument, either by scrubbing identically from every controller or by
       running the copy's Commit through the session's gate.
+
+      This item already owns AC-36’s hostname-marker probe. Because q-56 preserves refused hostnames
+      verbatim, verify that a synthetic credential marker embedded in a valid refused hostname is
+      absent from retained proxy stdout, Docker’s proxy log, and the protected egress-refusals.jsonl
+      copy.
   - id: T-53
     title: A session contract subprocess exits 2 under the code proof's coverage run, failing a scenario that passes in Tests
     phase: 1
@@ -2029,6 +1993,12 @@ items:
       scenario first committed without the tag is the case left. The red selector is this project's
       own (T-21), on top of the template's harness, so if this lands it goes to go-template-itos
       with the rest of the item.
+
+      Extend this item's scenario check to cover command-assembly probes. Commit 5b8bc5d on slice-38
+      supplied TestPublicExecCommand after nine exec scenarios reported a missing result without
+      reaching the parser. Add a regression with a selector that matches zero Go tests. The harness
+      should report the affected scenario ID and missing probe before evaluating the product
+      assertion.
   - id: p2-code-proof-draw-stable-across-main-merges
     title: The code proof's draw stays put when main is merged into an item's branch, so a repair is judged on the sites that failed
     phase: 1
@@ -2053,48 +2023,21 @@ items:
       as T-21 did for @wip scenarios; or both. Neither is a redraw to escape a failure. The same
       item settles one sentence in AGENTS.md: whether `itos-cc mutation list`, which runs no test,
       may be used locally to see the sites, given that local mutation runs are forbidden.
-  - id: p2-first-engine-row-slow-create
-    title: A shard's first engine row passes when the engine's first create takes seconds
+
+      AGENTS.md already prohibits local mutation runs. Correct the conflicting 09:23 instruction in
+      the slice-37 repair brief. The existing item covers redraws and the narrower open question of
+      whether agents may list mutation sites locally.
+
+      This item already identifies the conflicting slice-37 repair brief. Align the brief with
+      AGENTS.md, which assigns mutation proof to CI and prohibits local mutation runs. The narrower
+      open question is whether implementers may list mutation sites locally without running tests.
+  - id: T-54
+    title: Each engine shard warms the engine with one create and remove before its first engine row
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
-    kind: idea
-    why: >
-      No item owns this once T-50 lands. T-50 stops the leak and names the failure. Its fourth rule
-      leaves the slow first create to a remedy read from measured intervals, and its attempt 3
-      returned that the one limit it may move is not enough (q-63). In run 43543693012 at 73cbd13
-      all three shards failed at their first engine row (ID-OFFLINE-29, ID-ANCHORS-09,
-      ID-LIFECYCLE-08), each controller stopping with run.call-timeout, operation create response.
-      The lifecycle row's intervals: image inspection 10 ms, the recorder's checks 0.7 ms, the
-      engine's HTTP 201 2.329 s after forwarding and 3.729 s after controller start, 1.39 s of which
-      had passed before the call began. That outlives the fixture's 1-second call and also its
-      3-second startup budget, which starts before preflight
-      (internal/slices/run/command/command.go:80), so a longer call alone turns the failure into a
-      startup timeout. The same first rows failed in 5 of 6 shard jobs on slice-29's and T-51's
-      first go1.27.4 runs, and 9 in 129 are on record with a warm cache. Each costs a re-run, and
-      three have cost an implementer attempt and a question (q-59, q-61, q-63). Choose the remedy in
-      the spec, from more than this one cold-cache sample: the two create lines itos cut from that
-      run, and the passing-row intervals and I/O pressure readings that
-      p1-engine-timing-notice-every-run is to publish. If limits are the remedy, move call and
-      startup together, only through engineBudgetTree, each with a delayed-success and an expiry
-      control, T-42's cut and restart-refusal controls still valid, and the cost measured in CI
-      against the 180-second shard gate, since engineQuietInterval follows the larger limit. A warm
-      cache is p2-ci-go-build-cache-rolling-key's and does not explain the warm-cache failures. No
-      retry, skipped row, relaxed assertion or production default change. Phase p2: a re-run clears
-      each failure, so it blocks no step of milestone two, but it taxes every pull request of steps
-      1 and 2.
-
-      A warm cache does not prevent it. main's run 43546719957 at bcb9be2 (a docs commit, go1.27.3)
-      restored the setup-go cache, compiled the engine suite in 4.9 s, and still failed the
-      lifecycle shard's first engine row (ID-LIFECYCLE-08) with run.call-timeout on operation
-      create, then cleanup HTTP 409. So the slow first create of a job is the engine's, not the
-      compile's: p2-ci-go-build-cache-rolling-key alone is not the remedy.
-
-      The existing todo item already owns the measured remedy for legitimate first-create latency
-      exceeding shortened fixture budgets. T-50 is merged but explicitly leaves this remedy open.
-      Settle it within this item using measured intervals; any budget changes must address call and
-      startup together, preserve timeout controls, and satisfy the CI shard time gate.
+    kind: task
   - id: p2-native-mount-evidence-credential-inspection
     title: A CI-only tier runs credential source inspection against real bind mounts made in a private user and mount namespace
     phase: 1
@@ -2117,3 +2060,300 @@ items:
       slice-31 to slice-33 rely on. Not checked: whether the hosted ubuntu-latest runner permits
       unprivileged user namespaces (Ubuntu 24.04 restricts them through AppArmor by default); the
       runner has sudo if it does not.
+  - id: slice-34
+    title: Run provides an isolated, writable harness home
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: slice
+  - id: slice-35
+    title: Codex starts with isolated state and unwanted startup services disabled
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-34]
+    kind: slice
+    why: >
+      Was p1-harness-codex-home-seeding.
+      Seed the container-owned home with Codex update checks, analytics, plugins and its own sandbox
+      disabled, as the charter requires. Specify initialization and repeat-run behavior without
+      changing literal workload argv or executing checkout code on the host. Keep authentication
+      delivery in slice-32 and follow the charter's dedicated-directory decision rather than that
+      item's stale single-file wording. Prove settings and startup behavior with black-box scenarios
+      and controlled endpoints, without real accounts or credentials. Broken down from null.
+  - id: slice-36
+    title: Claude starts with isolated state and onboarding already completed
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-34]
+    kind: slice
+    why: >
+      Was p1-harness-claude-home-seeding.
+      Seed Claude's onboarding state so first startup needs no onboarding interaction or incidental
+      startup network access. Specify repeat-run behavior and preserve project isolation. Keep token
+      delivery in slice-31; this item owns nonsecret harness initialization. Use shared engine ports
+      and named adapters, without importing another slice. Prove behavior through black-box
+      scenarios with synthetic inputs and controlled endpoints; real-engine evidence belongs only in
+      CI. Broken down from null.
+  - id: T-55
+    title: Each engine shard's warm-up sends the product's own create, timed beside the plain one
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: [T-54]
+    kind: task
+  - id: T-56
+    title: Add shared terminal ports, adapters and contract tests
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: slice-37
+    title: Run an owned foreground workload with a TTY
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: [T-56]
+    kind: slice
+  - id: slice-38
+    title: Execute literal argv within a running owned session
+    phase: 1
+    owner: donvargax
+    status: doing
+    depends_on: []
+    kind: slice
+    why: >
+      Was p1-exec-owned-session.
+      Implement internal/slices/exec with thin command handling and shared session-engine
+      operations. Validate ownership and the live foreground workload; inherit frozen policy,
+      identity and mounts without extending session lifetime. Cover exit status, cancellation,
+      disconnect, concurrent stop and foreground exit. Specify how an exec process is terminated
+      despite the absence of an exec-signal endpoint before implementing. Require black-box
+      scenarios and CI-only real-engine evidence. Broken down from p1-interactive-tty.
+  - id: slice-39
+    title: Attach an interactive TTY to an owned exec command
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-56, slice-38]
+    kind: slice
+    why: >
+      Was p1-exec-interactive-terminal.
+      Combine the exec slice with shared terminal support for raw input, initial dimensions, resizes
+      and Ctrl-C as input. Specify terminal selection and JSON refusal. Prove terminal restoration,
+      bounded disconnect termination and removal of active exec workloads when the foreground
+      session ends. Keep shared behavior in engine packages without importing the run slice. Require
+      black-box red/green scenarios and CI-only real-engine evidence. Broken down from
+      p1-interactive-tty.
+  - id: T-57
+    title: The engine suite makes one throwaway product launch before its first engine row, and prints its create interval
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: p2-overlap-06-nondeterministic
+    title: ID-OVERLAP-06 failed once on main on a tree that had just passed it
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      main's run 43802914436 at a36768a, slice-27's merge commit, failed ID-OVERLAP-06 (Native
+      nested refusal preserves the running worker and releases after cleanup) with 'admitted
+      workload is not independently active with its original full ID', beside the known
+      ID-ANCHORS-09 first-row failure. The pull request's head e73a1bd, which differs from a36768a
+      by one line of tasks/asks.yaml, had passed the same shard 25 minutes earlier, and the re-run
+      of the failed jobs passed. The other shard took 144 s of its 180 s gate in that run, with
+      slice-27's egress rows now live, so a timing dependence under a fuller shard is the first
+      thing to check. One occurrence; record the next with its run before repairing anything.
+
+      The existing item tracks intermittent failures in ID-OVERLAP-06. Run 44286115510 failed the
+      activity check, which 369b58b changed to retry. The cleanup check still samples the daemon
+      once to confirm a 404 for the original worker ID. No cleanup failure has been observed. If one
+      occurs, record the CI run on this item.
+  - id: p2-repair-platform-ci-fixtures
+    title: Repair shell and Windows assumptions in portability fixtures
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Preserve the inherited checks and T-12's manual macOS/Windows validation by repairing
+      Bash-4-only fixture tooling and Windows executable/error assumptions. This is deferred
+      foundation maintenance: no supplied evidence shows it blocks the charter's current
+      harness-home step. Require focused regressions and platform CI evidence without weakening
+      assertions or claiming additional container-host support.
+
+      Commit aaf919c makes runFixtureWarmupShell pass --binary to jq on every platform to handle
+      Windows line endings. The existing item covers this fixture. Check the wrapper on macos-latest
+      before attributing a dispatch failure to it.
+
+      Include the shared Linux machine in the fixture repair. Start with one approval disk-contract
+      test that returns state.unsafe locally and passes on Ubuntu CI. Use it to identify the
+      filesystem assumption, then check the admission-leftover tests and affected feature rows while
+      preserving the production ownership checks.
+
+      This item already covers local state.unsafe failures on the shared Linux machine and the
+      affected feature scenarios. Both / and /tmp are owned by UID 65534 in the agent sandbox. Use
+      ID-EGRESS-09 to verify and document where implementers can run the fixture and reach its
+      behavior assertion with production ownership checks intact.
+
+      This item already records UID 65534 on `/` and `/tmp` and names ID-EGRESS-09 as a verification
+      case. Include the disk home fixtures in its scope. Name the first untrusted ancestor and its
+      UID in the fixture diagnostic, or document the ancestor-ownership prerequisite in
+      `features/README.md`. Keep the production ownership check and fixture assertions intact.
+
+      This item already records UID 65534 on / and /tmp and tracks the affected approval, home and
+      feature fixtures. Include the three reported cmd RealStore contract failures when verifying a
+      fixture environment that satisfies both ancestor ownership and the non-root manifest identity
+      requirement.
+
+      This item already tracks UID 65534 on `/` and `/tmp` and the resulting `approval.state.unsafe`
+      failures in disk tests and feature scenarios. Before judging a worker’s local evidence, use
+      the existing ID-EGRESS-09 fixture to confirm it reaches its behavior assertion with production
+      ownership checks intact. If an ancestor check stops it first, record the path and UID as an
+      environment blocker.
+
+      This item already records that `/` and `/tmp` appear as UID 65534 in the shared Linux sandbox
+      and that approval disk contracts fail the ancestor-ownership check. It also calls for
+      documenting the fixture prerequisite in `features/README.md` and using ID-EGRESS-09 to verify
+      that a suitable environment reaches the behavior assertion with production ownership checks
+      intact.
+
+      This item already tracks approval fixtures failing when `/` and `/tmp` appear as UID 65534. At
+      dispatch, check the fixture’s ancestor ownership and report the first rejected path and UID.
+      Use ID-EGRESS-09 to confirm the selected worker can reach its behavior assertion before
+      assigning it local red/green evidence.
+
+      This item already tracks UID 65534 on state-root ancestors and uses ID-EGRESS-09 to verify
+      that a local fixture reaches its assertion with production ownership checks intact. Three
+      consecutive sessions hit the same blocker, leaving the RUNTTY-20 and RUNTTY-22 assertions
+      unchecked until CI.
+
+      This item already tracks the approval failures caused by UID 65534 on `/` and `/tmp` in the
+      shared sandbox. It calls for documenting the ancestor-ownership requirement and using
+      ID-EGRESS-09 to verify that a disposable fixture reaches its behavior assertion with
+      production checks intact.
+
+      This item already records that `/` and `/tmp` appear as UID 65534 in the loop sandbox,
+      blocking approval-backed tests before they reach their assertions. It names ID-EGRESS-09 as
+      the check that a worker can produce local red/green evidence with the production ownership
+      checks intact.
+
+      This item already tracks UID 65534 on `/` and `/tmp` in the shared runner. Recovery fixtures
+      hit the same ancestor-ownership check as approval fixtures. Use ID-EGRESS-09 to verify that
+      the chosen fixture environment reaches its behavior assertion with production ownership checks
+      intact.
+
+      This item already tracks approval and recovery fixtures failing because the local runner
+      reports UID 65534 for `/` and `/tmp`. It names ID-EGRESS-09 as the check that a suitably
+      mapped runner reaches the behavior assertion with production ownership checks intact.
+  - id: p2-lifecycle-09-startup-timeout
+    title: ID-LIFECYCLE-09 ended in run.startup-timeout once on main, past the first engine row
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      main's run 43822382408 at ab99c7f, a docs commit, failed ID-LIFECYCLE-09's third example
+      (Ignored and repeated cancellation escalates once after the fixed grace) with
+      run.startup-timeout: the controller exited 75 at 3.97 s without reaching the ignore lifecycle
+      barrier, under the fixture's 3-second startup budget. In the same job T-57's throwaway launch
+      had taken the slow first create (forward-to-answer 1.063 s) and all four ID-LIFECYCLE-08 rows
+      passed, so this is not the first-row failure T-54, T-55 and T-57 dealt with. The journal
+      printed with the failure omits entries 2 to 18, which hold the launch itself. One occurrence;
+      with the next, read the full journal for which call took the time before choosing anything.
+
+      Include the ID-LIFECYCLE-12 healthy control in the existing startup-timeout investigation. In
+      run 43981890039 at c84b238, create was submitted 2.6 s into the 3 s budget and the engine
+      answered in 49 ms. Measure elapsed time from registration completion to create submission
+      alongside registration itself. That will let the two failures be compared before choosing a
+      remedy. T-50 is merged, and q-65 scoped its instrumentation to registration.
+
+      This investigation already tracks run 43981890039. Its healthy control submitted create 2.6 s
+      into the 3 s startup budget, and the engine answered in 49 ms. Include the separate 1 s
+      registration timeout when comparing where startup time went. The coordinator can use those
+      measurements to judge budget headroom. q-70 authorized reruns only for the slow first create.
+  - id: T-58
+    title: The whole feature suite's command names its own timeout, with headroom over what the suite takes in CI
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-59
+    title: egress.feature moves to an engine shard of its own, as the other shard's step has passed 180 seconds
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: slice-40
+    title: Deliver an approved OpenCode login to one container run
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-48, slice-34, slice-30]
+    kind: slice
+    why: >
+      Specify the OpenCode counterpart to slice-32. The source is auth.json under
+      ~/.local/share/opencode and may include the OpenCode Go provider key alongside other provider
+      entries. Specify what one grant authorizes, how unrelated entries stay outside it, what
+      approval shows, how updates or refreshes and cleanup work, and how the staged login stays out
+      of the checkout, engine configuration and logs. Use synthetic markers and fake endpoints for
+      the scenarios. Name any unresolved account decision explicitly. Specification first;
+      implementation follows the Codex and Claude slices. Real credential use is subject to decision
+      0025 question 5.
+  - id: slice-41
+    title: Start OpenCode headless with isolated home and configuration
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-34]
+    kind: slice
+    why: >
+      Specify the OpenCode counterpart to slice-35 in the approved worker. Run opencode --standalone
+      run --format json against its isolated home and configuration, with the authorized provider
+      and model. Cover separation from host configuration and services, bounded startup, final
+      output and failure, approved egress and cleanup. Scenarios use synthetic credentials and a
+      fake provider. Specify only for now; implementation follows the Codex and Claude slices.
+  - id: T-62
+    title: Clarify how branch syncs contribute to release version counts
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: p3-release-notes-first-parent-fixture
+    title: Cover a nested item merge whose first parent is on main
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      PR 69's second local review identified a topology missing from the regression: a nested merge
+      can start an item branch at main's tip. It should remain listed when only its first parent is
+      on main's line. See PR 69 discussion in comment 6988903923.
+  - id: p2-approval-prerequisite-step-checks-no-consent-prompt
+    title: Check that approval prerequisite failures do not request consent
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The approvalProblem scenario step checks the prerequisite diagnostic and exit code but can
+      pass even when the command asks for consent. Add a focused regression and make the step detect
+      an unexpected consent prompt in the approval and hardlink refusal cases.
+
+      The existing item covers this exact gap. The approvalProblem step should fail if an approval
+      or hardlink prerequisite refusal prompts for consent, even when the diagnostic and exit code
+      are correct.

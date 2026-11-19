@@ -298,6 +298,37 @@ func TestBoundedReleaseNotes(t *testing.T) {
 		}
 	})
 
+	t.Run("sync contributions", func(t *testing.T) {
+		feat := commit{SHA: fmt.Sprintf("%040d", 2), Header: "feat: catch up", Type: "feat", sync: true}
+		fix := commit{SHA: fmt.Sprintf("%040d", 3), Header: "fix: catch up", Type: "fix", sync: true}
+		breaking := commit{SHA: fmt.Sprintf("%040d", 4), Header: "refactor!: catch up", Type: "refactor", Breaking: "refactor!: catch up", sync: true}
+		for _, tc := range []struct {
+			name      string
+			syncs     []commit
+			want      string
+			assurance string
+			absent    string
+		}{
+			{"two", []commit{feat, fix},
+				"Omitted branch syncs add 1 feat and 1 fix, bringing the totals for the version calculation to 2 feats, 1 fix and 0 breaking changes.",
+				"No commit since v0.1.0 is a breaking change.", "No listed change is breaking."},
+			{"three", []commit{feat, fix, breaking},
+				"Omitted branch syncs add 1 feat, 1 fix and 1 breaking change, bringing the totals for the version calculation to 2 feats, 1 fix and 1 breaking change.",
+				"No listed change is breaking.", "No commit since v0.1.0 is a breaking change."},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				n := boundedFixture(false)
+				n.Commits = append(n.Commits, tc.syncs...)
+				body := renderNotes(t, n)
+				checkBounded(t, n, body)
+				requireText(t, body, tc.want, tc.assurance)
+				if strings.Contains(body, tc.absent) {
+					t.Errorf("notes hold %q:\n%s", tc.absent, body)
+				}
+			})
+		}
+	})
+
 	t.Run("framing cannot fit", func(t *testing.T) {
 		for _, first := range []bool{false, true} {
 			n := boundedFixture(first)
@@ -322,7 +353,7 @@ func TestBoundedReleaseNotes(t *testing.T) {
 // Build only this tool. All failure probes execute its real entry point, in a
 // disposable repository; no feature suite, engine or publication is involved.
 func TestBoundedReleaseNotesCommandFailures(t *testing.T) {
-	binary := filepath.Join(t.TempDir(), "release-notes")
+	binary := filepath.Join(t.TempDir(), "release-notes.exe")
 	build := exec.Command("go", "build", "-o", binary, ".")
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, out)

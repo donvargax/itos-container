@@ -66,6 +66,7 @@ const (
 	CredentialKind
 	CredentialDuplicate
 	CredentialSource
+	HomeStorage
 )
 
 // Issue locates one failure using decoded path components. Version is the
@@ -89,10 +90,16 @@ type Source interface {
 
 // Policy is the complete effective request. It never records approval.
 type Policy struct {
+	Home        *Home
 	Version     int
 	Manifest    string
 	Network     Network
 	Credentials []Credential
+}
+
+// Home requests persistent container-managed storage, never a host path.
+type Home struct {
+	Storage string `json:"storage"`
 }
 
 // Credential keeps the written order for located source observations. Display

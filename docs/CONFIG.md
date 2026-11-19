@@ -5,16 +5,17 @@ sandbox policy. The [charter](charter.md) selects the milestone from the binding
 [pilot contract](plans/container-pilot.md); they take precedence over upstream
 examples. Strict policy validation is implemented through `doctor --policy-only`, and
 policy plus manifest validation through `doctor --manifest-only`. A policy can request an
-exact host-name egress allowlist (version 2 below); terminal approval binds it, but run
-still refuses it. The inherited count, version and completion commands remain. Ordinary doctor inspects host readiness and approval. Explicit approval is implemented;
-runtime isolation remains unimplemented.
+exact host-name egress allowlist (version 2 below); terminal approval binds it and run
+uses that frozen list through the owned proxy. The inherited count, version and
+completion commands remain. Ordinary doctor inspects host readiness and approval.
+Explicit approval is implemented;
+runtime support requires the corresponding CI engine evidence.
 
 The milestone is an offline owned run with no network, an approved hardened container,
 the checkout as its only host mount, a non-root identity and owned cleanup. Linux amd64
 with native Docker is a target requiring passing runtime evidence, not a supported-host
-claim. A policy may request network egress to an allowlist of host names, but no
-proxy enforces it and no run starts with it yet. Ordinary doctor and approve bind
-the requested list; run still refuses a valid version 2 file for now. Version 3 adds
+claim. A version-2 allowlist run starts an owned proxy and isolated internal network.
+Ordinary doctor, approve and run share readiness checks and effective settings. Version 3 adds
 named credential requests and metadata-only inspection, without approval or delivery.
 Credential delivery/accounts, network Git, LAN ingress, Compose and other platforms
 remain deferred. Describing the wider pilot does not authorize its later slices or settle an open security decision.
@@ -320,11 +321,30 @@ policy version, so changing 1 to 2 offline still needs one new approval. Reorder
 or equivalently respelling names keeps the same fingerprint; adding, removing or
 changing a name does not. Stored records must satisfy their profile's exact shape.
 
-Run alone still refuses every valid version 2 policy with `policy.version` at
-`/version`, exit 2, before the manifest, engine or host state. Its fix names
-`doctor --policy-only`. Invalid policies retain their own validation problems.
-No approval here starts a proxy or grants a route; slice-27 must prove enforcement
-before lifting run's gate. See the [approval decision](decisions/0026-egress-allowlist-approval.md).
+Run accepts valid version 2 policies, including offline requests. Allowlist readiness
+requires native Docker >=28.0 with negotiated API >=1.48, the installed regular static
+Linux amd64 controller outside the checkout, and this cached proxy image:
+
+`docker.io/library/busybox@sha256:5624bb6777cf469b1fb50ae3f981b15d2715ee2fffaf20b9998cfb7843726835`
+
+A missing image reports `doctor.image.missing` (exit 3) and this exact operator fix:
+
+```sh
+docker pull docker.io/library/busybox@sha256:5624bb6777cf469b1fb50ae3f981b15d2715ee2fffaf20b9998cfb7843726835
+```
+
+An unusable cached proxy reports `doctor.egress-image`, an inadequate or unknown daemon
+`doctor.egress-engine`, and an unsafe executable `doctor.egress-executable`, all exit 3.
+No command pulls, builds or substitutes an image. Offline requires none of these egress
+prerequisites. A changed list refuses before opening the engine, naming sorted JSON
+pointers without values. Existing matching allowlist-v1 records remain valid.
+
+`intents/<project>/<token>.egress.json` stores schema-1 execution evidence containing
+only the observed `proxy_image_id`. It is published durably before the intent and
+before any resource creation, under the same protected collection. Recovery requires
+it for an allowlist session; old offline records need no sidecar. It neither changes
+canonical approval nor participates in the fingerprint. See the
+[runtime decision](decisions/0028-egress-run-wiring.md).
 
 The canonicalising library is `golang.org/x/net v0.60.0` (BSD-3-Clause, maintained by the
 Go team; `net/http` uses the same Lookup profile for host names) with
@@ -551,8 +571,11 @@ A source, checkout or state location on NFS, an NFS home included, reports
 has a device of its own and reports `/` as its root, so a second mount of a
 protected subdirectory matches its tree in neither position nor identity. A source,
 checkout or state location on 9p, such as a virtual machine's shared host folder,
-reports `credential.filesystem`; unrelated 9p mounts do not. Other filesystem
-types are judged from their mount rows.
+reports `credential.filesystem`; unrelated 9p mounts do not. Under q-64 the shared observer
+accepts exactly `ext4`, `btrfs` and `xfs`; every other type is refused by absence from that
+allowlist. This includes source/ancestor descriptors and mount rows at, below or covering
+checkout or either state root, in both observations. The fix names all three accepted
+types. Unrelated rows remain harmless, and mapping and known-location precedence remain.
 
 Source problems are located at `/credentials/<written-index>/source`. Missing or
 unavailable metadata uses exit 3; symlink, ancestor, location, regular, owner, permissions,
@@ -574,10 +597,56 @@ These observations neither grant access nor establish continuous protection from
 host changes. [Decision 0027](decisions/0027-credential-source-inspection.md) defines the
 race argument and limits. The disk adapter uses `github.com/moby/sys/mountinfo` v0.7.2
 under Apache-2.0, with its upstream license retained in the module distribution.
-Ordinary doctor, approve and run still refuse valid version 3 with `policy.version`,
-exit 2, before manifest/source/engine inspection or state publication. Their fix points
-to policy-only and credentials-only inspection. Slice-30 owns approval integration;
-this mode grants no delivery and settles none of T-47's live-account questions.
+Ordinary doctor and approve now consume this same observer before and after engine
+inspection and after consent, including remembered approvals. Each observation compares
+the policy pin's root device and inode with the independent walk's checkout node. Both
+must match; descriptor devices are compared, not mountinfo devices. A mismatch is
+`doctor.checkout.changed` (1) before consent and `approve.changed` (1) after it.
+
+The effective root and selected state root have an inclusive 4095-byte UTF-8 bound in
+ordinary doctor/approve even without grants. The root is checked before policy pin/open;
+state after valid policy, before source or boundary observation. A 4096-byte root reports
+`doctor.checkout.root`, state reports `approval.state.location`, both exit 2 with message
+and fix naming the boundary and the 4095-byte limit. State length includes the appended
+`/itos-container`. Credentials-only retains its no-grant no-scan result. Short relative or invalid UTF-8
+state selections without grants retain the existing store/control refusal order.
+
+### Approved credential settings
+
+Schema 1 gains an optional top-level `credentials` array of closed `{kind,source,target}`
+objects, sorted by kind. Its targets are exactly
+`/run/itos-container/credentials/claude-token` and
+`/run/itos-container/credentials/github-token`. A nonempty set selects
+`offline-credentials-v1` or `allowlist-credentials-v1`, with policy version 3. Canonical
+settings bind paths and kinds, never source bytes, hashes, inode, size, permissions or
+timestamps. Reordering grants or rotating a still-valid source at the same path leaves
+the fingerprint unchanged; metadata is still revalidated.
+
+Adding, removing or repointing a grant changes approval. Differences treat the whole
+array as `/credentials`, with absence represented by null; first/last grant changes
+also affect `/profile`. Removing the last grant restores the current request's offline
+fingerprint route when its other settings permit it. No grants omits the member entirely,
+retaining `offline-v1`/`allowlist-v1` and existing version-1/2 bytes. A no-grant version-3
+policy uses those profiles but retains declared version 3, so a version-only edit changes
+exactly `/policy/version`.
+
+Stored records remain closed, canonical and independently hash-verified. Invalid grant
+kinds, paths, targets, ordering, duplicates and extra fields are `approval.state.invalid`.
+A valid historical target with one filename under `/run/itos-container/credentials/` is
+readable history but differs from the current target and requires fresh approval.
+Status projects grants only from the validated protected snapshot, never current policy
+or approval. No-grant session JSON omits `credentials`.
+
+Any current credential grant requires terminal stdin and stdout and plain output, and
+refuses every `--fingerprint` option. The review explains provider permissions, prospective
+memory-backed copying, lack of workload redaction, allowed-host exfiltration and possible
+credential bytes in hostname refusal logs. An unsandboxed host agent can fake a terminal;
+approval records what, not who. See [CLI](CLI.md) and [security](security.md).
+
+Run still refuses every valid version-3 request with `policy.version`, exit 2, before
+manifest/source/engine/state access, even with approval or no grants. Delivery and
+live-account questions remain with their owning increments; these records grant no
+implemented delivery.
 
 ## Remaining specification work
 
@@ -590,3 +659,32 @@ Format policy is not loader compliance. Implement each required behaviour with
 black-box scenarios and red-first step definitions; use domain-owned ports and fakes,
 and run real-engine scenarios only in CI. The policy slice
 supplies no runtime isolation evidence.
+
+## Harness home request
+
+Policy versions 1, 2 and 3 accept optional `home: {storage: volume}`. The object
+is closed and `storage` is required; null, tmpfs, host paths, names and driver
+options are refused. Omitting `home` preserves the earlier policy and approval
+bytes. File-only doctor reports only the normalized request, without inspecting
+host state or contacting an engine.
+
+Doctor and approve bind a private volume at `/home/itos`, mode `0700`, owned by
+the approved host UID/GID, with project lifetime. The effective profile gains
+`-home` before `-v1`, including credential profiles. Adding or removing this
+request changes the fingerprint and requires a new approval. Review explains
+retention after exit/stop, checkout scope and terminal-consented reset/deletion;
+it never allocates storage. This request grants neither networking nor credentials
+and does not lift version-3 run restrictions. The worker receives `HOME=/home/itos`,
+`TMPDIR=/tmp` and fixed XDG config, data, state and cache paths beneath that home.
+Image defaults cannot redirect them. `/tmp` remains a separate executable tmpfs.
+
+The protected catalog is fixed at
+`<account home>/.local/state/itos-container/homes`, independent of `HOME` and
+`XDG_STATE_HOME`. Its scope binds checkout identity, UID/GID and the local daemon.
+Changing an image or approval generation preserves data; another scope cannot
+reuse it. Disabling the request retains the home, and re-enabling reuses it.
+Missing or changed recorded storage refuses reuse instead of silently replacing it.
+Use `status --homes` to discover retained and obsolete generations and the
+terminal-consented `stop --home <id> --reset|--delete` operations to retire one.
+Native CI evidence is required before claiming filesystem isolation; see
+[decision 0030](decisions/0030-persistent-harness-home.md).

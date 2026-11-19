@@ -13,6 +13,7 @@ import (
 	"github.com/donvargax/itos-container/internal/engine/approval/domain"
 	"github.com/donvargax/itos-container/internal/engine/approval/port"
 	"github.com/donvargax/itos-container/internal/engine/approval/port/porttest"
+	policy "github.com/donvargax/itos-container/internal/engine/policy/port"
 )
 
 // TestApprovalContractProbe is invoked only by feature fixtures through a test
@@ -105,4 +106,28 @@ func TestApprovalRealStoreContract(t *testing.T) {
 		b := codec.Candidate(porttest.Ready(), uid, "3000")
 		return disk.Store{StateHome: t.TempDir(), Records: codec}, a, b
 	})
+}
+
+func TestCredentialGrantStoreContract(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux protected-state target")
+	}
+	for _, backend := range []string{"memory", "disk"} {
+		t.Run(backend, func(t *testing.T) {
+			porttest.StoreContract(t, func() (port.Store, port.Candidate, port.Candidate) {
+				codec := canonical.JSON{}
+				r := porttest.Ready()
+				r.Policy.Policy.Version = 3
+				r.Policy.Policy.Credentials = []policy.Credential{{Kind: "github-token", Source: "/vault/github-a"}, {Kind: "claude-token", Source: "/vault/claude-a"}}
+				uid := strconv.Itoa(os.Geteuid())
+				a := codec.Candidate(r, uid, "1000")
+				r.Policy.Policy.Credentials[0].Source = "/vault/github-b"
+				b := codec.Candidate(r, uid, "1000")
+				if backend == "memory" {
+					return &porttest.Store{}, a, b
+				}
+				return disk.Store{StateHome: t.TempDir(), Records: codec}, a, b
+			})
+		})
+	}
 }

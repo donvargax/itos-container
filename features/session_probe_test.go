@@ -3,6 +3,7 @@ package features
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -193,7 +194,9 @@ func (w *world) productProbeBinary() (string, error) {
 }
 
 func (w *world) probeAssembly(source, suffix string) (string, error) {
-	path := filepath.Join(w.dir, "slice-9-contract-probe")
+	// Standalone harness worlds have no suite binary. Keep their assemblies
+	// beyond individual fixture cleanup, keyed by the source tree and role.
+	path := filepath.Join(standaloneProbeDir, fmt.Sprintf("%x%s", sha256.Sum256([]byte(source)), suffix))
 	// The suite binary lives outside every scenario's writable checkout and
 	// survives their teardown. Reuse only the executable; requests, processes,
 	// state, journals and coverage destinations remain scenario-specific.
@@ -211,6 +214,7 @@ func (w *world) probeAssembly(source, suffix string) (string, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 		cmd := exec.CommandContext(ctx, "go", probeBuildArgs(target, covered)...)
+		cmd.WaitDelay = time.Second
 		cmd.Dir, cmd.Env = source, setEnv(sessionChildEnvironment(os.Environ()), "CGO_ENABLED", "0")
 		data, err := cmd.CombinedOutput()
 		if err != nil {

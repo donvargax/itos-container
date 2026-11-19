@@ -4,17 +4,18 @@ These rules describe the planned `itos container` extension. The [charter](chart
 selects the milestone from the binding [pilot contract](plans/container-pilot.md); both
 take precedence over upstream examples. The current [entry point](../cmd/itos-container/main.go)
 exposes policy, manifest, host readiness and approval inspection through doctor,
-explicit approval through approve, and invocation/approval refusals through run, alongside the inherited count, version and completion commands. Runtime
-isolation is not implemented.
+explicit approval through approve, and approved offline or allowlist runs, alongside
+the inherited count, version and completion commands. Runtime support claims require
+the corresponding CI engine scenarios at the pushed head.
 
 The first milestone is an offline owned run: explicit argv in an approved, hardened
 container with no network, the checkout as its only host mount, a non-root identity
 and owned resources cleaned up on exit. Linux amd64 with native Docker is the target,
 requiring passing runtime evidence before any support claim. A policy can request an
-exact host-name egress allowlist, which the explicit policy-only, manifest-only and
-credentials-only doctor scopes read: nothing approves, enforces or runs it yet, and the
-other commands refuse it. Named credential requests and metadata inspection are implemented;
-credential delivery/accounts, network Git, LAN ingress, Compose and other
+exact host-name egress allowlist and named credential grants. Doctor and approve inspect
+their prerequisites; run uses the matching approved list through an owned CONNECT proxy
+on port 443. Named credential requests, metadata inspection and approval are implemented;
+run retains its credential gate. Credential delivery/accounts, network Git, LAN ingress, Compose and other
 platforms are deferred. Describing later pilot commands here does not authorize their
 implementation or settle an open security decision. Real-engine scenarios run only in CI;
 agents never receive the Docker socket.
@@ -136,10 +137,15 @@ list: plain output has one `network.allow: <name>` line per canonical name in as
 byte order after `network.mode`, and JSON has `policy.network.allow` as the same sorted
 array. Offline has no list. Inspection reads and validates only: it runs no engine, proxy
 or helper. Ordinary doctor and approve bind a valid version 2 policy in the
-canonical approval. Run still refuses every version 2 policy with `policy.version`
-at `/version` and exit 2 before engine access, naming `doctor --policy-only`.
+canonical approval. Run accepts the same valid version-2 settings. An offline request
+keeps network none; an allowlist request requires native Docker 28.0 or newer and
+negotiated API 1.48 or newer, the exact cached proxy image and the installed static
+Linux amd64 controller outside the checkout. The proxy is owned beside the worker;
+there is no TLS interception or fallback route. Missing proxy images name the exact
+`docker pull` command; doctor, approve and run never acquire an image. The private
+proxy entry point is hidden from help and completion.
 
-## Implemented run refusals
+## Implemented run
 
 `itos container run -- <command> [arguments...]` requires a nonempty executable after
 the first separator. Missing or empty commands and commands supplied without `--`
@@ -152,6 +158,24 @@ over missing-command errors. Run emits exactly one schema-1 object with `ok: fal
 and one `run.json-unsupported` problem containing `exit: 2`, a message and guidance
 to remove both requests. The diagnostic also goes to stderr. Terminal and redirected
 streams receive the same refusal.
+
+`itos container run --tty -- <command> [arguments...]` explicitly attaches a
+terminal. Stdin and stdout must both be terminals; otherwise run exits 2 with
+`run.terminal-required`. Acquisition or invalid initial dimensions exits 3 with
+`run.terminal-unavailable`. These checks follow JSON and argv validation and
+precede preflight. Stdin supplies the initial size and later resizes. Distinct
+stdout gets its own saved-state lease without supplying dimensions. Control keys,
+including Ctrl-C and Ctrl-D, go to the workload as bytes; Docker's own default
+Ctrl-P Ctrl-Q detach sequence does too, because run pins one long escape
+sequence the daemon cannot refuse (ctrl-^,ctrl-_,ctrl-^,ctrl-_,ctrl-^,ctrl-_,
+ctrl-^,ctrl-_) and that exact sequence alone detaches. Both worker output
+streams share one raw stream on stdout; controller diagnostics stay on stderr.
+
+Terminal state is restored on every return. Losing either terminal stops the owned
+workload through the existing bounded cleanup path. Terminal disconnect,
+observation, resize and restoration failures have separate `run.terminal-*`
+diagnostics and return 75 unless an observed nonzero workload exit takes priority.
+Terminal mode changes no approved settings and inherits no host terminal environment.
 
 Usage and JSON refusals above precede policy, engine and approval inspection.
 A valid invocation checks local policy, manifest, host identity and approval before
@@ -166,16 +190,18 @@ host-state root as approval. An identical snapshot is reused without rewriting i
 unsafe or conflicting state refuses, and an uncertain write yields no startup input.
 Every invocation revalidates prerequisites and approval, even if the snapshot exists.
 Successful publication now creates one owned unstarted worker from the frozen
-image config ID. Run durably records its inspected full ID, verifies the offline
-boundary, attaches separate stdin/stdout/stderr, then starts the literal argv.
+image config ID. Run durably records its inspected full ID, verifies the approved
+offline or allowlist boundary, attaches streams (merged output for `--tty`), then starts
+the literal argv.
 There is no implicit shell, image acquisition, helper execution or approval prompt.
 An explicit shell executes inside the worker. HOME and TMPDIR use `/tmp` tmpfs;
 the checkout is mounted at `/workspace` with the approved working subdirectory.
 
 Run observes the workload exit, drains output and removes only the revalidated
-owned worker. Zero requires confirmed removal and durable completion. An observed
-nonzero workload exit wins over a separate cleanup error. Failure retains a safe
-protected intent reference; public status/stop recovery remains pending.
+owned worker and any owned proxy and networks. Zero requires confirmed removal and
+durable completion. An observed nonzero workload exit wins over a separate cleanup
+error. Failure retains a safe protected intent reference and a session ID for
+status/stop recovery using the original grant.
 The implementation targets Linux amd64/native Docker. Runtime support and the
 remaining isolation properties require their CI engine scenarios; local fixtures
 are not isolation evidence.
@@ -283,10 +309,45 @@ Plain output names “Credentials only”, the same grants, and “Credential co
 engine and approval were not checked”. Paths use the existing terminal escaping.
 
 The [configuration contract](CONFIG.md#policy-version-3-credential-requests) defines the
-metadata rules, bounds and refusal precedence. Ordinary doctor, approve and run remain
-gated on version 3, including a version-3 policy with no credentials. File-only scopes
-accept its requests without inspecting the named host files. No token is delivered and
-no real credential use is authorized by these observations.
+metadata rules, bounds and refusal precedence. Ordinary doctor and approve accept version 3,
+including a no-grant policy. They reuse the metadata observer before engine inspection,
+after inspection and after terminal consent. Its root device and inode must equal the
+retained policy pin, including in credentials-only mode. An observed mismatch refuses
+with `doctor.checkout.changed` (exit 1), or `approve.changed` after consent.
+
+Ordinary doctor/approve reject an effective root or selected state root above 4095 UTF-8
+bytes with `doctor.checkout.root` or `approval.state.location` (exit 2). Both message and
+fix name the limit. Root text is checked before policy pinning; state text after valid
+policy and before boundary/source observation. The selected state's length includes
+`/itos-container`. These checks also apply without grants.
+
+Any credential grant requires plain output and terminal stdin and stdout. Every supplied
+`--fingerprint`, including empty, malformed or already matching, refuses after readiness
+with `approve.terminal-required`; bare redirected or JSON approval reports
+`approve.confirmation-required`. Both fixes name bare `itos container approve` at a
+terminal. An unchanged terminal approval shows its grants and disclosures without another
+prompt or record rewrite. An unsandboxed host agent can fake a terminal: approval records
+what was approved, not who.
+
+Review lists sorted kinds, JSON-escaped literal source paths and fixed targets. It explains
+that the worker will be able to read each listed file, that approval does not limit token
+provider permissions, and that delivery will copy the current source bytes into
+memory-backed staging retained for that worker until teardown. The original source is
+never written. Workload output and traffic are not redacted. With an allowlist, credential
+bytes can reach any allowed host; even a refused hostname can contain credential bytes
+and is kept in proxy and host refusal logs. Credential absence from those logs is not
+established. Help previews these prospective limits.
+
+`status` shows the protected session snapshot's exact frozen grants, even when current
+requests, approval or source files disappear. It reads none of those mutable inputs and
+never supplies grants missing from an invalid snapshot. No-grant JSON entries keep their
+previous shape. Plain status labels disclosures with the session ID and omits approval's
+temporary run warning.
+
+Credential delivery is not available in this increment; run still refuses version 3
+before manifest, engine or host state access, including with an approval or no grants.
+File-only scopes accept its requests without inspecting the named host files. No token
+is delivered and no real credential use is authorized by these observations.
 
 ## Names, help and arguments
 
@@ -378,6 +439,33 @@ and their mapping in the UI, never the domain. Help and tested behaviour must ag
 the codes they promise. Existing counting behaviour is unchanged.
 
 ## Compatibility and completion
+
+### Retained harness homes
+
+An approved `home: {storage: volume}` gives repeated runs of one checkout a
+private persistent home. Ordinary session cleanup and `stop <session-id>` retain
+it. `status --homes [--json]` reads the current user's protected catalog, including
+obsolete bindings and tombstones, even outside the original checkout. It neither
+scans the daemon for unrecorded volumes nor reads home contents. Select the
+original local daemon to inspect an entry from another engine.
+
+`stop --home <full-home-id> --reset` retires that generation and reserves one
+empty successor for the next approved run. `--delete` retires the generation and
+disables its scope until a separate consented reset. Both review permanent data
+loss and require terminal y/N consent; there is no `--yes`, force or bulk route.
+JSON results stay on stdout and terminal review goes to stderr. Agents must not
+use these operations on real retained homes.
+
+A session claim blocks home retirement until ordinary session stop confirms
+cleanup. Its diagnostic names the exact session and original state-root selection.
+An interrupted action retains its exact home ID and action as a retry, requiring
+fresh consent. Repeating a completed action cannot affect its successor. Missing
+storage is never recreated implicitly, and toggling policy does not undo deletion.
+
+Local contracts cover these decisions. Native isolation and initialization remain
+subject to the CI engine scenarios at the pushed head.
+
+### Compatibility rules
 
 Renamed commands/flags, changed exit codes and incompatible structured/file data are
 breaking changes. Group ready breaking changes and document migration; use a major

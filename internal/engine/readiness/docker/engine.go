@@ -32,22 +32,29 @@ func (Engine) Open(selection, checkout string, budget time.Duration) (port.Sessi
 
 func openEngine(selection, checkout string, budget time.Duration, newClient func(...client.Opt) (*client.Client, error)) (port.Session, port.Failure) {
 	ctx, cancel := context.WithTimeout(context.Background(), budget)
-	return openContext(ctx, ctx, cancel, selection, checkout, newClient)
+	return openContext(ctx, ctx, cancel, selection, checkout, false, newClient)
+}
+
+// OpenCatalog retains local endpoint validation and socket pinning without
+// requiring the checkout used by the catalog's original approval to exist.
+func (Engine) OpenCatalog(selection string, budget time.Duration) (port.Session, port.Failure) {
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	return openContext(ctx, ctx, cancel, selection, "", true, client.New)
 }
 
 func (Engine) OpenContext(call context.Context, selection, checkout string) (port.Session, port.Failure) {
 	lifetime, cancel := context.WithCancel(budgetdomain.Lifetime(call))
-	return openContext(call, lifetime, cancel, selection, checkout, client.New)
+	return openContext(call, lifetime, cancel, selection, checkout, false, client.New)
 }
 
-func openContext(call, ctx context.Context, cancel context.CancelFunc, selection, checkout string, newClient func(...client.Opt) (*client.Client, error)) (port.Session, port.Failure) {
+func openContext(call, ctx context.Context, cancel context.CancelFunc, selection, checkout string, catalog bool, newClient func(...client.Opt) (*client.Client, error)) (port.Session, port.Failure) {
 	success := false
 	defer func() {
 		if !success {
 			cancel()
 		}
 	}()
-	path, failure := socketPath(selection, checkout)
+	path, failure := selectedSocketPath(selection, checkout, catalog)
 	if failure != port.None {
 		return nil, failure
 	}
@@ -68,7 +75,7 @@ func openContext(call, ctx context.Context, cancel context.CancelFunc, selection
 		transport.CloseIdleConnections()
 		return nil, port.EngineSelection
 	}
-	s := &session{api: api, ctx: ctx, cancel: cancel, transport: transport, path: path, selected: selection, checkout: checkout, socket: info}
+	s := &session{api: api, ctx: ctx, cancel: cancel, transport: transport, path: path, selected: selection, checkout: checkout, catalog: catalog, socket: info}
 	_, err = api.Ping(call, client.PingOptions{NegotiateAPIVersion: true})
 	if err != nil {
 		failure = s.failure(err, port.EngineInspect)
@@ -90,6 +97,10 @@ func openContext(call, ctx context.Context, cancel context.CancelFunc, selection
 }
 
 func socketPath(selection, checkout string) (string, port.Failure) {
+	return selectedSocketPath(selection, checkout, false)
+}
+
+func selectedSocketPath(selection, checkout string, catalog bool) (string, port.Failure) {
 	if selection == "" {
 		selection = "unix:///var/run/docker.sock"
 	}
@@ -104,6 +115,9 @@ func socketPath(selection, checkout string) (string, port.Failure) {
 	path, err := filepath.EvalSymlinks(u.Path)
 	if err != nil {
 		return "", port.EngineUnavailable
+	}
+	if catalog {
+		return path, port.None
 	}
 	relative, err := filepath.Rel(checkout, path)
 	if err != nil {
@@ -121,6 +135,7 @@ type session struct {
 	cancel                   context.CancelFunc
 	transport                *http.Transport
 	path, selected, checkout string
+	catalog                  bool
 	socket                   fs.FileInfo
 }
 
@@ -131,7 +146,7 @@ func (s *session) Version() (port.Version, port.Failure) {
 	if err != nil {
 		return port.Version{}, s.failure(err, port.EngineInspect)
 	}
-	return port.Version{Product: v.Platform.Name, OS: v.Os, Architecture: v.Arch, Minimum: v.MinAPIVersion, Maximum: v.APIVersion, Negotiated: s.api.ClientVersion(), SDKMinimum: client.MinAPIVersion, SDKMaximum: client.MaxAPIVersion}, port.None
+	return port.Version{Release: v.Version, Product: v.Platform.Name, OS: v.Os, Architecture: v.Arch, Minimum: v.MinAPIVersion, Maximum: v.APIVersion, Negotiated: s.api.ClientVersion(), SDKMinimum: client.MinAPIVersion, SDKMaximum: client.MaxAPIVersion}, port.None
 }
 
 func (s *session) Info() (port.Info, port.Failure) {
@@ -154,13 +169,14 @@ func (s *session) Image(reference string) (port.Image, port.Failure) {
 	image := port.Image{ID: i.ID, OS: i.Os, Architecture: i.Architecture, RepoDigests: i.RepoDigests, ConfigPresent: i.Config != nil}
 	if i.Config != nil {
 		image.User = i.Config.User
+		image.Volumes = len(i.Config.Volumes) != 0
 		image.Label.Text, image.Label.Present = i.Config.Labels["devcontainer.metadata"]
 	}
 	return image, port.None
 }
 
 func (s *session) Unchanged() bool {
-	path, failure := socketPath(s.selected, s.checkout)
+	path, failure := selectedSocketPath(s.selected, s.checkout, s.catalog)
 	if failure != port.None || path != s.path {
 		return false
 	}

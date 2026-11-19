@@ -36,13 +36,16 @@ type world struct {
 	stdout, stderr string
 	deadline       time.Duration
 	timedOut       bool
+	socketRoot     string // Optional short owned directory for suite preparation.
 
 	stdin               string // the text the run reads from its standard input, "" for none
 	credentials         *credentialWorld
 	policy              *policyWorld
+	home                *homeWorld
 	manifest            *manifestWorld
 	doctor              *doctorWorld
 	approval            *approvalWorld
+	credentialApproval  *credentialApprovalWorld
 	run                 *runWorld
 	session             *sessionWorld
 	offline             *offlineRuntime
@@ -57,7 +60,15 @@ type world struct {
 	overlap             *overlapFixture
 	hardlinks           *hardlinkWorld
 	control             *controlFixture
+	egress              *egressWorld
 	duringQuiet         func() // Selected independent cases inside a stable quiet-worker lifetime.
+}
+
+func (w *world) fixtureSocketRoot() string {
+	if w.socketRoot != "" {
+		return w.socketRoot
+	}
+	return "/tmp"
 }
 
 func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
@@ -81,7 +92,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 		// Before the world is reset, whatever the row's outcome: a failing row is the
 		// one whose offsets matter, and godog skips the steps after a failure.
 		ctx = withSignalOffsets(ctx, w.lifecycle.signalOffsets())
-		sessionErr := errors.Join(w.closeLifecycleNative(), w.closeOverlap(), w.closeRecoveryNative(), w.closeOfflineRuntime(), w.closeAnchor(), w.closeSockets(), w.closeSession())
+		sessionErr := errors.Join(w.closeHomeNative(), w.closeLifecycleNative(), w.closeOverlap(), w.closeRecoveryNative(), w.closeOfflineRuntime(), w.closeAnchor(), w.closeSockets(), w.closeSession(), w.closeEgressNative())
 		w.closeCredentials()
 		w.closeDoctor()
 		w.closePolicy()
@@ -178,11 +189,13 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 	})
 	sc.Step(`^an empty folder "([^"]*)"$`, w.emptyFolder)
 	w.policySteps(sc)
+	w.homeSteps(sc)
 	w.credentialSteps(sc)
 	w.manifestSteps(sc)
 	w.doctorSteps(sc)
 	w.runSteps(sc)
 	w.approvalSteps(sc)
+	w.credentialApprovalSteps(sc)
 	w.sessionSteps(sc)
 	w.offlineRuntimeSteps(sc)
 	w.recoveryNativeSteps(sc)
@@ -198,6 +211,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 	w.hardlinkSteps(sc)
 	w.controlStateSteps(sc)
 	w.runExitSteps(sc)
+	w.egressSteps(sc)
 	return w
 }
 
@@ -233,14 +247,16 @@ func moduleRoot() (string, error) {
 // hook's GIT_DIR, the caller's ITOS_CONTAINER_ settings, CI's), with no
 // global or system git config and a fixed identity, and the caller's PATH
 // without its claude, its itos, its itos extensions or a git that is an itos
-// (callerPath).
+// (callerPath). The caller's terminal width (COLUMNS) is left out too, so help
+// wraps as it does under CI; a scenario that names a width sets it itself.
 func (w *world) env() []string {
 	var env []string
 	for _, kv := range os.Environ() {
 		name, _, _ := strings.Cut(kv, "=")
 		if strings.HasPrefix(name, "GIT_") || strings.HasPrefix(name, "ITOS_") ||
 			strings.HasPrefix(name, "ITOS_CONTAINER_") || strings.HasPrefix(name, "GITHUB_") ||
-			strings.HasPrefix(name, "GH_") || name == "CI" || strings.EqualFold(name, "PATH") {
+			strings.HasPrefix(name, "GH_") || name == "CI" || strings.EqualFold(name, "PATH") ||
+			strings.EqualFold(name, "COLUMNS") {
 			continue
 		}
 		env = append(env, kv)
@@ -458,6 +474,11 @@ func setEnv(env []string, name, value string) []string {
 // runEnv runs program in the folder dir in the environment env, its exit
 // code and output what the Then steps read.
 func (w *world) runEnv(dir string, env []string, program string, args ...string) error {
+	finishObservation, observeErr := w.credentialApprovalWatch()
+	if observeErr != nil {
+		return observeErr
+	}
+	defer finishObservation()
 	ctx := context.Background()
 	if w.deadline > 0 {
 		var cancel context.CancelFunc
@@ -555,7 +576,7 @@ func (w *world) emptyFolder(name string) error {
 // Then steps.
 
 func (w *world) report() string {
-	return fmt.Sprintf("exit %d\n--- stdout\n%s--- stderr\n%s", w.exit, w.stdout, w.stderr)
+	return w.credentialApprovalSafeText(fmt.Sprintf("exit %d\n--- stdout\n%s--- stderr\n%s", w.exit, w.stdout, w.stderr))
 }
 
 func outputLines(output string) []string {

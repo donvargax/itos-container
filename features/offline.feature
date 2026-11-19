@@ -50,7 +50,9 @@ Feature: Hardened offline foreground run
   #   Revalidate root/.git/workspace identity at the
   #   mount/launch boundary; never follow a replacement symlink or create a missing
   #   source. Frozen policy values do not excuse stale filesystem identity.
-  # - Add one explicit tmpfs at /tmp, rw,nosuid,nodev,mode=1777. HOME and TMPDIR
+  # - Add one explicit tmpfs at /tmp, rw,exec,nosuid,nodev,mode=1777: moby
+  #   prepends noexec to every tmpfs list and only a later exec token clears
+  #   it, so the executable /tmp names exec. HOME and TMPDIR
   #   are /tmp; tools may make private subdirectories there. No persistent volume
   #   or host tmp/home mount. Do not claim a tmpfs memory quota. Engine-managed
   #   proc/sys/dev, /dev/shm and generated hosts/hostname/resolv.conf files are
@@ -221,7 +223,7 @@ Feature: Hardened offline foreground run
   # - Sole host source: revalidated checkout bound read/write at /workspace,
   #   private/nonrecursive, no imported nested host mounts or source creation.
   #   workspaceFolder selects an existing directory beneath it, not a mount.
-  #   One requested tmpfs at /tmp, rw,nosuid,nodev,mode=1777. No named/anonymous
+  #   One requested tmpfs at /tmp, rw,exec,nosuid,nodev,mode=1777. No named/anonymous
   #   volumes, extra host directory, host /tmp/home/socket or persistent cache.
   #   Engine-managed proc/sys/dev, /dev/shm and generated hostname/hosts/resolver
   #   files are runtime facilities, not configurable host-source grants.
@@ -1147,7 +1149,7 @@ Feature: Hardened offline foreground run
   # - Read-only image root; sole host source is the revalidated checkout mounted
   #   read/write at /workspace, private/nonrecursive, without nested host mounts.
   #   workspaceFolder is an existing directory beneath that mount, not a source.
-  # - One requested tmpfs at /tmp, rw,nosuid,nodev,mode=1777; HOME and TMPDIR are
+  # - One requested tmpfs at /tmp, rw,exec,nosuid,nodev,mode=1777; HOME and TMPDIR are
   #   /tmp. A2 excludes persistent worker volumes/caches/profiles. Engine-managed
   #   proc/sys/dev, /dev/shm and generated hosts/hostname/resolver files are runtime
   #   facilities, not extra configurable host-source grants. No tmpfs quota claim.

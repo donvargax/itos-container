@@ -91,6 +91,11 @@ func TestDiagnosticRefusals(t *testing.T) {
 			Message: "Image user does not match the manifest's numeric identity request",
 			Fix:     "prepare an image with a positive numeric UID matching each specified manifest user",
 		}},
+		{"proxy executable", port.Issue{Kind: port.EgressExecutable, Subject: "executable"}, port.Problem{
+			Rule: "doctor.egress-executable", Exit: 3, Field: "executable",
+			Message: "This program cannot be delivered to the egress proxy",
+			Fix:     "use the installed static Linux amd64 release of itos-container, from a path outside the checkout",
+		}},
 		{"unknown failure", port.Issue{Kind: port.Failure(255), Subject: "inspection"}, port.Problem{
 			Rule: "doctor.internal", Exit: 70, Field: "inspection",
 			Message: "Unknown inspection failure", Fix: "report this as a bug",
@@ -99,6 +104,34 @@ func TestDiagnosticRefusals(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := port.Diagnostic(tc.issue); got != tc.want {
 				t.Fatalf("inspection diagnostic = %#v; want %#v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCredentialDiagnosticsPreserveSourceLocationAndFailure(t *testing.T) {
+	source := "/credentials/1/source"
+	for _, tc := range []struct {
+		name  string
+		issue port.CredentialIssue
+		want  port.Problem
+	}{
+		{"wrong owner", port.CredentialIssue{Rule: "credential.owner", Index: 1}, port.Problem{
+			Rule: "credential.owner", Exit: 1, File: "itos-container.yaml", Path: &source,
+			Message: "Credential source belongs to another user", Fix: "use a file owned by the effective host user",
+		}},
+		{"unknown source failure", port.CredentialIssue{Rule: "credential.unknown", Index: 1}, port.Problem{
+			Rule: "credential.unknown", Exit: 70, File: "itos-container.yaml", Path: &source,
+			Message: "Unknown credential inspection failure", Fix: "report this as a bug",
+		}},
+		{"unknown boundary failure", port.CredentialIssue{Rule: "unknown", Index: -1}, port.Problem{
+			Rule: "unknown", Exit: 70, File: "itos-container.yaml",
+			Message: "Unknown credential inspection failure", Fix: "report this as a bug",
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := port.CredentialDiagnostic(tc.issue); !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("credential diagnostic = %#v; want %#v", got, tc.want)
 			}
 		})
 	}

@@ -1,6 +1,10 @@
 package port
 
-import "time"
+import (
+	"time"
+
+	policy "github.com/donvargax/itos-container/internal/engine/policy/port"
+)
 
 // Checkout metadata inventories share these limits across readiness and source
 // inspection. Reaching the deadline refuses; count and depth limits are inclusive.
@@ -70,6 +74,19 @@ type CredentialFS interface {
 type CredentialInput struct {
 	Root, State, AccountState, OS, Architecture string
 	UID                                         int64
+	PolicyDevice, PolicyInode                   string
+}
+
+// PinnedCheckout exposes the policy pin without a second pathname walk or a
+// checkout inventory. Credential exclusion must precede hard-link refusals.
+type PinnedCheckout interface {
+	PinnedIdentity() (CheckoutIdentity, Failure)
+}
+
+// CredentialObserver shares lexical state validation and fresh observations.
+type CredentialObserver interface {
+	Boundary() CredentialResult
+	Inspect([]policy.Credential) CredentialResult
 }
 
 // CredentialIssue locates one first failure at the request's written index.
@@ -81,3 +98,9 @@ type CredentialIssue struct {
 }
 
 type CredentialResult struct{ Issues []CredentialIssue }
+
+// CredentialReadPaths names a retained metadata descriptor for the copying
+// adapter. It opens no data and never returns an original policy pathname.
+type CredentialReadPaths interface {
+	ReadPath(CredentialHandle) (string, bool)
+}

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -66,16 +67,27 @@ type image struct {
 	Architecture string `json:"architecture"`
 }
 type settings struct {
-	Schema   int      `json:"schema"`
-	Profile  string   `json:"profile"`
-	Proxy    *proxy   `json:"proxy,omitempty"`
-	Host     host     `json:"host"`
-	Checkout checkout `json:"checkout"`
-	Engine   engine   `json:"engine"`
-	Policy   policy   `json:"policy"`
-	Manifest manifest `json:"manifest"`
-	Image    image    `json:"image"`
+	Home        *home                  `json:"home,omitempty"`
+	Schema      int                    `json:"schema"`
+	Profile     string                 `json:"profile"`
+	Proxy       *proxy                 `json:"proxy,omitempty"`
+	Host        host                   `json:"host"`
+	Checkout    checkout               `json:"checkout"`
+	Engine      engine                 `json:"engine"`
+	Policy      policy                 `json:"policy"`
+	Manifest    manifest               `json:"manifest"`
+	Image       image                  `json:"image"`
+	Credentials []port.CredentialGrant `json:"credentials,omitempty"`
 }
+type home struct {
+	Storage  string `json:"storage"`
+	Target   string `json:"target"`
+	Lifetime string `json:"lifetime"`
+	Mode     string `json:"mode"`
+}
+
+func volumeHome() home { return home{"volume", "/home/itos", "project", "0700"} }
+
 type envelope struct {
 	Schema      int      `json:"schema"`
 	Project     string   `json:"project"`
@@ -119,6 +131,18 @@ func (JSON) Candidate(r readiness.Result, uid, gid string) port.Candidate {
 		s.Profile = "allowlist-v1"
 		s.Policy.Network.Allow = r.Policy.Policy.Network.Allow
 		s.Proxy = &proxy{Image: ProxyImage}
+	}
+	for _, grant := range r.Policy.Policy.Credentials {
+		s.Credentials = append(s.Credentials, port.CredentialGrant{Kind: grant.Kind, Source: grant.Source, Target: "/run/itos-container/credentials/" + grant.Kind})
+	}
+	if len(s.Credentials) > 0 {
+		slices.SortFunc(s.Credentials, func(a, b port.CredentialGrant) int { return strings.Compare(a.Kind, b.Kind) })
+		s.Profile = strings.TrimSuffix(s.Profile, "-v1") + "-credentials-v1"
+	}
+	if r.Policy.Policy.Home != nil {
+		h := volumeHome()
+		s.Home = &h
+		s.Profile = strings.TrimSuffix(s.Profile, "-v1") + "-home-v1"
 	}
 	return candidate(s)
 }
@@ -208,11 +232,31 @@ func valid(s settings) bool {
 
 func validProfile(s settings) bool {
 	n := s.Policy.Network
-	switch s.Profile {
+	profile := s.Profile
+	if s.Home != nil {
+		if *s.Home != volumeHome() || !strings.HasSuffix(profile, "-home-v1") {
+			return false
+		}
+		profile = strings.TrimSuffix(profile, "-home-v1") + "-v1"
+	}
+	if len(s.Credentials) > 0 {
+		if s.Policy.Version != 3 || !validGrants(s.Credentials) {
+			return false
+		}
+		switch profile {
+		case "offline-credentials-v1":
+			profile = "offline-v1"
+		case "allowlist-credentials-v1":
+			profile = "allowlist-v1"
+		default:
+			return false
+		}
+	}
+	switch profile {
 	case "offline-v1":
-		return (s.Policy.Version == 1 || s.Policy.Version == 2) && n.Mode == "offline" && n.Allow == nil && s.Proxy == nil
+		return (s.Policy.Version == 1 || s.Policy.Version == 2 || s.Policy.Version == 3) && n.Mode == "offline" && n.Allow == nil && s.Proxy == nil
 	case "allowlist-v1":
-		if s.Policy.Version != 2 || n.Mode != "allowlist" || len(n.Allow) == 0 || s.Proxy == nil {
+		if (s.Policy.Version != 2 && s.Policy.Version != 3) || n.Mode != "allowlist" || len(n.Allow) == 0 || s.Proxy == nil {
 			return false
 		}
 		name, digest, ok := strings.Cut(s.Proxy.Image, "@")
@@ -228,4 +272,19 @@ func validProfile(s settings) bool {
 	default:
 		return false
 	}
+}
+
+func validGrants(grants []port.CredentialGrant) bool {
+	targets := map[string]bool{}
+	for i, g := range grants {
+		if (g.Kind != "claude-token" && g.Kind != "github-token") || (i > 0 && grants[i-1].Kind >= g.Kind) || !policydomain.ValidCredentialPath(g.Source) || !policydomain.ValidCredentialPath(g.Target) {
+			return false
+		}
+		name, ok := strings.CutPrefix(g.Target, "/run/itos-container/credentials/")
+		if !ok || name == "" || strings.Contains(name, "/") || targets[g.Target] {
+			return false
+		}
+		targets[g.Target] = true
+	}
+	return true
 }

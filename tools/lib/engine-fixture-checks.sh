@@ -45,7 +45,9 @@ validate_manifest() {
       header_count=$((header_count + 1))
     fi
   done <<<"$header_data"
-  actual=$(sha256sum -- "$manifest") || fail_manifest_read 'manifest byte hashing' "$manifest" "$built" "$digest" "$?"
+  # Hash stdin in binary mode: filename output can prepend an escape marker,
+  # and text mode can translate the captured bytes on Windows.
+  actual=$(sha256sum --binary < "$manifest") || fail_manifest_read 'manifest byte hashing' "$manifest" "$built" "$digest" "$?"
   actual="sha256:${actual%% *}"
   manifest_observation "$manifest" "$built" "$digest" "$actual" || fail 'manifest observation: expected validated summary; observed failure'
   [[ $header_count == 1 ]] && digest_valid "$digest" || fail "manifest header: expected one sha256 digest; observed count=$header_count digest=$(fixture_value "$digest")"
@@ -82,7 +84,7 @@ daemon_config_path() {
 daemon_config_digest() {
   local file=$1 member=$2 actual expected
   # Hash the captured bytes before parsing; reserializing JSON changes identity.
-  actual=$(sha256sum -- "$file") || fail "daemon config hashing: expected readable raw config; observed status=$?"
+  actual=$(sha256sum --binary < "$file") || fail "daemon config hashing: expected readable raw config; observed status=$?"
   actual="sha256:${actual%% *}"
   expected=${member##*/}
   expected="sha256:${expected%.json}"

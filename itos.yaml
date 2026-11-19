@@ -60,13 +60,13 @@ tests:
     tag_prefix: "@"
     wip_tag: "@wip"
     run:
-      whole: "go test ./features -count=1"
-      select: "go test ./features -count=1 -scenarios={pattern}"
+      whole: "go test ./features -count=1 -timeout=20m"
+      select: "go test ./features -count=1 -timeout=20m -scenarios={pattern}"
       ids_pattern: "^@(?:{ids})$"
       join: { each: "(?:{p})", sep: "|" }
     recognize: # a task check read back as a selection, so CI runs it in the one run
-      - { command: "go test ./features -count=1", as: whole }
-      - { command: "go test ./features -count=1 -scenarios={pattern}", as: pattern }
+      - { command: "go test ./features -count=1 -timeout=20m", as: whole }
+      - { command: "go test ./features -count=1 -timeout=20m -scenarios={pattern}", as: pattern }
       - { command: "itos tests smoke run scenario", as: smoke }
     smoke:
       { file: features/smoke.yaml, every_file: true, add_hint: "add one to features/smoke.yaml" }

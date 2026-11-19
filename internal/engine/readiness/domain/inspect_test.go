@@ -47,6 +47,15 @@ func TestInspectSnapshot(t *testing.T) {
 	}
 }
 
+func TestCredentialAdmissionWithoutAnObserverFailsBeforeEffects(t *testing.T) {
+	i, input, engine, checkout := fixture()
+	i.AllowVersion3 = true
+	got := i.Inspect(input)
+	if got.Ready || got.Credentials == nil || len(got.Credentials.Issues) != 1 || got.Credentials.Issues[0].Rule != "state.unavailable" || engine.Opens != 0 || checkout.Opened {
+		t.Fatalf("missing observer admitted input: %#v", got)
+	}
+}
+
 func TestRepositoryDigestIdentity(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
