@@ -294,6 +294,37 @@ func TestRunscRegistration(t *testing.T) {
 			t.Errorf("%d daemon requests", d.requests.Load())
 		}
 	})
+	t.Run("identity_changed_between_reads", func(t *testing.T) {
+		// The validating read saw engine-A on linux and x86_64. The runtimes
+		// read reaches the same socket, but a daemon that answers it as anyone
+		// else is not the validated one: its inventory, whether it registers
+		// runsc or not, says nothing about the host's backend.
+		for name, identity := range map[string]string{
+			"different ID":            `"ID":"engine-B","OSType":"linux","Architecture":"x86_64"`,
+			"omitted ID":              `"OSType":"linux","Architecture":"x86_64"`,
+			"empty ID":                `"ID":"","OSType":"linux","Architecture":"x86_64"`,
+			"ID in another case":      `"ID":"ENGINE-A","OSType":"linux","Architecture":"x86_64"`,
+			"ID with padding":         `"ID":"engine-A ","OSType":"linux","Architecture":"x86_64"`,
+			"different system":        `"ID":"engine-A","OSType":"windows","Architecture":"x86_64"`,
+			"omitted system":          `"ID":"engine-A","Architecture":"x86_64"`,
+			"system in another case":  `"ID":"engine-A","OSType":"Linux","Architecture":"x86_64"`,
+			"different architecture":  `"ID":"engine-A","OSType":"linux","Architecture":"aarch64"`,
+			"omitted architecture":    `"ID":"engine-A","OSType":"linux"`,
+			"architecture respelled":  `"ID":"engine-A","OSType":"linux","Architecture":"amd64"`,
+			"every field changed":     `"ID":"engine-B","OSType":"windows","Architecture":"aarch64"`,
+			"identity fields omitted": `"Name":"anonymous"`,
+		} {
+			for inventory, runtimes := range map[string]string{
+				"runsc registered": `{"runc":{"path":"runc"},"runsc":{"path":"/usr/local/bin/runsc"}}`,
+				"runsc absent":     `{"runc":{"path":"runc"}}`,
+			} {
+				expect(t, name+", "+inventory, answeredBy(identity, runtimes), unread)
+			}
+		}
+		same := `"ID":"engine-A","OSType":"linux","Architecture":"x86_64"`
+		expect(t, "same daemon, runsc registered", answeredBy(same, `{"runsc":{"path":"runsc"}}`), gvisor)
+		expect(t, "same daemon, runsc absent", answeredBy(same, `{"runc":{"path":"runc"}}`), absent)
+	})
 	t.Run("zero_value", func(t *testing.T) {
 		if got, f := (Runtimes{}).Runsc(context.Background()); got != port.RegistrationUnknown || f != port.NoProbe {
 			t.Errorf("observed %v, %v", got, f)
@@ -324,11 +355,12 @@ func TestRunscRegistration(t *testing.T) {
 			body string
 			want port.Selection
 		}{
-			"path-based runsc":       {withRunsc(`{"path":"/usr/local/bin/runsc"}`), port.Selection{Backend: port.GVisor}},
-			"shim-only registration": {withRunsc(`{}`), port.Selection{Failure: port.RuntimeRegistration}},
-			"socket-permitting args": {withRunsc(`{"path":"runsc","runtimeArgs":["--host-uds=open"]}`), port.Selection{Failure: port.RuntimeRegistration}},
-			"no runsc":               {info(`{"runc":{"path":"runc"}}`), port.Selection{Backend: port.Neither}},
-			"missing inventory":      {info(``), port.Selection{Failure: port.RuntimeInspect}},
+			"path-based runsc":           {withRunsc(`{"path":"/usr/local/bin/runsc"}`), port.Selection{Backend: port.GVisor}},
+			"shim-only registration":     {withRunsc(`{}`), port.Selection{Failure: port.RuntimeRegistration}},
+			"socket-permitting args":     {withRunsc(`{"path":"runsc","runtimeArgs":["--host-uds=open"]}`), port.Selection{Failure: port.RuntimeRegistration}},
+			"no runsc":                   {info(`{"runc":{"path":"runc"}}`), port.Selection{Backend: port.Neither}},
+			"missing inventory":          {info(``), port.Selection{Failure: port.RuntimeInspect}},
+			"another daemon's inventory": {answeredBy(`"ID":"engine-B","OSType":"linux","Architecture":"x86_64"`, `{"runc":{"path":"runc"}}`), port.Selection{Failure: port.RuntimeInspect}},
 		} {
 			d := serve(t, reply(c.body))
 			if got := detect(context.Background(), newEngine(d.endpoint)); got != c.want {

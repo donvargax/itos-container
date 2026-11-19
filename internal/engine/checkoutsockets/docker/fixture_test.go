@@ -67,6 +67,13 @@ func info(runtimes string) string {
 	return body + `}`
 }
 
+// answeredBy is a /info body from the daemon whose identity fields are the given
+// raw JSON members, keeping runc registered as the default runtime. The pin the
+// adapter validates reports engine-A, linux and x86_64, which info answers with.
+func answeredBy(identity, runtimes string) string {
+	return `{` + identity + `,"DefaultRuntime":"runc","Runtimes":` + runtimes + `}`
+}
+
 // withRunsc registers runc and the given runsc entry, varying only the latter.
 func withRunsc(entry string) string {
 	return info(`{"runc":{"path":"runc"},"runsc":` + entry + `}`)
