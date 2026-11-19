@@ -725,7 +725,8 @@ Feature: An approved persistent home for one checkout's harness
   # https://github.com/anomalyco/opencode/releases/tag/v2.3.2
   # 01 and 02 use existing steps. 03 reuses terminal approval. 04 reuses
   # command invocation and approval refusal. 05 reuses command invocation and
-  # the source observer assertion. The remaining steps need red-first bindings.
+  # the source observer assertion. 09 reuses command invocation and the exit
+  # code check. The remaining steps need red-first bindings.
 
   @wip @slice-40 @ID-OPENCODELOGIN-01
   Scenario: File-only inspection identifies the exact OpenCode provider requested
@@ -831,8 +832,8 @@ Feature: An approved persistent home for one checkout's harness
       | a selected OAuth entry that needs refresh                  | "run.opencode-entry" for the approved source path         | 1    | the host database                                  |
 
     Examples: A recognized kind whose delivery is gated
-      | condition                                          | refusal                                                                              | exit | unopened sources  |
-      | valid opencode-auth followed by valid github-token | "policy.version" at /version and identifies github-token as unavailable for delivery | 2    | the host database |
+      | condition                                          | refusal                                                                              | exit | unopened sources                                                               |
+      | valid opencode-auth followed by valid github-token | "policy.version" at /version and identifies github-token as unavailable for delivery | 2    | the host database, the requested auth.json and the requested github-token file |
 
   # The cooperative probe uses the delivered grant. Its read and write checks
   # report booleans. Independent controls outside the observed trees validate
@@ -934,11 +935,12 @@ Feature: An approved persistent home for one checkout's harness
   # Each row starts from its own session. Confirmed absence requires a
   # not-found reply for the recorded full worker ID. All other session resources
   # are accounted for, so only the retained account can prevent completion
-  # in that row. In the unconfirmed row full-ID inspection is also unavailable
-  # through status.
-  # Inspect read-only copies of the database and sidecars as in 08.
+  # in that row. The unconfirmed row also withholds full-ID inspection until
+  # the stop retry. Inspect read-only copies of the database and sidecars as in 08.
+  # Both run attempts use the same grant-free policy, approval and checkout.
+  # /bin/true can exit successfully even with the database read-only.
   @wip @slice-40 @ID-OPENCODELOGIN-09 @local-engine-fixture
-  Scenario Outline: Incomplete OpenCode cleanup keeps the original session recoverable
+  Scenario Outline: Incomplete OpenCode cleanup blocks home reuse until the original session is recovered
     Given a synthetic OpenCode session with an independently recorded owned worker, a retained home and an acquired login whose staged pathname is gone
     And the retained worker database contains the imported account for that grant, its synthetic key and an unrelated session with a known ID, title and message
     And the retained database, its directory and its SQLite sidecars are read-only to cleanup
@@ -951,6 +953,9 @@ Feature: An approved persistent home for one checkout's harness
     And the engine recorder shows worker absence was <confirmation> for the recorded full ID during the first stop
     And the first stop exits nonzero and both commands report incomplete cleanup for the original session
     And each command gives exactly the retry argv "itos", "container", "stop" and the original session ID
+    When the checkout selects a version 1 offline policy for the original home and its matching grant-free approval while the retained store is still read-only
+    And itos-container runs with "run -- /bin/true"
+    Then the grant-free run exits nonzero and the engine recorder counts zero worker start requests during that run
     And read-only inspection before retry still finds the imported credential ID with its granted synthetic key
     When the fixture <repair> and a fresh controller executes the reported stop retry
     Then immediate read-only inspection finds no imported account in the retained OpenCode database
@@ -959,6 +964,9 @@ Feature: An approved persistent home for one checkout's harness
     And the retry reports cleanup complete for the original session and independent inspection confirms the worker and staging are absent
     And the original home volume is still present and the host login is byte-for-byte intact
     And neither stop starts a worker, rereads a host credential or invents a workload exit
+    When itos-container runs with "run -- /bin/true"
+    Then it exits with code 0
+    And the engine recorder shows that run started a new worker with the original volume mounted at "/home/itos" and no credential mounts
 
     Examples:
       | confirmation | resource | repair                                                                     |
