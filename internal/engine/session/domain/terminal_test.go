@@ -51,6 +51,24 @@ func TestRegisteredLaunchRefusesUnsupportedTerminalBeforeCreate(t *testing.T) {
 	}
 }
 
+// Run wraps every engine in the finite engine, whose connection always has the
+// terminal methods; an engine without the capability is refused by them.
+func TestRunRefusesEngineWithoutTerminalCapabilityBeforeCreate(t *testing.T) {
+	runner, frozen, registry, engine, id := registeredLifecycleFixture()
+	runner.Engine = noTerminalEngine{runner.Engine}
+	provider := &tf.Fake{Size: terminal.Dimensions{Columns: 113, Rows: 37}}
+	lease, err := provider.Acquire(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close()
+	got := runner.Run(t.Context(), frozen, []string{"probe"}, port.Streams{Terminal: lease})
+	if got.Outcome != port.TerminalUnavailable || got.Started || got.Cleanup != port.Complete ||
+		slices.Contains(engine.Events, "create") || len(engine.Resources) != 0 || registry.Locks[id] {
+		t.Fatalf("a missing terminal capability advanced launch or retained authority: %+v %v", got, engine.Events)
+	}
+}
+
 func TestMissingTerminalCapabilityRefuses(t *testing.T) {
 	c := finiteConnection{RunConnection: noTerminalConnection{}}
 	if f := c.SetTerminal(terminal.Dimensions{Columns: 113, Rows: 37}); f != port.TerminalUnavailable {
