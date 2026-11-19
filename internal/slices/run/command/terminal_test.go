@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/donvargax/itos-container/internal/cli"
 	ap "github.com/donvargax/itos-container/internal/engine/approval/port"
 	af "github.com/donvargax/itos-container/internal/engine/approval/port/porttest"
@@ -36,23 +37,81 @@ type observedTerminal struct {
 
 func (l observedTerminal) Close() terminal.Result { r := l.Lease.Close(); close(l.closed); return r }
 
-func TestTerminalAcquisitionBudgetReleasesLateLease(t *testing.T) {
+func TestTerminalAcquisitionFailureClosesLateLeaseBeforeReturn(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		fake := &tf.Fake{Size: terminal.Dimensions{Columns: 113, Rows: 37}}
 		release, closed := make(chan struct{}), make(chan struct{})
-		ctx, end := budget.Start(context.Background(), time.Second, "startup")
+		go func() {
+			// The acquisition finishes after the finite call budget expires.
+			time.Sleep(15 * time.Second)
+			close(release)
+		}()
+		ctx, end := budget.Start(context.Background(), time.Hour, "startup")
 		defer end()
 		l, err := acquireTerminal(ctx, lateTerminal{fake, release, closed})
 		var failure budget.Failure
+		var problems []string
 		if l != nil || !errors.As(err, &failure) {
-			t.Fatal("late acquisition admitted", l, err)
+			problems = append(problems, fmt.Sprintf("late acquisition admitted: %v %v", l, err))
 		}
-		close(release)
-		<-closed
+		select {
+		case <-closed:
+		default:
+			problems = append(problems, "acquireTerminal returned before the late lease was closed")
+			// Release the acquisition this return did not join so cleanup settles.
+			close(release)
+		}
+		synctest.Wait()
 		if fake.Raw() {
-			t.Fatal("late lease retained raw state")
+			problems = append(problems, "late lease retained raw state")
+		}
+		if len(problems) > 0 {
+			t.Fatal(strings.Join(problems, "; "))
 		}
 	})
+}
+
+// A host signal that lands while the terminal is being acquired keeps the
+// run.cancelled result of every other startup phase: the interrupt cause is
+// reported, not classified as an internal error.
+func TestHostSignalDuringTerminalAcquisitionReportsCancellation(t *testing.T) {
+	for _, tc := range []struct {
+		signal string
+		code   int
+	}{{"SIGINT", 130}, {"SIGTERM", 143}} {
+		t.Run(tc.signal, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				parent, cancel := context.WithCancelCause(context.Background())
+				defer cancel(nil)
+				approval, snapshots, runner := startupApprovalFixture(), &af.Snapshots{}, &rf.Runner{}
+				provider := interruptingTerminal{interrupt: cancel, signal: tc.signal}
+				c := CLI{TTY: true, Context: parent, Terminal: provider, Approval: approval, Snapshots: snapshots, Runner: runner, Args: []string{"--", "probe"}}
+				var out, diagnostics strings.Builder
+				start := time.Now()
+				code := c.Run(&cli.UI{Stdout: &out, Stderr: &diagnostics, Classify: Classify})
+				elapsed := time.Since(start)
+				if code != tc.code || diagnostics.String() != "itos-container: run.cancelled "+tc.signal+"; workload outcome not-started\n" || out.Len() != 0 || elapsed != 0 {
+					t.Fatal("an acquisition-window host signal lost its typed cancellation", code, elapsed, diagnostics.String())
+				}
+				if approval.Inspections != 0 || runner.Argv != nil {
+					t.Fatal("an interrupted acquisition entered a later startup phase")
+				}
+			})
+		})
+	}
+}
+
+// interruptingTerminal delivers the host signal as soon as the acquisition
+// begins, then ends with the acquisition lifetime as the joined cleanup does.
+type interruptingTerminal struct {
+	interrupt context.CancelCauseFunc
+	signal    string
+}
+
+func (p interruptingTerminal) Acquire(ctx context.Context) (terminal.Lease, error) {
+	p.interrupt(sp.Interrupt{Signal: p.signal})
+	<-ctx.Done()
+	return nil, &terminal.Failure{Kind: terminal.Cancelled, Err: ctx.Err()}
 }
 
 func TestTerminalAcquisitionAndRollbackDiagnostics(t *testing.T) {

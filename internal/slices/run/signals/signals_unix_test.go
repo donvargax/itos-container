@@ -1,7 +1,12 @@
+//go:build !windows
+
 package signals
 
 import (
 	"context"
+	"errors"
+	"os"
+	"os/exec"
 	"syscall"
 	"testing"
 	"time"
@@ -44,17 +49,30 @@ func TestCaptureConsumesHangupForTerminalRuns(t *testing.T) {
 	}
 }
 
-// A plain run keeps the inherited hangup behavior: nothing subscribes it, and
-// no hangup is consumed on its behalf.
-func TestCaptureLeavesPlainRunsAlone(t *testing.T) {
-	ctx, release := Capture(context.Background(), false)
-	defer release()
-	select {
-	case <-ctx.Done():
-		t.Fatal("a plain capture ended before release")
-	default:
+// A plain run keeps the inherited hangup disposition: nothing subscribes SIGHUP
+// on its behalf, so the default action must still terminate the process. The
+// property is proven by a child that captures in plain mode, raises SIGHUP to
+// itself and must die to it; a consumed hangup is reached only by sleeping out
+// the child's failure marker.
+func TestPlainCaptureLeavesHangupDeadly(t *testing.T) {
+	if os.Getenv("ITOS_CONTAINER_TEST_PLAIN_HANGUP") == "1" {
+		_, release := Capture(context.Background(), false)
+		defer release()
+		if err := syscall.Kill(syscall.Getpid(), syscall.SIGHUP); err != nil {
+			os.Exit(3)
+		}
+		time.Sleep(20 * time.Second)
+		os.Exit(1)
 	}
-	if _, ok := context.Cause(ctx).(session.Interrupt); ok {
-		t.Fatal("a plain capture invented a cancellation")
+	cmd := exec.Command(os.Args[0], "-test.run=^TestPlainCaptureLeavesHangupDeadly$", "-test.count=1")
+	cmd.Env = append(os.Environ(), "ITOS_CONTAINER_TEST_PLAIN_HANGUP=1")
+	err := cmd.Run()
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) {
+		t.Fatalf("the plain-run child did not exit: %v", err)
+	}
+	status, ok := exit.Sys().(syscall.WaitStatus)
+	if !ok || !status.Signaled() || status.Signal() != syscall.SIGHUP {
+		t.Fatalf("a plain run did not die to its inherited hangup: exit=%d signaled=%t signal=%v", exit.ExitCode(), ok && status.Signaled(), status)
 	}
 }

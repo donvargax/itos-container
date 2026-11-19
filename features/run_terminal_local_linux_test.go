@@ -451,6 +451,19 @@ func (w *world) terminalLocalSteps(sc *godog.ScenarioContext, fixture **terminal
 		}
 		return nil
 	})
+	// A closed master may make even a successful restoration unverifiable on
+	// some kernels, so the honest contract is the attempt with any failure
+	// separately reported, mirroring the engine tier's RUNTTY-13 step.
+	sc.Step(`^terminal restoration is attempted with any failure reported separately while owned cleanup completes$`, func() error {
+		f := *fixture
+		if f.timedOut {
+			return fmt.Errorf("owned teardown never finished: %s", w.report())
+		}
+		if err := f.restored(); err != nil && !strings.Contains(w.stderr, "run.terminal-restore") {
+			return fmt.Errorf("failed restoration was not reported: %v; %s", err, w.report())
+		}
+		return w.localOfflineOwned()
+	})
 }
 
 func (f *terminalInvocation) distinctOutput() error {

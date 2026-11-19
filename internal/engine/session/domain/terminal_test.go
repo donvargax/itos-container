@@ -60,6 +60,38 @@ func TestMissingTerminalCapabilityRefuses(t *testing.T) {
 	}
 }
 
+// A client terminal that already ended must keep its owned workload from
+// reaching an irreversible launch edge: no worker may be created, attached
+// or started for a client that is gone, whatever ended the lease.
+func TestRegisteredLaunchRefusesLostClientBeforeIrreversibleEdges(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		lost func(*tf.Fake)
+		want port.Outcome
+	}{
+		{"hangup", func(f *tf.Fake) { f.Hangup(false) }, port.TerminalDisconnected},
+		{"observation", func(f *tf.Fake) { f.Break() }, port.TerminalUnavailable},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runner, registry, engine, workspace, id := registeredSessionFixture(t)
+			provider := &tf.Fake{Size: terminal.Dimensions{Columns: 113, Rows: 37}}
+			lease, err := provider.Acquire(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer lease.Close()
+			tc.lost(provider)
+			c, a, worker, failure := runner.registeredLaunch(t.Context(), id, []string{"probe"}, port.Streams{Terminal: lease})
+			if c != nil {
+				defer c.Close()
+			}
+			if failure != tc.want || a != nil || worker != "" || len(engine.Resources) != 0 || registry.Locks[id] || !workspace.Closed {
+				t.Fatalf("a lost client reached an irreversible launch edge: %s %q", failure, worker)
+			}
+		})
+	}
+}
+
 func TestStreamFailureRechecksTerminalBeforeDelayedNotification(t *testing.T) {
 	for _, tc := range []struct {
 		name           string
