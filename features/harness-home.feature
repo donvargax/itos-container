@@ -723,9 +723,9 @@ Feature: An approved persistent home for one checkout's harness
   # principals and authentication outcomes, and discards headers and key bytes.
   # Only product delivery supplies the granted key to a worker. No model is contacted.
   # https://github.com/anomalyco/opencode/releases/tag/v2.3.2
-  # 01 and 02 use existing steps. 03 reuses terminal approval, 04 and 05 reuse
-  # command invocation and 04 reuses the approval refusal. The other steps in
-  # 03–05 and all steps in 06–09 need definitions in the red-first test commit.
+  # 01 and 02 use existing steps. 03 reuses terminal approval. 04 reuses
+  # command invocation and approval refusal. 05 reuses command invocation and
+  # the source observer assertion. The remaining steps need red-first bindings.
 
   @wip @slice-40 @ID-OPENCODELOGIN-01
   Scenario: File-only inspection identifies the exact OpenCode provider requested
@@ -800,36 +800,39 @@ Feature: An approved persistent home for one checkout's harness
       | for the other provider at the same path    | run.approval-changed |
       | for the same slot in another checkout only | run.approval-missing |
 
-  # The mixed row lists opencode-auth first. Both synthetic sources are usable
-  # and both grants are approved. The local run fixture supports OpenCode
-  # delivery and leaves github-token delivery gated. Its refusal at /version
-  # identifies the unavailable kind. Count staging operations throughout run
-  # so removing a partial copy cannot hide delivery of the first grant.
+  # Seed a host database in every row. The wrong-path file, symlink target and
+  # group-readable file each hold a valid entry for the requested provider.
+  # Start the observers after setup and before run. Watching the target catches
+  # an open through the link. Count a staged file even if run later unlinks it.
+  # In the mixed row both sources are usable and approved. The fixture supports
+  # opencode-auth delivery and leaves github-token delivery gated.
   @wip @slice-40 @ID-OPENCODELOGIN-05 @local-engine-fixture
   Scenario Outline: Run refuses the whole credential request when it cannot deliver a grant
     Given a disposable checkout whose version 4 policy requests the "opencode-go" file grant with "<condition>"
     And the fixture independently records matching approval for the entire request
+    And the source observer watches <unopened sources> with an independent read control
     When itos-container runs with "run -- opencode-grant-probe"
     Then run exits with code <exit> and reports <refusal>
-    And the engine recorder counted zero worker create requests and the staging recorder found zero logins <when>
-    And the controller neither opened the host database nor disclosed any synthetic key in its diagnostics or records
+    And throughout the run the engine recorder counted zero worker create requests and the staging recorder counted zero login file creations
+    And the source observer saw its control read and no credential data open or read
+    And no synthetic key appears in the run diagnostics or records
 
     Examples: Unusable OpenCode source or provider entry
-      | condition                                                  | refusal                                                   | exit | when        |
-      | auth.json absent with the selected key only in host SQLite | "credential.missing" for the approved source path         | 3    | at run exit |
-      | a different private auth.json named in request and grant   | "credential.opencode_source" for the approved source path | 1    | at run exit |
-      | a symbolic link in place of auth.json                      | "credential.symlink" for the approved source path         | 1    | at run exit |
-      | group-readable auth.json                                   | "credential.permissions" for the approved source path     | 1    | at run exit |
-      | auth.json with malformed JSON                              | "run.opencode-entry" for the approved source path         | 1    | at run exit |
-      | another provider only                                      | "run.opencode-entry" for the approved source path         | 1    | at run exit |
-      | duplicate JSON members for the selected provider           | "run.opencode-entry" for the approved source path         | 1    | at run exit |
-      | duplicate key fields inside the selected entry             | "run.opencode-entry" for the approved source path         | 1    | at run exit |
-      | an empty key for the selected provider                     | "run.opencode-entry" for the approved source path         | 1    | at run exit |
-      | a selected OAuth entry that needs refresh                  | "run.opencode-entry" for the approved source path         | 1    | at run exit |
+      | condition                                                  | refusal                                                   | exit | unopened sources                                   |
+      | auth.json absent with the selected key only in host SQLite | "credential.missing" for the approved source path         | 3    | the host database                                  |
+      | a different private auth.json named in request and grant   | "credential.opencode_source" for the approved source path | 1    | the host database and the wrong-path auth.json     |
+      | a symbolic link in place of auth.json                      | "credential.symlink" for the approved source path         | 1    | the host database and the symlink target           |
+      | group-readable auth.json                                   | "credential.permissions" for the approved source path     | 1    | the host database and the group-readable auth.json |
+      | auth.json with malformed JSON                              | "run.opencode-entry" for the approved source path         | 1    | the host database                                  |
+      | another provider only                                      | "run.opencode-entry" for the approved source path         | 1    | the host database                                  |
+      | duplicate JSON members for the selected provider           | "run.opencode-entry" for the approved source path         | 1    | the host database                                  |
+      | duplicate key fields inside the selected entry             | "run.opencode-entry" for the approved source path         | 1    | the host database                                  |
+      | an empty key for the selected provider                     | "run.opencode-entry" for the approved source path         | 1    | the host database                                  |
+      | a selected OAuth entry that needs refresh                  | "run.opencode-entry" for the approved source path         | 1    | the host database                                  |
 
     Examples: A recognized kind whose delivery is gated
-      | condition                                          | refusal                                                                              | exit | when               |
-      | valid opencode-auth followed by valid github-token | "policy.version" at /version and identifies github-token as unavailable for delivery | 2    | throughout the run |
+      | condition                                          | refusal                                                                              | exit | unopened sources  |
+      | valid opencode-auth followed by valid github-token | "policy.version" at /version and identifies github-token as unavailable for delivery | 2    | the host database |
 
   # The cooperative probe uses the delivered grant. Its read and write checks
   # report booleans. Independent controls outside the observed trees validate
@@ -928,30 +931,39 @@ Feature: An approved persistent home for one checkout's harness
       | normal exit                         |
       | controller loss followed by stop    |
 
-  # The recorder keeps the acquired worker reference after the staged path is
-  # gone. Two independent faults apply to the first stop. The retained store,
-  # including its directory and SQLite sidecars, is read-only to cleanup, and
-  # the recorder withholds confirmation of worker removal. Lifting the faults
-  # leaves the account for the retried stop to remove. Take read-only copies
-  # as in 08, before the first stop and immediately after the retry returns.
+  # Each row starts from its own session. Confirmed absence requires a
+  # not-found reply for the recorded full worker ID. All other session resources
+  # are accounted for, so only the retained account can prevent completion
+  # in that row. In the unconfirmed row full-ID inspection is also unavailable
+  # through status.
+  # Inspect read-only copies of the database and sidecars as in 08.
   @wip @slice-40 @ID-OPENCODELOGIN-09 @local-engine-fixture
-  Scenario: Incomplete OpenCode cleanup keeps the original session recoverable
+  Scenario Outline: Incomplete OpenCode cleanup keeps the original session recoverable
     Given a synthetic OpenCode session with an independently recorded owned worker, a retained home and an acquired login whose staged pathname is gone
     And the retained worker database contains the imported account for that grant, its synthetic key and an unrelated session with a known ID, title and message
+    And the retained database, its directory and its SQLite sidecars are read-only to cleanup
     And the checkout now requests a different OpenCode provider
     When the fixture snapshots the retained OpenCode database and its sidecars before the first stop
     Then the account with the imported credential ID in that snapshot contains the granted synthetic key
-    When a fresh stop for that session runs while the fixture prevents account cleanup and withholds confirmation of worker removal
-    And fresh status inspects the session
-    Then status shows the frozen OpenCode provider and keeps cleanup incomplete with the original session ID and its exact stop retry
-    And the first stop reports incomplete cleanup with that same retry
-    When the fixture lifts both faults and a fresh controller executes the reported stop retry
+    When a fresh stop for that session runs with worker absence <confirmation>
+    And fresh status inspects the session under the same conditions
+    Then status shows the frozen OpenCode provider and reports the original worker as "<resource>"
+    And the engine recorder shows worker absence was <confirmation> for the recorded full ID during the first stop
+    And the first stop exits nonzero and both commands report incomplete cleanup for the original session
+    And each command gives exactly the retry argv "itos", "container", "stop" and the original session ID
+    And read-only inspection before retry still finds the imported credential ID with its granted synthetic key
+    When the fixture <repair> and a fresh controller executes the reported stop retry
     Then immediate read-only inspection finds no imported account in the retained OpenCode database
     And the granted key is absent from the database, its SQLite sidecars and the rest of the retained OpenCode data
     And the same database still contains the unrelated session with its original ID, title and message
     And the retry reports cleanup complete for the original session and independent inspection confirms the worker and staging are absent
     And the original home volume is still present and the host login is byte-for-byte intact
     And neither stop starts a worker, rereads a host credential or invents a workload exit
+
+    Examples:
+      | confirmation | resource | repair                                                                     |
+      | confirmed    | absent   | makes only the retained store writable                                     |
+      | unconfirmed  | unknown  | makes the retained store writable and restores worker absence confirmation |
 
   # Management runs only on independently tracked disposable CI homes. Observe
   # active-worker refusal and a successful control before harness teardown.
