@@ -8314,6 +8314,13 @@
     The ABI query and daemon inspection are the detector's only I/O.
     [Docker runtime configuration](https://docs.docker.com/reference/cli/dockerd/#configure-runtimes-using-daemonjson).
 
+    Before selecting gVisor, inspect the complete runtimeArgs list on the matching runsc entry.
+    An empty list, including an omitted field, uses runsc's default host-uds policy of none.
+    Also accept the exact one-element list ["--host-uds=none"]. For every other list, return
+    a typed inspection failure with no selection. This covers arguments that permit host socket
+    access and arguments whose effect on that policy the detector cannot establish.
+    [gVisor's host socket policy](https://github.com/google/gvisor/blob/a05ab5909d2518dd541a1eb4396057e9292f4178/runsc/config/flags.go#L158).
+
     Put the in-memory fakes and shared observation contracts in port/porttest. Run each contract
     against its fake and its concrete adapter. In native's TestLandlockABIProbe, supply controlled
     syscall results and check the version-query arguments, both absence errnos, EPERM and an
@@ -8322,9 +8329,13 @@
     In docker's TestRunscRegistration, send /info fixtures through the pinned SDK decoder.
     Keep runc registered and set DefaultRuntime to runc while varying the Runtimes.runsc entry.
     In path_registration, {"path":"runsc"} and {"path":"/usr/local/bin/runsc"} each confirm
-    gVisor. In shim_only_registration, send {} for the runsc entry, as Moby does for the
-    shim-only registration with no reported status. Require a typed inspection failure with no
-    selection. In contradictory_path, {"path":"/usr/bin/runc"} must yield the same failure.
+    gVisor. Repeat the absolute-path control with runtimeArgs [] and ["--host-uds=none"].
+    Change only runtimeArgs on that control for two refusal cases. In socket_permitting_args,
+    use ["--host-uds=open"]. In unknown_args, try ["--unknown-fixture-flag"] alone and then
+    with "--host-uds=none" prepended. Each must return a typed inspection failure with no selection.
+    In shim_only_registration, send {} for the runsc entry, as Moby does for the shim-only
+    registration with no reported status. In contradictory_path, send {"path":"/usr/bin/runc"}.
+    Require the same typed failure with no selection for both registrations.
     Also require that failure for synthetic entries reporting runtimeType io.containerd.runsc.v1
     or io.containerd.runc.v2 alone, or a runsc path paired with the foreign shim. A lookalike
     key carrying a valid runsc path and an empty inventory each report absence. Cover omitted
@@ -8339,13 +8350,15 @@
     the observations between calls and require the new result even after an earlier success.
 
     The check runs every checkoutsockets package once and requires Go to report a pass for
-    each named test and all three named Docker subtests in their own packages. It currently
+    each named test and all five named Docker subtests in their own packages. It currently
     exits 1 because internal/engine/checkoutsockets does not exist. A buildable package with
     no tests produces no matching pass events. First commit the tests and minimal compiling
     stubs with test --item T-64. Record the failing selection and syscall assertions. A Docker
     stub that accepts the runsc name alone must fail the typed-failure assertions in both
-    shim_only_registration and contradictory_path. Implement with chore --task T-64 and run
-    the same tests to green.
+    shim_only_registration and contradictory_path. Selecting gVisor from its path alone must
+    pass path_registration and fail the typed-failure assertions in
+    socket_permitting_args and unknown_args. Implement with chore --task T-64 and run the
+    same tests to green.
     Slice-42 owns doctor reporting, slice-43 approval and slice-44 run admission.
     Slice-45 reports the frozen selection. ID-SOCKETS-01 covers the startup scan.
     T-65 owns the worker init. Runtime proof for ID-SOCKETS-02/03 belongs to slice-46 on the
@@ -8361,7 +8374,9 @@
           | ["domain/TestBackendSelection", "native/TestLandlockABIProbe",
              "docker/TestRunscRegistration", "docker/TestRunscRegistration/path_registration",
              "docker/TestRunscRegistration/shim_only_registration",
-             "docker/TestRunscRegistration/contradictory_path"]
+             "docker/TestRunscRegistration/contradictory_path",
+             "docker/TestRunscRegistration/socket_permitting_args",
+             "docker/TestRunscRegistration/unknown_args"]
           | map("github.com/donvargax/itos-container/internal/engine/checkoutsockets/" + .) - $passed
           | if length == 0 then true else error("missing passing tests: " + join(", ")) end'
 - id: T-65
