@@ -7,6 +7,8 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"path"
+	"slices"
 	"strings"
 
 	"github.com/moby/moby/api/types/system"
@@ -43,12 +45,12 @@ func (r Runtimes) Runsc(ctx context.Context) (port.Registration, port.Failure) {
 	if versionFailure != rp.None || infoFailure != rp.None || readiness.ValidateEngine(version, info) != rp.None {
 		return unreadable(ctx)
 	}
-	path := strings.TrimPrefix(pin.Endpoint(), "unix://")
+	socket := strings.TrimPrefix(pin.Endpoint(), "unix://")
 	transport := &http.Transport{DisableKeepAlives: true, DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		if !pin.Unchanged() {
 			return nil, errors.New("engine socket changed")
 		}
-		return (&net.Dialer{}).DialContext(ctx, "unix", path)
+		return (&net.Dialer{}).DialContext(ctx, "unix", socket)
 	}}
 	defer transport.CloseIdleConnections()
 	api, err := client.New(client.WithHost(pin.Endpoint()), client.WithAPIVersion(version.Negotiated), client.WithHTTPClient(&http.Client{
@@ -75,12 +77,34 @@ func unreadable(ctx context.Context) (port.Registration, port.Failure) {
 
 // registration judges the reported inventory. A missing or null map is no
 // inventory; an inventory without the exact key runsc confirms its absence.
+// The runsc entry must be a path-based registration: Moby reports no
+// runtimeType, so a nonempty one is a shim registration this detector cannot
+// identify, and an entry without a recognized path says nothing about the
+// executable behind the name.
 func registration(runtimes map[string]system.RuntimeWithStatus) (port.Registration, port.Failure) {
 	if runtimes == nil {
 		return port.RegistrationUnknown, port.RuntimeInspect
 	}
-	if _, ok := runtimes["runsc"]; !ok {
+	entry, ok := runtimes["runsc"]
+	if !ok {
 		return port.RunscAbsent, port.None
 	}
+	if entry.Type != "" || !runscPath(entry.Path) || !hostSocketsUnreachable(entry.Args) {
+		return port.RegistrationUnknown, port.RuntimeRegistration
+	}
 	return port.RunscRegistered, port.None
+}
+
+// runscPath accepts the bare name or an absolute, canonical Linux path whose
+// final component is runsc.
+func runscPath(p string) bool {
+	return p == "runsc" || (strings.HasPrefix(p, "/") && path.Clean(p) == p && path.Base(p) == "runsc")
+}
+
+// hostSocketsUnreachable inspects the complete runtimeArgs list. An empty list
+// leaves runsc's default host-uds policy of none, and the exact default flag
+// restates it. Any other list either permits host sockets or changes the
+// policy in a way the detector cannot establish.
+func hostSocketsUnreachable(args []string) bool {
+	return len(args) == 0 || slices.Equal(args, []string{"--host-uds=none"})
 }

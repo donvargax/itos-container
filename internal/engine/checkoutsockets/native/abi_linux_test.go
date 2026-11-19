@@ -2,6 +2,7 @@ package native
 
 import (
 	"context"
+	"math/bits"
 	"syscall"
 	"testing"
 
@@ -86,7 +87,7 @@ func TestLandlockABIProbe(t *testing.T) {
 		}
 	})
 	t.Run("invalid ABI", func(t *testing.T) {
-		for _, r := range []uintptr{0, ^uintptr(0), ^uintptr(0) - 100, 1 << 63} {
+		for _, r := range []uintptr{0, ^uintptr(0), ^uintptr(0) - 100, uintptr(1) << (bits.UintSize - 1)} {
 			c := &controlled{r: r}
 			abi, failure := c.probe().LandlockABI(context.Background())
 			if abi != (port.ABI{}) || failure != port.ABIInvalid {
