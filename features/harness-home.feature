@@ -839,11 +839,10 @@ Feature: An approved persistent home for one checkout's harness
   # report booleans. Independent controls outside the observed trees validate
   # each marker search (raw and base64 at all three offsets). q-56 leaves
   # deliberate disclosures by a workload in refused hostnames to
-  # p1-platform-log-redaction. This probe requests a harmless refused hostname
-  # so proxy output, the engine log and the protected refusal log actually exist.
-  # Inspect live worker configuration, including Env, argv, labels and mounts.
-  # Scan raw create requests, protected approvals, snapshots and recovery state
-  # as well as plain/JSON doctor and status and the run diagnostics.
+  # p1-platform-log-redaction. Inspect Env, argv, labels and mounts while each
+  # worker is live. Include raw create requests, protected approvals, snapshots
+  # and recovery state, and both plain and JSON output from doctor and status.
+  # Teardown publishes each session's protected refusal log after its proxy stops.
   # After exit, copy the original volume's database and sidecars as in 08
   # before opening SQLite or OpenCode. Select the pre-existing ID explicitly
   # so its saved key can be tested even if cleanup cleared the active selection.
@@ -856,6 +855,7 @@ Feature: An approved persistent home for one checkout's harness
     And the fake provider registers the two granted keys and the retained account's key under three distinct synthetic principals
     When each granted worker runs "opencode --standalone auth import /run/itos-container/credentials/opencode-auth"
     And each switches to the credential ID in its staged file before requesting its provider with OpenCode at the allowlisted fake endpoint
+    And each worker sends its proxy a CONNECT request on port 443 for a distinct harmless hostname outside its allowlist
     And the control requests "opencode-go" with OpenCode using its existing selection
     Then the fake provider authenticates both workers and attributes every authenticated request from each to its granted principal
     And the provider authenticates the control as the pre-existing "opencode-go" principal and receives no attempt with that key from either granted worker
@@ -864,11 +864,14 @@ Feature: An approved persistent home for one checkout's harness
     And an attempted write to each staged file fails
     And neither worker can read the other checkout's granted key, original auth.json, host database or its sidecars
     And native mount inspection finds only the staged read-only credential file among credential mounts and both host stores retain their bytes
-    And the marker checks find no credential in worker create or inspect data, the checkout, approval or session records, doctor, status, diagnostics or retained logs
+    And the marker checks find no synthetic marker in either worker's create request or live inspect data, its checkout, proxy stdout or engine logs
+    And the same checks find none in either checkout's approval or live session records, doctor or status output or run diagnostics so far
     And the same checks detect each marker and encoding in its independent control
     When both granted workers exit normally and their run commands return
     Then immediate read-only inspection of the first checkout's original retained database finds the pre-existing account ID and no row for that worker's staged credential ID
     And the first worker's granted key is absent from that database and its SQLite sidecars
+    And each session's protected egress-refusals.jsonl contains the refusal for the harmless hostname its worker requested
+    And for both runs the same marker checks find no synthetic markers in the full refusal log, final diagnostics or final session records
     When the first checkout selects matching approval with only the credential grant removed
     And a fresh worker on that same volume selects the pre-existing "opencode-go" account by ID and requests the fake provider without importing credentials
     And the independent control repeats its request from the pre-delivery copy
