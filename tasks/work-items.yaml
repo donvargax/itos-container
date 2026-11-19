@@ -2371,14 +2371,15 @@ items:
     status: todo
     depends_on: []
     kind: task
-  - id: p1-doctor-checkout-socket-backend
+  - id: slice-42
     title: Report the checkout socket backend in doctor
     phase: 1
     owner: null
     status: todo
     depends_on: [T-64]
-    kind: idea
+    kind: slice
     why: >
+      Was p1-doctor-checkout-socket-backend.
       Let the person see which backend a run would use before approving it. Cover Landlock, gVisor
       and a host with neither backend through doctor’s read-only inspection. Broken down from
       p1-checkout-socket-kernel-enforcement.
