@@ -12,12 +12,47 @@ import (
 // serves execs only for the owned worker ID it recorded, and refuses
 // anything else with the observer's canary, which no product output may
 // contain.
+// serveExecKill applies the independent stop's signal to the owned worker:
+// the local fixture has no real process, so the container observation moves
+// to exited and the journal records the request before dispatch.
+func (a *sessionAPI) serveExecKill(out http.ResponseWriter, entry sessionRequest, index int) {
+	id := strings.TrimSuffix(strings.TrimPrefix(entry.Path, "/containers/"), "/kill")
+	if a.w.doctor.real == nil && id != a.w.exec.worker {
+		a.requests[index].Status = http.StatusForbidden
+		http.Error(out, "session fixture refuses request "+doctorCanary, http.StatusForbidden)
+		return
+	}
+	if c := a.local[id]; c != nil {
+		object(c["State"])["Status"] = "exited"
+		object(c["State"])["Running"] = false
+	}
+	a.requests[index].Status = http.StatusNoContent
+	out.WriteHeader(http.StatusNoContent)
+}
+
+// execStopBarrier pauses an exec transition so an independent stop can
+// complete first. The handler releases the recorder's lock while it waits:
+// the stop's own requests must reach the fixture.
+func (a *sessionAPI) execStopBarrier() {
+	e := a.w.exec
+	if e == nil || e.stopBoundary == "" || e.stopReady == nil || e.stopSignaled {
+		return
+	}
+	e.stopSignaled = true
+	ready, release := e.stopReady, e.stopRelease
+	a.mu.Unlock()
+	close(ready)
+	<-release
+	a.mu.Lock()
+}
+
 func (a *sessionAPI) serveExecCreate(out http.ResponseWriter, request *http.Request, entry sessionRequest, index int) {
 	if entry.Method != "POST" {
 		a.requests[index].Status = http.StatusForbidden
 		http.Error(out, "session fixture refuses request "+doctorCanary, http.StatusForbidden)
 		return
 	}
+	a.execStopBarrier()
 	id := strings.TrimSuffix(strings.TrimPrefix(entry.Path, "/containers/"), "/exec")
 	if a.w.doctor.real == nil && id != a.w.exec.worker {
 		a.requests[index].Status = http.StatusForbidden
@@ -98,6 +133,7 @@ func (a *sessionAPI) serveExec(out http.ResponseWriter, request *http.Request, e
 			http.Error(out, "session fixture refuses request "+doctorCanary, http.StatusForbidden)
 			return
 		}
+		a.execStopBarrier()
 		a.requests[index].Status = http.StatusOK
 		a.execStart(out, request, instance)
 	case strings.HasSuffix(id, "/json") && entry.Method == "GET":

@@ -36,6 +36,11 @@ type execWorld struct {
 	execLie                          string
 	execExit                         int
 	execStdout, execStderr           string
+	event, boundary                  string
+	stopBoundary                     string
+	stopReady, stopRelease           chan struct{}
+	stopSignaled                     bool
+	independentStopExit              int
 	envExtra                         map[string]string
 	inputWatch                       *sessionReadWatch
 	frozenEnv                        []string
@@ -59,6 +64,9 @@ type execProbeRequest struct {
 	Authority, Boundary string
 	Exit                int
 	Stdout, Stderr      string
+	Event               string
+	EventBoundary       string
+	StopBoundary        string
 }
 
 // execProbeReport is the assembly's own observation of the invocation.
@@ -73,6 +81,7 @@ type execProbeReport struct {
 	Argv                          []string
 	Env                           []string
 	User, WorkingDir              string
+	StopExit                      int
 }
 
 type execLease struct {
@@ -487,9 +496,29 @@ func (w *world) closeExec() error {
 // report, is recorded as data: the behaviour assertions in Then must fail,
 // not the invocation step.
 func (w *world) execInvoke(key, backend string, request execProbeRequest) error {
-	bin, err := w.sessionProbeBinary()
+	handle, err := w.execProbeStart(key, backend, request)
 	if err != nil {
 		return err
+	}
+	return w.execProbeWait(handle)
+}
+
+type execProbeHandle struct {
+	key, backend string
+	request      execProbeRequest
+	cmd          *exec.Cmd
+	cancel       context.CancelFunc
+	wait         chan error
+	waitErr      error
+	exited       bool
+	transcript   strings.Builder
+	pre          int
+}
+
+func (w *world) execProbeStart(key, backend string, request execProbeRequest) (*execProbeHandle, error) {
+	bin, err := w.sessionProbeBinary()
+	if err != nil {
+		return nil, err
 	}
 	s := w.session
 	s.api.mu.Lock()
@@ -506,13 +535,14 @@ func (w *world) execInvoke(key, backend string, request execProbeRequest) error 
 	}
 	request.Exit = w.exec.execExit
 	request.Stdout, request.Stderr = w.exec.execStdout, w.exec.execStderr
+	request.Event, request.EventBoundary = w.exec.event, w.exec.boundary
+	request.StopBoundary = w.exec.stopBoundary
 	request.Output = filepath.Join(w.dir, "slice-38-"+key+"-report.json")
 	input := filepath.Join(w.dir, "slice-38-"+key+"-input.json")
 	if err := os.WriteFile(input, approvalJSON(request), 0600); err != nil {
-		return err
+		return nil, err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel()
 	args := []string{"-test.run=^TestPublicExecCommand$", "-test.count=1"}
 	if cover := w.coverageDir(); cover != "" {
 		args = append(args, "-test.gocoverdir="+cover)
@@ -528,26 +558,41 @@ func (w *world) execInvoke(key, backend string, request execProbeRequest) error 
 	}
 	cmd.Env = setEnv(cmd.Env, "ITOS_ROOT", w.doctor.checkout)
 	cmd.Env = setEnv(cmd.Env, "SLICE_38_EXEC_INPUT", input)
-	var transcript strings.Builder
-	cmd.Stdout, cmd.Stderr = &transcript, &transcript
+	handle := &execProbeHandle{key: key, backend: backend, request: request, cmd: cmd, cancel: cancel, pre: pre, wait: make(chan error, 1)}
+	cmd.Stdout, cmd.Stderr = &handle.transcript, &handle.transcript
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return err
+		cancel()
+		return nil, err
 	}
 	if err := w.startLocalCommand(cmd); err != nil {
-		return err
+		cancel()
+		return nil, err
 	}
 	_ = stdin.Close()
-	runErr := cmd.Wait()
+	return handle, nil
+}
+
+// execProbeWait joins the probe and files its observation under the handle's
+// key. A probe that published no report is recorded as missing evidence.
+func (w *world) execProbeWait(handle *execProbeHandle) error {
+	var runErr error
+	if handle.exited {
+		runErr = handle.waitErr
+	} else {
+		runErr = handle.cmd.Wait()
+	}
+	defer handle.cancel()
 	b := execBackend{subprocess: doctorResult{exit: -1}}
-	if state := cmd.ProcessState; state != nil {
+	if state := handle.cmd.ProcessState; state != nil {
 		b.subprocess.exit = state.ExitCode()
 	}
-	b.subprocess.stdout, b.subprocess.stderr = transcript.String(), ""
+	b.subprocess.stdout, b.subprocess.stderr = handle.transcript.String(), ""
+	s := w.session
 	s.api.mu.Lock()
-	b.execRequests = append([]sessionRequest{}, s.api.requests[pre:]...)
+	b.execRequests = append([]sessionRequest{}, s.api.requests[handle.pre:]...)
 	s.api.mu.Unlock()
-	report, readErr := os.ReadFile(request.Output)
+	report, readErr := os.ReadFile(handle.request.Output)
 	if readErr == nil {
 		if err := json.Unmarshal(report, &b.report); err != nil {
 			return err
@@ -560,10 +605,10 @@ func (w *world) execInvoke(key, backend string, request execProbeRequest) error 
 	if runErr != nil {
 		var exit *exec.ExitError
 		if !errors.As(runErr, &exit) {
-			return fmt.Errorf("exec assembly subprocess failed: %w\n%s", runErr, transcript.String())
+			return fmt.Errorf("exec assembly subprocess failed: %w\n%s", runErr, handle.transcript.String())
 		}
 	}
-	w.exec.results[key] = b
+	w.exec.results[handle.key] = b
 	return nil
 }
 

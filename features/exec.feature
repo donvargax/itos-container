@@ -241,7 +241,7 @@ Feature: Execute literal argv in a live owned foreground session
   # Cancel before any start may be sent: no running exec exists to terminate.
   # The command assembly injects an actual cancelled context at the named port
   # boundary; it does not bypass the exec handler or invent a returned result.
-  @ID-EXEC-07 @wip @slice-38
+  @ID-EXEC-07 @wip @slice-38 @linux
   Scenario Outline: Cancellation before exec start leaves the primary alone
     Given a live exec fixture with "<signal>" scheduled at "<boundary>"
     When the exec CLI attempts its probe through both local backends
@@ -368,7 +368,7 @@ Feature: Execute literal argv in a live owned foreground session
   # Barriers release the operation lock between transitions. An independent
   # stop wins before the selected mutation; a delayed positive observation may
   # not undo stopped state. No lock is held over foreground wait or stream drain.
-  @ID-EXEC-11 @wip @slice-38
+  @ID-EXEC-11 @wip @slice-38 @linux
   Scenario Outline: A completed stop fences an exec continuation
     Given a live exec fixture with a stop barrier at "<boundary>"
     When exec pauses and a separate stop completes before the exec continuation resumes through both local backends

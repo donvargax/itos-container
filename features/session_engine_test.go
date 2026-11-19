@@ -119,6 +119,10 @@ func (a *sessionAPI) serve(out http.ResponseWriter, request *http.Request) {
 		a.serveExecCreate(out, request, entry, index)
 		return
 	}
+	if a.w.exec != nil && entry.Method == "POST" && strings.HasPrefix(entry.Path, "/containers/") && strings.HasSuffix(entry.Path, "/kill") {
+		a.serveExecKill(out, entry, index)
+		return
+	}
 	if a.w.exec != nil && strings.HasPrefix(entry.Path, "/exec/") {
 		a.serveExec(out, request, entry, index)
 		return
