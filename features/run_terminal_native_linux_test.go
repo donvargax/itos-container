@@ -218,10 +218,10 @@ func (w *world) terminalNativeSteps(sc *godog.ScenarioContext, fixture **termina
 		if err := n.observed(); err != nil {
 			return err
 		}
-		if w.exit != exit || !strings.Contains(w.stderr, "run.terminal-disconnected") || n.finished.Sub(n.interrupted) > 32*time.Second {
+		if w.exit != exit || n.finished.Sub(n.interrupted) > 32*time.Second {
 			return fmt.Errorf("disconnect outcome differs: %s", w.report())
 		}
-		return nil
+		return w.terminalDisconnectDiagnostic()
 	})
 	sc.Step(`^the worker receives one owned SIGTERM with escalation "([^"]*)" at the original grace deadline only while still owned and running$`, func(escalation string) error { return n.ownedSignals("SIGTERM", escalation == "one SIGKILL") })
 	sc.Step(`^terminal restoration is attempted and any failure is reported separately without blocking cleanup$`, func() error {

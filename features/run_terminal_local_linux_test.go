@@ -446,10 +446,10 @@ func (w *world) terminalLocalSteps(sc *godog.ScenarioContext, fixture **terminal
 	})
 	sc.Step(`^terminal run reports "run.terminal-disconnected" and returns the workload exit (\d+)$`, func(exit int) error {
 		f := *fixture
-		if f.timedOut || w.exit != exit || !strings.Contains(w.stderr, "run.terminal-disconnected") {
+		if f.timedOut || w.exit != exit {
 			return fmt.Errorf("expected run.terminal-disconnected with exit %d, timed out=%t: %s", exit, f.timedOut, w.report())
 		}
-		return nil
+		return w.terminalDisconnectDiagnostic()
 	})
 	// A closed master may make even a successful restoration unverifiable on
 	// some kernels, so the honest contract is the attempt with any failure
@@ -464,6 +464,13 @@ func (w *world) terminalLocalSteps(sc *godog.ScenarioContext, fixture **terminal
 		}
 		return w.localOfflineOwned()
 	})
+}
+
+func (w *world) terminalDisconnectDiagnostic() error {
+	if !strings.Contains(w.stderr, "run.terminal-disconnected") || strings.Contains(w.stderr, "run.execution-unavailable") {
+		return fmt.Errorf("expected a terminal disconnect without an execution failure: %s", w.report())
+	}
+	return nil
 }
 
 func (f *terminalInvocation) distinctOutput() error {
