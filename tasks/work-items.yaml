@@ -2342,7 +2342,7 @@ items:
     title: Detect the available checkout socket backend
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: T-65
