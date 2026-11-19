@@ -2152,6 +2152,11 @@ items:
       activity check, which 369b58b changed to retry. The cleanup check still samples the daemon
       once to confirm a 404 for the original worker ID. No cleanup failure has been observed. If one
       occurs, record the CI run on this item.
+
+      T-59 run 44286115510 and T-64 on November 19 hit the same ID-OVERLAP-06 activity assertion on
+      different example rows. Have the assertion report which observation failed: worker ID, engine
+      inspection, running state, mount anchor, intent record, mount boundary, or heartbeat. That
+      evidence can guide the repair while preserving the scenario’s checks.
   - id: p2-repair-platform-ci-fixtures
     title: Repair shell and Windows assumptions in portability fixtures
     phase: 1
