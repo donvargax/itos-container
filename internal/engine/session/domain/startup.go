@@ -18,6 +18,7 @@ type startupState struct {
 	detectorExit    *int
 	operation       string
 	started         bool
+	acknowledged    bool
 	failure         port.Outcome
 }
 

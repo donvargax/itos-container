@@ -159,6 +159,24 @@ and one `run.json-unsupported` problem containing `exit: 2`, a message and guida
 to remove both requests. The diagnostic also goes to stderr. Terminal and redirected
 streams receive the same refusal.
 
+`itos container run --tty -- <command> [arguments...]` explicitly attaches a
+terminal. Stdin and stdout must both be terminals; otherwise run exits 2 with
+`run.terminal-required`. Acquisition or invalid initial dimensions exits 3 with
+`run.terminal-unavailable`. These checks follow JSON and argv validation and
+precede preflight. Stdin supplies the initial size and later resizes. Distinct
+stdout gets its own saved-state lease without supplying dimensions. Control keys,
+including Ctrl-C and Ctrl-D, go to the workload as bytes; Docker's own default
+Ctrl-P Ctrl-Q detach sequence does too, because run pins one long escape
+sequence the daemon cannot refuse (ctrl-^,ctrl-_,ctrl-^,ctrl-_,ctrl-^,ctrl-_,
+ctrl-^,ctrl-_) and that exact sequence alone detaches. Both worker output
+streams share one raw stream on stdout; controller diagnostics stay on stderr.
+
+Terminal state is restored on every return. Losing either terminal stops the owned
+workload through the existing bounded cleanup path. Terminal disconnect,
+observation, resize and restoration failures have separate `run.terminal-*`
+diagnostics and return 75 unless an observed nonzero workload exit takes priority.
+Terminal mode changes no approved settings and inherits no host terminal environment.
+
 Usage and JSON refusals above precede policy, engine and approval inspection.
 A valid invocation checks local policy, manifest, host identity and approval before
 contacting the engine. Locally decidable refusals make no engine connection; daemon
@@ -173,7 +191,7 @@ unsafe or conflicting state refuses, and an uncertain write yields no startup in
 Every invocation revalidates prerequisites and approval, even if the snapshot exists.
 Successful publication now creates one owned unstarted worker from the frozen
 image config ID. Run durably records its inspected full ID, verifies the approved
-offline or allowlist boundary, attaches separate stdin/stdout/stderr, then starts
+offline or allowlist boundary, attaches streams (merged output for `--tty`), then starts
 the literal argv.
 There is no implicit shell, image acquisition, helper execution or approval prompt.
 An explicit shell executes inside the worker. HOME and TMPDIR use `/tmp` tmpfs;

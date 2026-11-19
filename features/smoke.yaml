@@ -24,6 +24,10 @@
   scenarios:
     - id: "@ID-COUNT-01"
       why: count's whole path in one run, the counts on stdout and the hint on stderr, the file read through the disk adapter and the output shaped
+- file: run_terminal.feature
+  scenarios:
+    - id: "@ID-RUNTTY-01"
+      why: explicit terminal selection, literal argv, raw output and restoration through the local engine recorder
 - file: cli.feature
   scenarios:
     - id: "@ID-CLI-01"

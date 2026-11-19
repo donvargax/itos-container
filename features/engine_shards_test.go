@@ -58,7 +58,7 @@ func engineFeatureFiles(dir string) ([]string, error) {
 // this tree keeps outside offline, lifecycle and egress.
 var shardOtherFiles = []string{
 	"anchors.feature", "checkout-overlap.feature", "doctor.feature", "hardlinks.feature",
-	"recovery.feature", "session.feature", "sockets.feature",
+	"recovery.feature", "run_terminal.feature", "session.feature", "sockets.feature",
 }
 
 // egressShardFiles is the egress shard's complete pinned set: egress.feature, plus
@@ -306,20 +306,18 @@ func TestEngineShards(t *testing.T) {
 		}
 	})
 	t.Run("not-yet-listed egress file", func(t *testing.T) {
-		// The pin is an explicit allowlist, never the inventory's leftover, so a new
-		// engine file no shard's set lists yet (slice-37's run_terminal.feature, on a
-		// branch before it extends other) cannot hide in egress: its presence there is
-		// an issue, and the pinned set the issue names never includes the new file.
+		// A new engine file must have an explicit shard assignment.
+		const unassigned = "unassigned.feature"
 		engine, err := realEngineFeatures()
 		if err != nil {
 			t.Fatal(err)
 		}
-		engine = append(engine, "run_terminal.feature")
-		issue := egressShardIssue([]string{"egress.feature", "run_terminal.feature"}, engine)
+		engine = append(slices.Clone(engine), unassigned)
+		issue := egressShardIssue([]string{"egress.feature", unassigned}, engine)
 		if issue == "" {
 			t.Error("the egress pin allowed a not-yet-listed engine file")
 		}
-		if strings.Contains(issue, "run_terminal.feature") {
+		if strings.Contains(issue, unassigned) {
 			t.Errorf("the pinned set includes the unrelated file: %q", issue)
 		}
 	})

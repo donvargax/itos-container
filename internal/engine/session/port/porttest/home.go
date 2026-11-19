@@ -8,6 +8,7 @@ import (
 
 	budget "github.com/donvargax/itos-container/internal/engine/budget/port"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
+	terminal "github.com/donvargax/itos-container/internal/engine/terminal/port"
 )
 
 // Homes models protected state and durable scope exclusion entirely in memory.
@@ -209,6 +210,22 @@ type homeConnection struct {
 	home *HomeEngine
 }
 
+// A home-capable connection keeps the terminal capability of the connection it
+// wraps, as a real engine connection supplies both through one handle.
+func (c *homeConnection) SetTerminal(size terminal.Dimensions) port.Outcome {
+	t, ok := c.RunConnection.(port.TerminalConnection)
+	if !ok {
+		return port.TerminalUnavailable
+	}
+	return t.SetTerminal(size)
+}
+func (c *homeConnection) Resize(ctx context.Context, id string, size terminal.Dimensions) port.Outcome {
+	t, ok := c.RunConnection.(port.TerminalConnection)
+	if !ok {
+		return port.TerminalResize
+	}
+	return t.Resize(ctx, id, size)
+}
 func (c *homeConnection) event(name string) {
 	if c.home.HomeBefore != nil {
 		c.home.HomeBefore(name)

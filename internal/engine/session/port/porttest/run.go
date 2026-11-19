@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/donvargax/itos-container/internal/engine/session/port"
+	terminal "github.com/donvargax/itos-container/internal/engine/terminal/port"
 )
 
 // RunEngine is an in-memory lifecycle fake, including explicit boundary faults.
@@ -32,6 +33,9 @@ type RunEngine struct {
 	Output, ErrorOutput                                              []byte
 	After                                                            func(string)
 	AfterStart, AfterWait                                            func()
+	AfterCancelledWait                                               func()
+	BeforeResize                                                     func()
+	ResizeFailure                                                    port.Outcome
 	WaitUntilCancel, IgnoreSignal                                    bool
 	SignalFailure                                                    port.Outcome
 	StdinClosed, DrainUntilCancel                                    bool
@@ -43,12 +47,14 @@ type RunEngine struct {
 }
 type runConnection struct {
 	*memoryConnection
-	run *RunEngine
+	run      *RunEngine
+	terminal terminal.Dimensions
 }
 type runAttachment struct {
-	run      *RunEngine
-	failure  port.Outcome
-	failures chan port.Outcome
+	run        *RunEngine
+	failure    port.Outcome
+	failures   chan port.Outcome
+	outputDone chan struct{}
 }
 
 func (e *RunEngine) event(name string) {
@@ -71,7 +77,7 @@ func (e *RunEngine) OpenRun(ctx context.Context, b port.Binding) (port.RunConnec
 		return nil, f
 	}
 	e.event("open")
-	return &runConnection{c.(*memoryConnection), e}, ""
+	return &runConnection{memoryConnection: c.(*memoryConnection), run: e}, ""
 }
 func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []string) (string, port.Outcome) {
 	if !r.ValidCredentials(c.binding) || r.Schema == 4 && !r.Credentials.Ready() {
@@ -120,7 +126,7 @@ func (c *runConnection) Attach(_ context.Context, _ string, streams port.Streams
 	if c.run.AttachFailure != "" {
 		return nil, c.run.AttachFailure
 	}
-	a := runAttachment{run: c.run, failures: make(chan port.Outcome, 2)}
+	a := &runAttachment{run: c.run, failures: make(chan port.Outcome, 2), outputDone: make(chan struct{})}
 	if c.run.StdinClosed {
 		a.failures <- port.StdinClosed
 	} else if streams.In != nil {
@@ -128,10 +134,19 @@ func (c *runConnection) Attach(_ context.Context, _ string, streams port.Streams
 			a.failure = port.ExecutionFailed
 		}
 	}
+	if c.terminal.Valid() {
+		streams.Err = streams.Out
+	}
+	go a.forwardOutput(streams)
+	return a, ""
+}
+
+func (a *runAttachment) forwardOutput(streams port.Streams) {
+	defer close(a.outputDone)
 	for _, output := range []struct {
 		writer port.Writer
 		data   []byte
-	}{{streams.Out, c.run.Output}, {streams.Err, c.run.ErrorOutput}} {
+	}{{streams.Out, a.run.Output}, {streams.Err, a.run.ErrorOutput}} {
 		if output.writer != nil && len(output.data) != 0 {
 			if n, err := output.writer.Write(output.data); err != nil || n != len(output.data) {
 				a.failure = port.ExecutionFailed
@@ -141,7 +156,6 @@ func (c *runConnection) Attach(_ context.Context, _ string, streams port.Streams
 	if a.failure != "" {
 		a.failures <- a.failure
 	}
-	return a, ""
 }
 func (c *runConnection) Start(ctx context.Context, id string) port.Outcome {
 	if c.isProxy(id) {
@@ -194,6 +208,9 @@ func (c *runConnection) Wait(ctx context.Context, id string) (int, port.Outcome)
 		<-ctx.Done()
 	}
 	if ctx.Err() != nil {
+		if c.run.AfterCancelledWait != nil {
+			c.run.AfterCancelledWait()
+		}
 		return 0, port.ExecutionFailed
 	}
 	c.engine.resourcesMu.Lock()
@@ -251,10 +268,14 @@ func (c *runConnection) Signal(ctx context.Context, id, signal string) port.Outc
 	c.engine.Resources[id] = o
 	return ""
 }
-func (a runAttachment) Drain(ctx context.Context) port.Outcome {
+func (a *runAttachment) Drain(ctx context.Context) port.Outcome {
 	a.run.event("drain")
 	if a.run.DrainUntilCancel {
 		<-ctx.Done()
+	}
+	select {
+	case <-a.outputDone:
+	case <-ctx.Done():
 	}
 	a.run.DrainContextErr = ctx.Err()
 	if ctx.Err() != nil {
@@ -265,8 +286,8 @@ func (a runAttachment) Drain(ctx context.Context) port.Outcome {
 	}
 	return a.run.DrainFailure
 }
-func (a runAttachment) Close() { a.run.event("detach") }
-func (a runAttachment) Failures() <-chan port.Outcome {
+func (a *runAttachment) Close() { a.run.event("detach") }
+func (a *runAttachment) Failures() <-chan port.Outcome {
 	if a.run.StdinFailures != nil {
 		return a.run.StdinFailures
 	}

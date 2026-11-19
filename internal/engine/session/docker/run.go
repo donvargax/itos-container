@@ -17,9 +17,11 @@ import (
 
 	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
+	terminal "github.com/donvargax/itos-container/internal/engine/terminal/port"
 )
 
 type runConnection struct {
+	terminal    terminal.Dimensions
 	proxyConfig *container.Config
 	proxyRecord port.Record
 	*connection
@@ -87,6 +89,7 @@ func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []str
 	}
 	pids, init := int64(4096), false
 	config := &container.Config{
+		Tty:   c.terminal.Valid(),
 		Image: r.ImageID, User: r.UID + ":" + r.GID, WorkingDir: c.binding.Workspace,
 		Cmd: slices.Clone(argv), Entrypoint: []string{}, Env: environment,
 		AttachStdin: true, AttachStdout: true, AttachStderr: true, OpenStdin: true, StdinOnce: true,
@@ -94,6 +97,7 @@ func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []str
 		Labels:      map[string]string{"io.itos-container.intent": r.NameToken(), "io.itos-container.project": r.Project, "io.itos-container.fingerprint": r.Fingerprint},
 	}
 	host := &container.HostConfig{
+		ConsoleSize: [2]uint{uint(c.terminal.Rows), uint(c.terminal.Columns)},
 		NetworkMode: "none", ReadonlyRootfs: true, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges"},
 		Resources: container.Resources{PidsLimit: &pids}, RestartPolicy: container.RestartPolicy{Name: "no"},
 		IpcMode: "private", CgroupnsMode: "private", Init: &init, LogConfig: container.LogConfig{Type: "none"},
@@ -155,7 +159,8 @@ func (c *runConnection) VerifyRun(ctx context.Context, id string, argv []string)
 	}
 	if c.expected == nil || !slices.Equal(r.Config.Cmd, argv) || !slices.Equal(r.Config.Cmd, c.expected.Cmd) ||
 		len(r.Config.Entrypoint) != 0 || r.Config.User != c.expected.User || r.Config.WorkingDir != c.expected.WorkingDir ||
-		!sameEnvironment(r.Config.Env, c.expected.Env) || r.Config.Tty || !r.Config.OpenStdin || !r.Config.StdinOnce ||
+		!sameEnvironment(r.Config.Env, c.expected.Env) || r.Config.Tty != c.expected.Tty || !r.Config.OpenStdin || !r.Config.StdinOnce ||
+		r.HostConfig.ConsoleSize != [2]uint{uint(c.terminal.Rows), uint(c.terminal.Columns)} ||
 		len(r.Config.Volumes) != 0 || r.Config.Healthcheck == nil || !slices.Equal(r.Config.Healthcheck.Test, []string{"NONE"}) ||
 		r.State.Status != "created" || r.State.Running || r.State.Pid != 0 || (r.State.StartedAt != "" && r.State.StartedAt != "0001-01-01T00:00:00Z") ||
 		!safeHomeWorkerHost(r.HostConfig, c.record) || !safeHomeMounts(r.Mounts, c.record) {
@@ -267,10 +272,23 @@ type attachment struct {
 	failure  port.Outcome
 }
 
+// terminalDetachKeys pins the escape sequence the daemon applies to a TTY
+// attach's input. The daemon cannot disable that handling: an absent value
+// keeps Docker's default ctrl-p,ctrl-q, which it swallows as a detach while
+// dropping the attach, so those workload bytes would never arrive. This exact
+// byte sequence is the one input run cannot forward; it deliberately begins
+// with a byte no workload control-key exchange sends, and everything else,
+// Docker's default included, reaches the worker unchanged.
+const terminalDetachKeys = "ctrl-^,ctrl-_,ctrl-^,ctrl-_,ctrl-^,ctrl-_,ctrl-^,ctrl-_"
+
 func (c *runConnection) Attach(ctx context.Context, id string, streams port.Streams) (port.Attachment, port.Outcome) {
 	call, cancel := c.call(ctx)
 	defer cancel()
-	response, err := c.api.ContainerAttach(call, id, client.ContainerAttachOptions{Stream: true, Stdin: true, Stdout: true, Stderr: true})
+	options := client.ContainerAttachOptions{Stream: true, Stdin: true, Stdout: true, Stderr: true}
+	if c.terminal.Valid() {
+		options.DetachKeys = terminalDetachKeys
+	}
+	response, err := c.api.ContainerAttach(call, id, options)
 	if err != nil {
 		return nil, port.ExecutionFailed
 	}
@@ -293,7 +311,12 @@ func (c *runConnection) Attach(ctx context.Context, id string, streams port.Stre
 		if streams.Err != nil {
 			errout = streams.Err
 		}
-		_, err := stdcopy.StdCopy(out, errout, response.Reader)
+		var err error
+		if c.terminal.Valid() {
+			_, err = io.Copy(out, response.Reader)
+		} else {
+			_, err = stdcopy.StdCopy(out, errout, response.Reader)
+		}
 		if err != nil {
 			a.fail()
 		}

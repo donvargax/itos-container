@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -55,7 +56,7 @@ func TestNativeProbeBuildReuse(t *testing.T) {
 				t.Fatal(err)
 			}
 			b, err := os.Stat(copied)
-			if err != nil || os.SameFile(a, b) || b.Mode().Perm()&0100 == 0 {
+			if err != nil || os.SameFile(a, b) || !probeExecutable(runtime.GOOS, b.Mode()) {
 				t.Fatal("probe copy is shared or not executable", err)
 			}
 			// A different product build cannot reuse a previous suite's cache.
@@ -68,5 +69,25 @@ func TestNativeProbeBuildReuse(t *testing.T) {
 				t.Fatal("failed compilation published a probe", err)
 			}
 		})
+	}
+}
+
+func probeExecutable(goos string, mode os.FileMode) bool {
+	return goos == "windows" || mode.Perm()&0100 != 0
+}
+
+func TestProbeExecutable(t *testing.T) {
+	for _, tc := range []struct {
+		goos string
+		mode os.FileMode
+		want bool
+	}{
+		{"linux", 0700, true},
+		{"linux", 0611, false},
+		{"windows", 0600, true},
+	} {
+		if got := probeExecutable(tc.goos, tc.mode); got != tc.want {
+			t.Errorf("probeExecutable(%q, %#o) = %t, want %t", tc.goos, tc.mode, got, tc.want)
+		}
 	}
 }

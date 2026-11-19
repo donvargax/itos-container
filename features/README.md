@@ -251,10 +251,10 @@ Since T-45 the engine tier runs in engine shards, the matrix of the `engine-shar
 **lifecycle** (`lifecycle.feature`, whose four `ID-LIFECYCLE-09` rows stay nested in
 `ID-LIFECYCLE-13`'s quiet row), **other**
 (`anchors.feature`, `checkout-overlap.feature`, `doctor.feature`, `hardlinks.feature`,
-`recovery.feature`, `session.feature` and `sockets.feature`) and, since T-59, **egress**
-(`egress.feature`, moved whole from other after that shard's measured step passed 180
-seconds; slice-28's `egress_lifecycle.feature` joins it and slice-37's `run_terminal.feature`
-goes to other when those branches merge). A shard is a job of whole feature files on its own
+`recovery.feature`, `run_terminal.feature`, `session.feature` and `sockets.feature`) and,
+since T-59, **egress** (`egress.feature`, moved whole from other after that shard's
+measured step passed 180 seconds). Slice-28's `egress_lifecycle.feature` joins egress
+when that branch merges. A shard is a job of whole feature files on its own
 native `ubuntu-latest` runner and daemon, with its own checkout of the exact `${{ env.TO }}`
 head, preflight, fixture preparation and cleanup. Nothing crosses runners, `fail-fast` is off
 so a red shard hides no other, and no feature is ever split. Each runs on main pushes,
@@ -304,10 +304,8 @@ lifecycle shard; its selector subtest
 runs fixture features with memory-only steps; its multiline egress report subtest formats an
 in-memory egress entry whose YAML literal block names `egress_lifecycle.feature` and
 `egress.feature` and requires the same one-line report the real partition logs to end with
-both files; its not-yet-listed egress file subtest refuses a synthetic engine file no shard's
-set lists yet, like slice-37's `run_terminal.feature` before it extends other, so a new engine
-file cannot hide in egress and fails visibly until a shard's set or a new shard takes it; and
-its broken-workflows subtest refuses a dropped, doubled,
+both files. The not-yet-listed egress file subtest checks that adding an unassigned file to
+the inventory cannot place it in egress. The broken-workflows subtest refuses a dropped, doubled,
 unknown or path-named feature, an empty or fifth shard, the old three-shard layout, a file
 swapped between egress and other, an unrelated file in the egress shard, a file moved whole
 from other into offline or lifecycle, a weakened
@@ -573,7 +571,8 @@ For slice-34, the coordinator's 2026-11-16 observations put offline at 31 to 40 
 lifecycle at 43 to 110 and other at 90 to 140. The whole home feature went to offline,
 which had room under the 180-second gate. Its nine live home rows bring offline to 33
 examples. `TestEngineShards` also checks that manual selection of all four home IDs
-selects those nine rows in offline alone.
+selects those nine rows in offline alone. Slice-37 adds 15 terminal rows to other,
+bringing that shard to 47 examples.
 
 The loop records each shard's step time from the public job metadata and, from its log, the
 runner image (`/etc/os-release`) and the preflight's Docker version, so a later image change
@@ -582,7 +581,7 @@ times that show the need. In the prepared CI tier only, the coordinator measures
 with:
 
 ```sh
-for features in 'offline.feature harness-home.feature' lifecycle.feature 'anchors.feature checkout-overlap.feature doctor.feature hardlinks.feature recovery.feature session.feature sockets.feature' egress.feature; do
+for features in 'offline.feature harness-home.feature' lifecycle.feature 'anchors.feature checkout-overlap.feature doctor.feature hardlinks.feature recovery.feature run_terminal.feature session.feature sockets.feature' egress.feature; do
   env -u ITOS_CONTAINER_RED_SCENARIOS ITOS_CONTAINER_ENGINE_TESTS=1 ITOS_CONTAINER_ENGINE_FEATURES="$features" timeout --signal=TERM --kill-after=5s 180s setsid --wait go test ./features -count=1 -v -run '^TestFeatures$' -timeout=4m
 done
 ```

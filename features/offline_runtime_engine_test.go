@@ -13,6 +13,8 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"reflect"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -61,6 +63,7 @@ type offlineAPI struct {
 	removeReady chan struct{}
 	removeHeld  bool
 	lifecycle   *lifecycleFaults
+	terminal    bool
 }
 
 func offlineHex(value string) bool {
@@ -359,6 +362,10 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 		switch operation {
 		case "attach":
 			for key, values := range r.URL.Query() {
+				if key == "detachKeys" && a.terminal && object(observed["Config"])["Tty"] == true &&
+					slices.Equal(values, []string{fixtureTerminalDetachKeys}) {
+					continue
+				}
 				if (key != "stream" && key != "stdin" && key != "stdout" && key != "stderr" && key != "logs") || len(values) != 1 || (values[0] != "1" && values[0] != "0" && values[0] != "true" && values[0] != "false") {
 					return false
 				}
@@ -374,7 +381,11 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 		case "kill":
 			return len(r.URL.Query()) == 1 && len(r.URL.Query()["signal"]) == 1 &&
 				(r.URL.Query().Get("signal") == "SIGTERM" || r.URL.Query().Get("signal") == "SIGKILL" ||
-					(a.lifecycle != nil && r.URL.Query().Get("signal") == "SIGINT"))
+					((a.lifecycle != nil || a.terminal) && r.URL.Query().Get("signal") == "SIGINT"))
+		case "resize":
+			columns, colErr := strconv.Atoi(r.URL.Query().Get("w"))
+			rows, rowErr := strconv.Atoi(r.URL.Query().Get("h"))
+			return a.terminal && len(r.URL.Query()) == 2 && colErr == nil && rowErr == nil && columns > 0 && columns <= 65535 && rows > 0 && rows <= 65535
 		case "stop":
 			return reflect.DeepEqual(r.URL.Query(), url.Values{"signal": {"SIGTERM"}, "t": {"10"}})
 		}
@@ -414,7 +425,7 @@ func (a *offlineAPI) safeCreate(body map[string]any) bool {
 	w := a.w
 	host := object(body["HostConfig"])
 	if body["Image"] != w.doctor.imageID || body["User"] != w.approval.uid+":"+w.approval.gid ||
-		!reflect.DeepEqual(body["Labels"], w.sessionLabels()) || body["Tty"] == true || len(object(body["Volumes"])) != 0 ||
+		!reflect.DeepEqual(body["Labels"], w.sessionLabels()) || (body["Tty"] == true) != a.terminal || len(object(body["Volumes"])) != 0 ||
 		host["NetworkMode"] != "none" || host["ReadonlyRootfs"] != true || host["Privileged"] == true || host["PublishAllPorts"] == true || host["AutoRemove"] == true ||
 		!reflect.DeepEqual(host["CapDrop"], []any{"ALL"}) || !reflect.DeepEqual(host["SecurityOpt"], []any{"no-new-privileges"}) {
 		return false

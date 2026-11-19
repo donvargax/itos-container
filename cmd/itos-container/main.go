@@ -55,6 +55,7 @@ import (
 	sessionentropy "github.com/donvargax/itos-container/internal/engine/session/entropy"
 	sessionport "github.com/donvargax/itos-container/internal/engine/session/port"
 	sessionpresentation "github.com/donvargax/itos-container/internal/engine/session/presentation"
+	terminalnative "github.com/donvargax/itos-container/internal/engine/terminal/native"
 	approve "github.com/donvargax/itos-container/internal/slices/approve/command"
 	"github.com/donvargax/itos-container/internal/slices/count/command"
 	countdisk "github.com/donvargax/itos-container/internal/slices/count/disk"
@@ -176,12 +177,15 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 		c.Approve.Presentation = presentation
 		return c.Approve.Run(ui)
 	case "run":
+		input, _ := in.(*os.File)
+		output, _ := stdout.(*os.File)
+		c.Run.Terminal = terminalnative.NewPair(input, output, runtime.GOOS)
 		service, _ := approvalServices(command, in, stdout, stderr)
 		c.Run.Approval = approvaldomain.Preflight{Service: service, Local: service.Readiness.(approvalport.StagedReadiness), Canonical: approvalcanonical.JSON{}}
 		c.Run.Snapshots = approvaldisk.Snapshots{Store: service.Store.(approvaldisk.Store), Records: approvalcanonical.JSON{}}
 		runner, _ := sessionServices(service)
 		c.Run.Runner = runner
-		interrupts, release := signals.Capture(context.Background())
+		interrupts, release := signals.Capture(context.Background(), c.Run.TTY)
 		defer release()
 		c.Run.Context = interrupts
 		ui.Classify = runcommand.Classify
