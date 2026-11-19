@@ -1,0 +1,86 @@
+// Package docker reads the runtime registrations of the caller's native Docker
+// daemon through the pinned SDK. It issues one read-only /info request.
+package docker
+
+import (
+	"context"
+	"errors"
+	"net"
+	"net/http"
+	"strings"
+
+	"github.com/moby/moby/api/types/system"
+	"github.com/moby/moby/client"
+
+	"github.com/donvargax/itos-container/internal/engine/checkoutsockets/port"
+	readiness "github.com/donvargax/itos-container/internal/engine/readiness/domain"
+	rp "github.com/donvargax/itos-container/internal/engine/readiness/port"
+)
+
+// Runtimes inspects the daemon the caller selected. Each lookup opens the
+// selection afresh through the readiness engine, which refuses remote,
+// untrusted and replaced sockets, then validates the engine as native.
+type Runtimes struct {
+	Readiness           rp.ContextEngine
+	Selection, Checkout string
+}
+
+// Runsc reports the registration of the runtime named runsc.
+func (r Runtimes) Runsc(ctx context.Context) (port.Registration, port.Failure) {
+	if ctx.Err() != nil {
+		return port.RegistrationUnknown, port.Cancelled
+	}
+	if r.Readiness == nil {
+		return port.RegistrationUnknown, port.NoProbe
+	}
+	pin, failure := r.Readiness.OpenContext(ctx, r.Selection, r.Checkout)
+	if failure != rp.None {
+		return unreadable(ctx)
+	}
+	defer pin.Close()
+	version, versionFailure := pin.Version()
+	info, infoFailure := pin.Info()
+	if versionFailure != rp.None || infoFailure != rp.None || readiness.ValidateEngine(version, info) != rp.None {
+		return unreadable(ctx)
+	}
+	path := strings.TrimPrefix(pin.Endpoint(), "unix://")
+	transport := &http.Transport{DisableKeepAlives: true, DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		if !pin.Unchanged() {
+			return nil, errors.New("engine socket changed")
+		}
+		return (&net.Dialer{}).DialContext(ctx, "unix", path)
+	}}
+	defer transport.CloseIdleConnections()
+	api, err := client.New(client.WithHost(pin.Endpoint()), client.WithAPIVersion(version.Negotiated), client.WithHTTPClient(&http.Client{
+		Transport:     transport,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}))
+	if err != nil {
+		return unreadable(ctx)
+	}
+	defer func() { _ = api.Close() }()
+	result, err := api.Info(ctx, client.InfoOptions{})
+	if err != nil || !pin.Unchanged() {
+		return unreadable(ctx)
+	}
+	return registration(result.Info.Runtimes)
+}
+
+func unreadable(ctx context.Context) (port.Registration, port.Failure) {
+	if ctx.Err() != nil {
+		return port.RegistrationUnknown, port.Cancelled
+	}
+	return port.RegistrationUnknown, port.RuntimeInspect
+}
+
+// registration judges the reported inventory. A missing or null map is no
+// inventory; an inventory without the exact key runsc confirms its absence.
+func registration(runtimes map[string]system.RuntimeWithStatus) (port.Registration, port.Failure) {
+	if runtimes == nil {
+		return port.RegistrationUnknown, port.RuntimeInspect
+	}
+	if _, ok := runtimes["runsc"]; !ok {
+		return port.RunscAbsent, port.None
+	}
+	return port.RunscRegistered, port.None
+}
