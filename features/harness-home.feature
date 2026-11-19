@@ -728,7 +728,7 @@ Feature: An approved persistent home for one checkout's harness
   # the source observer assertion. 09 reuses command invocation and the exit
   # code check. The remaining steps need red-first bindings.
 
-  @wip @slice-40 @ID-OPENCODELOGIN-01
+  @slice-40 @ID-OPENCODELOGIN-01
   Scenario: File-only inspection identifies the exact OpenCode provider requested
     Given policy inspection has isolated host state and a recording engine endpoint
     And the policy file contains:
@@ -750,7 +750,7 @@ Feature: An approved persistent home for one checkout's harness
     And it exits with code 0
     And the engine recorder has no connections
 
-  @wip @slice-40 @ID-OPENCODELOGIN-02
+  @slice-40 @ID-OPENCODELOGIN-02
   Scenario Outline: A grant cannot request an implicit provider or a second OpenCode login
     Given policy inspection has isolated host state and a recording engine endpoint
     And the policy file contains:

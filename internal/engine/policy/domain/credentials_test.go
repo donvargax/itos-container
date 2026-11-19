@@ -101,3 +101,86 @@ func TestCredentialVersionAndIndependentProblems(t *testing.T) {
 		}
 	}
 }
+
+func openCodePolicy(version string, items ...port.Value) port.Result {
+	root := minimal()
+	root.Fields["version"] = number(version, "0")
+	root.Fields["credentials"] = port.Value{Kind: port.Array, Items: items}
+	return domain.Inspect(&porttest.Source{Value: root}, nil)
+}
+
+func openCodeEntry(provider port.Value) port.Value {
+	fields := map[string]port.Value{"kind": text("opencode-auth"), "source": text("/h/.local/share/opencode/auth.json")}
+	if provider.Kind != port.Null {
+		fields["provider"] = provider
+	}
+	return object(fields)
+}
+
+// Version 4 adds one kind. It is the only kind with a provider, the provider is
+// required and literal, and no earlier version knows the kind.
+func TestOpenCodeAuthGrant(t *testing.T) {
+	got := openCodePolicy("4", openCodeEntry(text("opencode-go")))
+	want := []port.Credential{{Kind: "opencode-auth", Source: "/h/.local/share/opencode/auth.json", Provider: "opencode-go"}}
+	if got.Policy == nil || got.Policy.Version != 4 || !reflect.DeepEqual(got.Policy.Credentials, want) {
+		t.Fatalf("%#v", got)
+	}
+	mixed := openCodePolicy("4",
+		object(map[string]port.Value{"kind": text("github-token"), "source": text("/vault/g")}),
+		openCodeEntry(text("opencode-go")))
+	if mixed.Policy == nil || len(mixed.Policy.Credentials) != 2 || mixed.Policy.Credentials[0].Provider != "" {
+		t.Fatalf("%#v", mixed)
+	}
+	// Version 3's kinds and closed fields are unchanged: it knows neither the kind nor its provider.
+	want3 := []port.Issue{
+		{Kind: port.UnknownKey, Path: []string{"credentials", "0", "provider"}, Version: 3},
+		{Kind: port.CredentialKind, Path: []string{"credentials", "0", "kind"}, Version: 3},
+	}
+	if got := openCodePolicy("3", openCodeEntry(text("opencode-go"))); got.Policy != nil || !reflect.DeepEqual(got.Issues, want3) {
+		t.Fatalf("%#v", got)
+	}
+}
+
+func TestOpenCodeAuthProviderIsOneLiteralID(t *testing.T) {
+	at := func(kind port.Failure) []port.Issue {
+		return []port.Issue{{Kind: kind, Path: []string{"credentials", "0", "provider"}, Version: 4}}
+	}
+	for _, id := range []string{"a", "0", "zZ9A", "opencode-go", "Open_Code.Go-2", strings.Repeat("a", 64)} {
+		if got := openCodePolicy("4", openCodeEntry(text(id))); got.Policy == nil || got.Policy.Credentials[0].Provider != id {
+			t.Errorf("%q refused: %#v", id, got)
+		}
+	}
+	for _, id := range []string{"", "*", "open*", "a/b", "-a", ".a", "_a", "a b", "ñ", "a\nb", "a\x00", "a{", "a`", "a@", "a[", "a:", "a+", "a,", strings.Repeat("a", 65)} {
+		if got := openCodePolicy("4", openCodeEntry(text(id))); !reflect.DeepEqual(got.Issues, at(port.CredentialProvider)) {
+			t.Errorf("%q accepted or mislocated: %#v", id, got)
+		}
+	}
+	if got := openCodePolicy("4", openCodeEntry(port.Value{Kind: port.Number, Number: port.Decimal{Coefficient: "1", Exponent: "0"}})); !reflect.DeepEqual(got.Issues, at(port.Type)) {
+		t.Errorf("%#v", got)
+	}
+	missing := object(map[string]port.Value{"kind": text("opencode-auth"), "source": text("/a/auth.json")})
+	if got := openCodePolicy("4", missing); !reflect.DeepEqual(got.Issues, at(port.Required)) {
+		t.Errorf("%#v", got)
+	}
+}
+
+func TestOpenCodeAuthClosedEntryAndSingleGrant(t *testing.T) {
+	// Another kind cannot name a provider: only opencode-auth selects by provider.
+	withProvider := object(map[string]port.Value{"kind": text("claude-token"), "source": text("/vault/a"), "provider": text("x")})
+	if got := openCodePolicy("4", withProvider); !reflect.DeepEqual(got.Issues, []port.Issue{{Kind: port.UnknownKey, Path: []string{"credentials", "0", "provider"}, Version: 4}}) {
+		t.Errorf("%#v", got)
+	}
+	extra := object(map[string]port.Value{"kind": text("opencode-auth"), "source": text("/a/auth.json"), "provider": text("x"), "account": text("y")})
+	if got := openCodePolicy("4", extra); !reflect.DeepEqual(got.Issues, []port.Issue{{Kind: port.UnknownKey, Path: []string{"credentials", "0", "account"}, Version: 4}}) {
+		t.Errorf("%#v", got)
+	}
+	// A second login for the same kind is located at the later kind, whatever provider it names.
+	got := openCodePolicy("4", openCodeEntry(text("opencode-go")), openCodeEntry(text("other")))
+	if !reflect.DeepEqual(got.Issues, []port.Issue{{Kind: port.CredentialDuplicate, Path: []string{"credentials", "1", "kind"}, Version: 4}}) {
+		t.Errorf("%#v", got)
+	}
+	bad := object(map[string]port.Value{"kind": text("unknown"), "source": text("/a/auth.json"), "provider": text("x")})
+	if got := openCodePolicy("4", bad); len(got.Issues) != 2 {
+		t.Errorf("an unknown kind keeps its own problems and its unlisted provider: %#v", got)
+	}
+}

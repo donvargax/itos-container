@@ -59,6 +59,10 @@ func presentPolicy(u *cli.UI, result port.Result, withJSON bool) int {
 		}
 		for _, grant := range policy.Credentials {
 			_, _ = fmt.Fprintf(u.Stdout, "credentials.%s.source: %s\n", grant.Kind, printable(grant.Source))
+			if grant.Provider != "" {
+				// A provider ID is restricted to ASCII letters, digits, dots, underscores and hyphens.
+				_, _ = fmt.Fprintf(u.Stdout, "credentials.%s.provider: %s\n", grant.Kind, grant.Provider)
+			}
 		}
 		if policy.Home != nil {
 			_, _ = fmt.Fprintln(u.Stdout, "home.storage:", policy.Home.Storage)
