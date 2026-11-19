@@ -8272,3 +8272,21 @@
     This task has no dependencies and stays unowned during specification and review. Only the
     contributor takes the task after spec approval.
     The implementer may commit freely in its workspace. The host makes the landing commits.
+- id: T-64
+  type: chore
+  title: Detect the available checkout socket backend
+  why: >
+    Give doctor, approve and run one shared selection rule. Prefer Landlock ABI 9 or later, then an
+    available runsc runtime. Test both backends, confirmed absence and failed detection through the
+    engine port and its adapters. Broken down from p1-checkout-socket-kernel-enforcement.
+  done_when:
+    - run: go test -count=1 ./internal/engine/checkoutsockets/...
+- id: T-65
+  type: chore
+  title: Build the trusted Landlock worker init
+  why: >
+    The init must apply the pathname-socket restriction before executing the literal workload argv.
+    Test argument preservation and verify that a failed restriction prevents workload execution.
+    Broken down from p1-checkout-socket-kernel-enforcement.
+  done_when:
+    - run: go test -count=1 ./cmd/itos-container-init ./internal/slices/workerinit/...

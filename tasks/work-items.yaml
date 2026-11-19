@@ -693,33 +693,9 @@ items:
     title: Host Unix sockets created during a run are unreachable from the worker
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      Deferred from slice-19 by the person (q-30, 2026-11-07): CI showed the worker connects to host
-      Unix sockets in the bind-mounted checkout (runs 42312676619, 42323471709), and the milestone
-      only refuses sockets present at startup. Closing it needs kernel enforcement: Landlock's
-      pathname-socket rule (ABI 9+) through a product init, which needs a new kernel on every host
-      and a CI runner that has it, or the gVisor runtime, which hosted runners can prove but which
-      adds a runtime. Research in docs/plans/checkout-socket-enforcement.md; scenarios ID-SOCKETS-02
-      and 03 wait for it. A milestone-2 choice.
-
-      Already tracks continuous enforcement against host sockets created or replaced after startup,
-      retaining Landlock/gVisor research and runtime scenarios ID-SOCKETS-02/03. Preserve the
-      person's q-30 deferral to milestone 2.
-
-      The person's design, 2026-11-07, for milestone 2: Landlock by default (ABI 9+,
-      LANDLOCK_ACCESS_FS_RESOLVE_UNIX), applied by a small read-only init binary itos-container
-      mounts and runs as the worker's entrypoint before exec'ing the literal argv, as Docker has no
-      Landlock option and the controller cannot restrict a worker the daemon spawns; gVisor (runsc)
-      as the fallback when the kernel lacks ABI 9; on a host with neither, run is allowed only with
-      an explicit approval that records 'late host sockets reachable', shown at approve time and in
-      status. Doctor reports which backend a run would use, and the approval binds it. Proof: the
-      Landlock path is proven locally on the person's machine (Landlock ABI 10 on Linux 7.2) for
-      now, with hosted CI proving the gVisor path; a weakened gate until a new-kernel CI runner
-      exists (record it in weakened-gates.md when built). Amends the spec's no-helper and
-      no-extra-mount rules for the init binary.
   - id: T-31
     title: Native stop confined to one of two equal-basename projects passes reliably
     phase: 1
@@ -2357,3 +2333,91 @@ items:
       The existing item covers this exact gap. The approvalProblem step should fail if an approval
       or hardlink prerequisite refusal prompts for consent, even when the diagnostic and exit code
       are correct.
+  - id: T-64
+    title: Detect the available checkout socket backend
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
+  - id: T-65
+    title: Build the trusted Landlock worker init
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
+  - id: slice-42
+    title: Report the checkout socket backend in doctor
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-64]
+    kind: slice
+    why: >
+      Was p1-doctor-checkout-socket-backend.
+      Let the person see which backend a run would use before approving it. Cover Landlock, gVisor
+      and a host with neither backend through doctor’s read-only inspection. Broken down from
+      p1-checkout-socket-kernel-enforcement.
+  - id: slice-43
+    title: Bind the checkout socket backend to approval
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-64]
+    kind: slice
+    why: >
+      Was p1-approve-checkout-socket-backend.
+      Show the selected backend during review and record it in the approval. When neither backend is
+      available, require explicit consent to “late host sockets reachable”. Cover reapproval after
+      the selection changes. Broken down from p1-checkout-socket-kernel-enforcement.
+  - id: slice-44
+    title: Require matching socket approval before worker creation
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-43]
+    kind: slice
+    why: >
+      Was p1-run-checkout-socket-admission.
+      Compare the host’s current selection with the approval before creating a worker and freeze the
+      choice in the session record. Prove that startup-scan-only operation requires explicit
+      weaker-mode consent, including when an older approval exists. Broken down from
+      p1-checkout-socket-kernel-enforcement.
+  - id: slice-45
+    title: Show the session’s approved socket protection in status
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-44]
+    kind: slice
+    why: >
+      Was p1-status-checkout-socket-backend.
+      Read the frozen session record so status still reports “late host sockets reachable” for a
+      weaker-mode session after a controller restart or a change in host capabilities. Broken down
+      from p1-checkout-socket-kernel-enforcement.
+  - id: slice-46
+    title: Enforce Landlock for foreground and attached workloads
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-65, slice-44, slice-38]
+    kind: slice
+    why: >
+      Was p1-run-landlock-checkout-sockets.
+      Mount the trusted init read-only and apply it before both foreground and independently
+      attached exec commands. Prove ID-SOCKETS-02 and ID-SOCKETS-03 on the person’s ABI 9+ host,
+      including worker-private IPC and checkout edits. Record the temporary hosted-CI exception in
+      weakened-gates.md. Broken down from p1-checkout-socket-kernel-enforcement.
+  - id: slice-47
+    title: Enforce checkout socket denial with the approved gVisor fallback
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-44]
+    kind: slice
+    why: >
+      Was p1-run-gvisor-checkout-sockets.
+      Launch and verify the worker under runsc when Landlock ABI 9 is unavailable. Prove
+      ID-SOCKETS-02 and ID-SOCKETS-03 in hosted CI with their positive controls, and verify that a
+      runsc failure stops startup. Broken down from p1-checkout-socket-kernel-enforcement.
