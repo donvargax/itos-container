@@ -687,15 +687,19 @@ Feature: An approved persistent home for one checkout's harness
   # active true and value containing exactly type "key" and the selected key.
   # T-48 supplies the owned memory-backed staging, mount checks and teardown.
   #
-  # The supported account operation inside the worker is
+  # The workload imports the staged account inside the worker with
   # opencode --standalone auth import /run/itos-container/credentials/opencode-auth
-  # The workload passes the mounted file directly to that command, including
-  # on an already migrated database. In the same worker it issues the request
-  # with opencode --standalone run --model <provider>/<fixture-model> <prompt>.
-  # The mounted file is the only login input. The probe keeps the worker live
-  # for inspection, rotation or the specified session ending.
+  # OpenCode 2.3.2 keeps the current account active when the worker database
+  # already has that integration. After import the workload takes integrationID
+  # and id from the staged account and selects it in the same worker store with
+  # opencode --standalone auth switch <integrationID> <id>
+  # Only after both commands succeed does it send a provider request with
+  # opencode --standalone run --model <integrationID>/<fixture-model> <prompt>.
+  # The probe keeps the worker live for inspection, rotation or session end.
   # https://opencode.ai/docs/cli/commands/#auth
   # https://github.com/anomalyco/opencode/blob/v2.3.2/packages/schema/src/credential.ts
+  # https://github.com/anomalyco/opencode/blob/v2.3.2/packages/cli/src/commands/handlers/auth/import.ts#L21-L36
+  # https://github.com/anomalyco/opencode/blob/v2.3.2/packages/cli/src/commands/handlers/auth/switch.ts
   #
   # OpenCode v2 imports legacy credentials during migration and saves new or
   # updated logins in SQLite. Removing auth.json alone can leave a usable login.
@@ -712,12 +716,12 @@ Feature: An approved persistent home for one checkout's harness
   # Givens write independent policy/approval fixtures, private temporary host
   # stores and distinct generated markers. Both the trusted account home and
   # HOME/XDG resolve to the fixture. Clients use isolated configuration and
-  # stores with no ambient provider login. Run steps capture early CLI exits
-  # for Then. Only @engine rows use native workers, in CI. They invoke the
+  # only the accounts seeded for that scenario. Run steps capture early CLI
+  # exits for Then. Only @engine rows use native workers, in CI. They invoke the
   # released OpenCode 2.3.2 client against an allowlisted fake HTTPS provider
   # configured for the fixture's provider IDs. It records request IDs, synthetic
   # principals and authentication outcomes, and discards headers and key bytes.
-  # Workers obtain test keys only from product delivery. No model is contacted.
+  # Only product delivery supplies the granted key to a worker. No model is contacted.
   # https://github.com/anomalyco/opencode/releases/tag/v2.3.2
   # 01 and 02 use existing steps. 03 reuses terminal approval, 04 and 05 reuse
   # command invocation and 04 reuses the approval refusal. The other steps in
@@ -796,27 +800,36 @@ Feature: An approved persistent home for one checkout's harness
       | for the other provider at the same path    | run.approval-changed |
       | for the same slot in another checkout only | run.approval-missing |
 
+  # The mixed row lists opencode-auth first. Both synthetic sources are usable
+  # and both grants are approved. The local run fixture supports OpenCode
+  # delivery and leaves github-token delivery gated. Its refusal at /version
+  # identifies the unavailable kind. Count staging operations throughout run
+  # so removing a partial copy cannot hide delivery of the first grant.
   @wip @slice-40 @ID-OPENCODELOGIN-05 @local-engine-fixture
-  Scenario Outline: An unsafe source or unusable provider entry stops the run before worker creation
-    Given a disposable OpenCode checkout with an independently recorded matching file grant for "opencode-go"
-    And its synthetic OpenCode source has "<condition>"
+  Scenario Outline: Run refuses the whole credential request when it cannot deliver a grant
+    Given a disposable checkout whose version 4 policy requests the "opencode-go" file grant with "<condition>"
+    And the fixture independently records matching approval for the entire request
     When itos-container runs with "run -- opencode-grant-probe"
-    Then the OpenCode refusal identifies the approved source and reports "<rule>" with exit <exit>
-    And the engine saw no worker create and no staged login remains
+    Then run exits with code <exit> and reports <refusal>
+    And the engine recorder counted zero worker create requests and the staging recorder found zero logins <when>
     And the controller neither opened the host database nor disclosed any synthetic key in its diagnostics or records
 
-    Examples:
-      | condition                                                  | rule                       | exit |
-      | auth.json absent with the selected key only in host SQLite | credential.missing         | 3    |
-      | a different private auth.json named in request and grant   | credential.opencode_source | 1    |
-      | a symbolic link in place of auth.json                      | credential.symlink         | 1    |
-      | group-readable auth.json                                   | credential.permissions     | 1    |
-      | auth.json with malformed JSON                              | run.opencode-entry         | 1    |
-      | another provider only                                      | run.opencode-entry         | 1    |
-      | duplicate JSON members for the selected provider            | run.opencode-entry         | 1    |
-      | duplicate key fields inside the selected entry              | run.opencode-entry         | 1    |
-      | an empty key for the selected provider                      | run.opencode-entry         | 1    |
-      | a selected OAuth entry that needs refresh                   | run.opencode-entry         | 1    |
+    Examples: Unusable OpenCode source or provider entry
+      | condition                                                  | refusal                                                   | exit | when        |
+      | auth.json absent with the selected key only in host SQLite | "credential.missing" for the approved source path         | 3    | at run exit |
+      | a different private auth.json named in request and grant   | "credential.opencode_source" for the approved source path | 1    | at run exit |
+      | a symbolic link in place of auth.json                      | "credential.symlink" for the approved source path         | 1    | at run exit |
+      | group-readable auth.json                                   | "credential.permissions" for the approved source path     | 1    | at run exit |
+      | auth.json with malformed JSON                              | "run.opencode-entry" for the approved source path         | 1    | at run exit |
+      | another provider only                                      | "run.opencode-entry" for the approved source path         | 1    | at run exit |
+      | duplicate JSON members for the selected provider           | "run.opencode-entry" for the approved source path         | 1    | at run exit |
+      | duplicate key fields inside the selected entry             | "run.opencode-entry" for the approved source path         | 1    | at run exit |
+      | an empty key for the selected provider                     | "run.opencode-entry" for the approved source path         | 1    | at run exit |
+      | a selected OAuth entry that needs refresh                  | "run.opencode-entry" for the approved source path         | 1    | at run exit |
+
+    Examples: A recognized kind whose delivery is gated
+      | condition                                          | refusal                                                                              | exit | when               |
+      | valid opencode-auth followed by valid github-token | "policy.version" at /version and identifies github-token as unavailable for delivery | 2    | throughout the run |
 
   # The cooperative probe uses the delivered grant. Its read and write checks
   # report booleans. Independent controls outside the observed trees validate
@@ -831,12 +844,18 @@ Feature: An approved persistent home for one checkout's harness
   Scenario: The worker receives only the selected OpenCode provider key
     Given two CI checkouts with isolated homes, one granted "opencode-go" and one granted "other-provider" from the same private auth.json
     And the fixture host has distinct markers for those two keys, an extra field and its OpenCode database
+    And the first checkout's retained worker database is seeded with a different active "opencode-go" account
+    And an independent OpenCode control uses a copy of that home made before delivery
+    And the fake provider registers the two granted keys and the retained account's key under three distinct synthetic principals
     When each granted worker runs "opencode --standalone auth import /run/itos-container/credentials/opencode-auth"
-    And each requests its selected provider with OpenCode at the allowlisted fake endpoint
-    Then the fake provider accepts each worker as the principal selected for its checkout
+    And each switches to the credential ID in its staged file before requesting its provider with OpenCode at the allowlisted fake endpoint
+    And the control requests "opencode-go" with OpenCode using its existing selection
+    Then the fake provider authenticates both workers and attributes every authenticated request from each to its granted principal
+    And the provider authenticates the control as the pre-existing "opencode-go" principal and receives no attempt with that key from either granted worker
+    And the first worker's retained database contains both accounts with the staged credential ID active for "opencode-go"
     And each worker reads a staged file matching the single-account import format for its approved provider and key with no extra host field
     And an attempted write to each staged file fails
-    And neither worker can read the other key, original auth.json, host database or its sidecars
+    And neither worker can read the other checkout's granted key, original auth.json, host database or its sidecars
     And native mount inspection finds only the staged read-only credential file among credential mounts and both host stores retain their bytes
     And the marker checks find no credential in worker create or inspect data, the checkout, approval or session records, doctor, status, diagnostics or retained logs
     And the same checks detect each marker and encoding in its independent control
@@ -847,16 +866,16 @@ Feature: An approved persistent home for one checkout's harness
   @wip @slice-40 @ID-OPENCODELOGIN-07 @engine
   Scenario: Host rotation supplies a fresh key only to the next granted run
     Given a CI OpenCode file grant and a fake provider configured to accept its selected API key
-    When the first worker runs "opencode --standalone auth import /run/itos-container/credentials/opencode-auth" and requests the fake provider with OpenCode
+    When the first worker runs "opencode --standalone auth import /run/itos-container/credentials/opencode-auth", switches to the staged credential ID and requests the fake provider with OpenCode
     Then the fake provider accepts the original key for the selected principal
     When the first worker exits and the fixture revokes its key, registers a replacement at the provider and saves it only in host SQLite
-    And a second granted worker repeats the import and request with the stale host auth.json
+    And a second granted worker repeats the import, switch and request with the stale host auth.json
     Then the fake provider rejects the stale key and OpenCode reports an authentication failure without falling back to another login
     When the host writes the replacement key into the selected auth.json entry in place while the second worker is live
     Then a separate reader in that worker reopens "/run/itos-container/credentials/opencode-auth" and finds the original key for the provider and no replacement key
     When OpenCode retries the request in the second worker
     Then the fake provider still receives and rejects the old key
-    When the second worker exits and a third granted worker repeats the import and request under the same approval
+    When the second worker exits and a third granted worker repeats the import, switch and request under the same approval
     Then the fake provider accepts the replacement for the same principal
     And both generations use the same approval fingerprint and no run refreshes or writes either host store
 
@@ -874,7 +893,7 @@ Feature: An approved persistent home for one checkout's harness
     And the retained OpenCode database contains an unrelated saved session with a known ID and title
     And an independent OpenCode control has the same synthetic login saved only in SQLite
     When the granted worker runs "opencode --standalone auth import /run/itos-container/credentials/opencode-auth"
-    And it sends a distinct message in the saved session with OpenCode and writes a home marker
+    And it switches to the staged credential ID, sends a distinct message in the saved session with OpenCode and writes a home marker
     And the SQLite-only control makes its own request to the fake provider
     Then the fake provider authenticates that worker as the selected principal and the SQLite-only control also authenticates
     And OpenCode lists the imported account from the worker's effective SQLite store and the seeded session in that store contains the new message
@@ -899,15 +918,24 @@ Feature: An approved persistent home for one checkout's harness
   # Recovery cannot infer that the credential is gone from a missing staged
   # pathname. The recorder keeps the acquired worker reference and can withhold
   # its removal confirmation independently of the state of the staged copy.
+  # The first stop leaves the worker holding its database. As soon as the retry
+  # returns, capture the same retained database and sidecars as in 08, before
+  # starting OpenCode, launching another worker or running fixture teardown.
   @wip @slice-40 @ID-OPENCODELOGIN-09 @local-engine-fixture
   Scenario: Incomplete OpenCode cleanup keeps the original session recoverable
     Given a synthetic OpenCode session with an independently recorded owned worker, a retained home and an acquired login whose staged pathname is gone
+    And the retained worker database contains the imported account for that grant, its synthetic key and an unrelated session with a known ID, title and message
     And the checkout now requests a different OpenCode provider
     When a fresh stop for that session cannot confirm worker removal and status inspects it
     Then status shows the frozen OpenCode provider and keeps cleanup incomplete with the original session ID and its exact stop retry
+    And read-only inspection before the retry finds the imported account and its key in the retained home
     When worker removal can be confirmed and the same stop is retried
-    Then cleanup completes with the worker and staging absent and the retained home and host login intact
-    And neither stop starts a worker, rereads a credential or invents a workload exit
+    Then immediate read-only inspection finds no imported account in the retained OpenCode database
+    And the granted key is absent from the database, its SQLite sidecars and the rest of the retained OpenCode data
+    And the same database still contains the unrelated session with its original ID, title and message
+    And the retry reports cleanup complete for the original session and independent inspection confirms the worker and staging are absent
+    And the original home volume is still present and the host login is byte-for-byte intact
+    And neither stop starts a worker, rereads a host credential or invents a workload exit
 
   # Management runs only on independently tracked disposable CI homes. Observe
   # active-worker refusal and a successful control before harness teardown.
