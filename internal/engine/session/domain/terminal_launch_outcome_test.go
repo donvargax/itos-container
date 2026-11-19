@@ -212,3 +212,110 @@ func TestHangupCancellingTheMountDetectorReportsTheLoss(t *testing.T) {
 		}
 	})
 }
+
+// Every call the mount detector makes in a registered run is bound to the
+// launch, including its worker reference, mounted-identity stat and process
+// checks, and a call whose launch ended gives no result. A loss that lands
+// inside any of them therefore leaves the detector without an observation, and
+// whatever refusal follows is the loss's. TestLateHangupPreservesMountRefusal
+// holds the converse: a refusal reached with launch live stands.
+func TestHangupInsideAMountDetectorCallReportsTheLoss(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		absent   bool   // the held process cannot be opened, so the detector reconciles the exit
+		at       string // the call the hangup lands in
+		nth      int    // for an inspection, which one after start
+		finish   bool   // the reconciliation wait returns the worker's exit
+		mismatch bool   // the mounted checkout differs from the anchor
+	}{
+		{name: "worker reference", at: "open"},
+		{name: "fresh inspection", at: "after inspect", nth: 2},
+		{name: "mounted checkout stat", at: "stat", mismatch: true},
+		{name: "reconciliation inspection", absent: true, at: "before inspect", nth: 3},
+		{name: "reconciliation wait", absent: true, at: "wait"},
+		{name: "reconciliation wait that returned", absent: true, at: "after wait", finish: true},
+		{name: "reconciliation recheck", absent: true, at: "before inspect", nth: 4, finish: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				runner, frozen, registry, engine, id := registeredLifecycleFixture()
+				w := &detectorWorkspace{Workspace: runner.Workspace.(*f.Workspace), process: &f.Process{}}
+				runner.Workspace = w
+				if tc.absent {
+					w.nilProcess, w.openFailure = true, port.ProcessAbsent
+				}
+				if tc.mismatch {
+					mount := w.Mounts[123]
+					mount.Inode = "different"
+					w.Mounts[123] = mount
+				}
+				provider := &tf.Fake{Size: terminal.Dimensions{Columns: 113, Rows: 37}}
+				lease, err := provider.Acquire(t.Context())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer lease.Close()
+
+				started, lost, inspections := false, false, 0
+				hangup := func() {
+					if lost {
+						return
+					}
+					lost = true
+					provider.Hangup(false)
+					<-lease.Done()
+					synctest.Wait()
+				}
+				engine.AfterStart = func() { started = true }
+				engine.BeforeInspect = func() {
+					if !started || lost {
+						return
+					}
+					inspections++
+					if tc.at == "before inspect" && inspections == tc.nth {
+						hangup()
+					}
+				}
+				engine.AfterInspect = func() {
+					if started && tc.at == "after inspect" && inspections == tc.nth {
+						hangup()
+					}
+				}
+				engine.After = func(event string) {
+					if event == "wait" && started && tc.at == "wait" {
+						hangup()
+					}
+				}
+				engine.AfterWait = func() {
+					if started && tc.at == "after wait" {
+						hangup()
+					}
+				}
+				if tc.at == "open" {
+					w.open = func() {
+						if started {
+							hangup()
+						}
+					}
+				}
+				if tc.at == "stat" {
+					w.stat = hangup
+				}
+				engine.WaitUntilCancel = !tc.finish
+				got := runner.Run(t.Context(), frozen, []string{"probe"}, port.Streams{Terminal: lease})
+				if !lost {
+					t.Fatal("the detector never reached the hangup")
+				}
+				if got.Outcome != port.TerminalDisconnected || got.MountDiagnostic != (port.MountDiagnostic{}) {
+					t.Errorf("a refusal the loss caused was reported as the mount's: %+v", got)
+				}
+				if slices.Contains(engine.Events, "SIGKILL") || registry.Records[id].MountDetector != "" {
+					t.Errorf("the cut detector left a verdict or skipped the grace period: %q %v", registry.Records[id].MountDetector, engine.Events)
+				}
+				if got.Cleanup != port.Complete || len(engine.Resources) != 0 || len(engine.Anchors) != 0 {
+					t.Errorf("run left an owned resource: %+v %v", got, engine.Events)
+				}
+			})
+		})
+	}
+}
