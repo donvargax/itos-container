@@ -2364,17 +2364,13 @@ items:
     status: todo
     depends_on: []
     kind: task
-  - id: p1-build-landlock-worker-init
+  - id: T-65
     title: Build the trusted Landlock worker init
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      The init must apply the pathname-socket restriction before executing the literal workload
-      argv. Test argument preservation and verify that a failed restriction prevents workload
-      execution. Broken down from p1-checkout-socket-kernel-enforcement.
+    kind: task
   - id: p1-doctor-checkout-socket-backend
     title: Report the checkout socket backend in doctor
     phase: 1
@@ -2425,7 +2421,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-build-landlock-worker-init, p1-run-checkout-socket-admission, slice-38]
+    depends_on: [T-65, p1-run-checkout-socket-admission, slice-38]
     kind: idea
     why: >
       Mount the trusted init read-only and apply it before both foreground and independently
