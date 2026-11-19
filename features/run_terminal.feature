@@ -117,6 +117,11 @@ Feature: An explicitly selected terminal for an owned foreground run
   # new terminal disconnects. No resize is issued after teardown has begun.
   #
   # Use slice-12's shared termination path, not a second cleanup algorithm.
+  # During launch, loss of the terminal cancels pending engine requests. If
+  # start was dispatched but not acknowledged with a usable terminal, the
+  # daemon may already have started the worker. Reconcile the recorded ID
+  # immediately and remove the freshly verified owned worker without grace.
+  # Once start is acknowledged, the ordinary foreground grace applies.
   # On terminal loss/failure send SIGTERM once to the freshly revalidated owned
   # live primary, allow the original 10 s grace INCLUDING delivery time, then
   # SIGKILL once only if fresh ownership and running state still permit it.

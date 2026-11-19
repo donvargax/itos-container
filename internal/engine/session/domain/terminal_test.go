@@ -184,6 +184,41 @@ func TestTerminalLossCancelsPendingStart(t *testing.T) {
 	}
 }
 
+func TestStartReconcilesLeaseBeforeDelayedNotification(t *testing.T) {
+	for _, hostSignal := range []bool{false, true} {
+		t.Run(map[bool]string{false: "terminal loss", true: "host signal first"}[hostSignal], func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				runner, frozen, _, engine, _ := registeredLifecycleFixture()
+				provider := &tf.Fake{Size: terminal.Dimensions{Columns: 113, Rows: 37}, ObservationDelay: time.Hour}
+				lease, err := provider.Acquire(t.Context())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer lease.Close()
+				ctx, cancel := context.WithCancelCause(t.Context())
+				defer cancel(nil)
+				engine.AfterStart = func() {
+					if hostSignal {
+						cancel(port.Interrupt{Signal: "SIGINT"})
+					}
+					provider.Break()
+				}
+				got := runner.Run(ctx, frozen, []string{"probe"}, port.Streams{Terminal: lease})
+				if got.Cleanup != port.Complete || len(engine.Resources) != 0 {
+					t.Fatal("start race left an owned resource", got)
+				}
+				if hostSignal {
+					if got.Signal != "SIGINT" || got.Outcome != "" || !slices.Contains(engine.Events, "SIGINT") {
+						t.Fatal("later observation failure replaced the host signal", got, engine.Events)
+					}
+				} else if got.Outcome != port.TerminalUnavailable || !slices.Contains(engine.Events, "SIGKILL") {
+					t.Fatal("start acknowledged a client that was already gone", got, engine.Events)
+				}
+			})
+		})
+	}
+}
+
 func TestStreamFailureRechecksTerminalBeforeDelayedNotification(t *testing.T) {
 	for _, tc := range []struct {
 		name           string

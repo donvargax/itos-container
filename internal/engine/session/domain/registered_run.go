@@ -32,9 +32,6 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	defer end()
 	state := &startupState{}
 	startup = context.WithValue(startup, startupKey{}, state)
-	gate := make(chan struct{}, 1)
-	gate <- struct{}{}
-	s.Workspace = finiteWorkspace{s.Workspace, startup, gate}
 	result := port.RunResult{}
 	id, failure := s.Entropy.Token()
 	if failure != "" || !port.HexID(id) {
@@ -102,7 +99,12 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		s.Registry = bound.ForRun(frozen)
 	}
 	result.Reference, result.SessionID = port.Reference(frozen.Frozen.Project, token), id
-	c, attachment, resource, failure := s.registeredLaunch(startup, id, argv, streams)
+	launch, finishLaunch := watchLaunchTerminal(startup, streams.Terminal)
+	gate := make(chan struct{}, 1)
+	gate <- struct{}{}
+	s.Workspace = finiteWorkspace{s.Workspace, launch, gate}
+	c, attachment, resource, failure := s.registeredLaunch(launch, id, argv, streams)
+	loss := finishLaunch()
 	result.ID, result.Outcome = resource, failure
 	result.HomeID = state.homeID
 	result.Started, result.Operation = state.started, state.operation
@@ -112,8 +114,12 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 	if result.Outcome != "" {
 		result.MountDiagnostic = state.mountDiagnostic
 	}
-	if startup.Err() != nil && failure != port.Refused && failure != port.IsolationUnverified {
-		result.Outcome = startupFailure(startup)
+	if failure != port.Refused && failure != port.IsolationUnverified {
+		if loss != "" {
+			result.Outcome = loss
+		} else if startup.Err() != nil {
+			result.Outcome = startupFailure(startup)
+		}
 	}
 	end()
 	if c != nil {
@@ -166,7 +172,10 @@ func (s Runner) registeredRun(ctx context.Context, frozen approval.Durable, argv
 		}
 		return result
 	}
-	recovery := Recovery{Registry: s.Registry, Engine: s.Engine, Refusals: s.Refusals, Homes: s.Homes, Credentials: s.Credentials, immediate: result.Outcome == port.MountRefused && result.Started}
+	// A cancelled start request may already have made the worker live. Use
+	// immediate owned teardown if the controller never acknowledged a live TTY.
+	racedStart := loss != "" && !state.acknowledged
+	recovery := Recovery{Registry: s.Registry, Engine: s.Engine, Refusals: s.Refusals, Homes: s.Homes, Credentials: s.Credentials, immediate: result.Started && (result.Outcome == port.MountRefused || racedStart)}
 	// The output subscription is independent of termination and removal. A blocked
 	// consumer must never hold the operation lock or prevent owned cleanup.
 	drain := startDrain(teardown, attachment, streams.Terminal)
@@ -365,6 +374,12 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 	}
 	if ctx.Err() != nil {
 		return c, a, resource, port.ExecutionFailed
+	}
+	if loss := lostClientTerminal(streams.Terminal); loss != "" {
+		return c, a, resource, loss
+	}
+	if state, ok := ctx.Value(startupKey{}).(*startupState); ok {
+		state.acknowledged = true
 	}
 	detector, failure := detectAnchor(ctx, intent, c, s.Workspace)
 	r := entry.Record()

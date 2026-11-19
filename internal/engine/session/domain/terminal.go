@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 	terminal "github.com/donvargax/itos-container/internal/engine/terminal/port"
@@ -51,6 +52,34 @@ func lostClientTerminal(lease terminal.Lease) port.Outcome {
 		return port.TerminalUnavailable
 	}
 	return ""
+}
+
+var errLaunchObservationEnded = errors.New("terminal launch observation ended")
+
+// Keep in-flight launch calls cancellable until the foreground wait takes over.
+// The final poll also catches a loss whose periodic notification is still pending.
+func watchLaunchTerminal(ctx context.Context, lease terminal.Lease) (context.Context, func() port.Outcome) {
+	if lease == nil {
+		return ctx, func() port.Outcome { return "" }
+	}
+	launch, cancel := context.WithCancelCause(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		select {
+		case <-lease.Done():
+			cancel(errLaunchObservationEnded)
+		case <-launch.Done():
+		}
+	}()
+	return launch, func() port.Outcome {
+		cancel(errLaunchObservationEnded)
+		<-done
+		if context.Cause(launch) == errLaunchObservationEnded {
+			return lostClientTerminal(lease)
+		}
+		return ""
+	}
 }
 
 // waitForeground owns terminal events only while the command is live. It joins

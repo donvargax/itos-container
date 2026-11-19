@@ -32,8 +32,8 @@ func stopAnchoredSession(ctx context.Context, s port.Session, c port.RunConnecti
 	if !immediate {
 		return stopSession(ctx, s, c, signal, exit, remove, live)
 	}
-	// A failed detector is not a graceful cancellation. Kill the independently
-	// revalidated worker immediately, without waiting or inventing its exit.
+	// A failed detector or a start raced by terminal loss requires immediate
+	// removal. Kill only a freshly verified live worker and retain any known exit.
 	if exit != nil {
 		if failure := recordExit(s, *exit); failure != "" {
 			return failure
