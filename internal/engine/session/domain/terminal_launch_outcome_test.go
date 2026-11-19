@@ -6,6 +6,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
 	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 	f "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
@@ -73,4 +74,62 @@ func TestLateHangupLeavesSupersedingStopInControl(t *testing.T) {
 			t.Errorf("run took cleanup from the superseding stop: %v", engine.Events)
 		}
 	})
+}
+
+// A refusal launch reached on its own stands even when the client hangs up
+// while launch is still releasing its entry. Only the final poll sees the
+// hangup, so no cancellation caused the refusal.
+func TestLateHangupPreservesHomeAndCredentialRefusals(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		want port.Outcome
+	}{
+		{"home", port.HomeRefused},
+		{"credential", port.CredentialRefused},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				var runner Runner
+				var frozen approval.Durable
+				var registry *f.Registry
+				var engine *f.RunEngine
+				switch tc.name {
+				case "home":
+					x := domainHomeFixture()
+					g := x.seed()
+					o := x.engine.Homes[g.Name]
+					o.Created = "replacement"
+					x.engine.Homes[g.Name] = o
+					runner, frozen, registry, engine = x.runner, x.frozen, x.registry, x.engine.RunEngine
+				case "credential":
+					runner, frozen, registry, engine, _ = registeredLifecycleFixture()
+					// A staged kind with no stager can never be satisfied.
+					registry.Store.Codec.(*f.Codec).Value.StagingKinds = f.MemoryCredentialFixture(map[string][]byte{"claude-token": []byte("synthetic\n")}).Sources.Kinds()
+				}
+				provider := &tf.Fake{Size: terminal.Dimensions{Columns: 113, Rows: 37}, ObservationDelay: time.Hour}
+				lease, err := provider.Acquire(t.Context())
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer lease.Close()
+				lost := false
+				registry.AfterClose = func(string) {
+					if !lost {
+						lost = true
+						provider.Hangup(false)
+					}
+				}
+				got := runner.Run(t.Context(), frozen, []string{"probe"}, port.Streams{Terminal: lease})
+				if !lost {
+					t.Fatal("the client was never lost")
+				}
+				if got.Outcome != tc.want || got.Started || got.Exited || got.Cleanup != port.Complete {
+					t.Errorf("late hangup replaced the launch refusal: %+v", got)
+				}
+				if slices.Contains(engine.Events, "start") || len(engine.Resources) != 0 || len(engine.Anchors) != 0 {
+					t.Errorf("refused launch kept owned resources: %v", engine.Events)
+				}
+			})
+		})
+	}
 }
