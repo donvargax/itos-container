@@ -6,6 +6,7 @@ import (
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 	terminal "github.com/donvargax/itos-container/internal/engine/terminal/port"
 	tf "github.com/donvargax/itos-container/internal/engine/terminal/port/porttest"
+	"slices"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -87,6 +88,47 @@ func TestRegisteredLaunchRefusesLostClientBeforeIrreversibleEdges(t *testing.T) 
 			}
 			if failure != tc.want || a != nil || worker != "" || len(engine.Resources) != 0 || registry.Locks[id] || !workspace.Closed {
 				t.Fatalf("a lost client reached an irreversible launch edge: %s %q", failure, worker)
+			}
+		})
+	}
+}
+
+func TestRegisteredLaunchStopsAtClientLossDuringCreateOrAttach(t *testing.T) {
+	for _, tc := range []struct {
+		event    string
+		lose     func(*tf.Fake)
+		outcome  port.Outcome
+		attached bool
+	}{
+		{"create", func(f *tf.Fake) { f.Hangup(false) }, port.TerminalDisconnected, false},
+		{"attach", (*tf.Fake).Break, port.TerminalUnavailable, true},
+	} {
+		t.Run(tc.event, func(t *testing.T) {
+			runner, registry, engine, _, id := registeredSessionFixture(t)
+			provider := &tf.Fake{Size: terminal.Dimensions{Columns: 113, Rows: 37}}
+			lease, err := provider.Acquire(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer lease.Close()
+			engine.After = func(event string) {
+				if event == tc.event {
+					tc.lose(provider)
+					<-lease.Done()
+				}
+			}
+			conn, attachment, _, failure := runner.registeredLaunch(t.Context(), id, []string{"probe"}, port.Streams{Terminal: lease})
+			if conn != nil {
+				defer conn.Close()
+			}
+			if attachment != nil {
+				defer attachment.Close()
+			}
+			if failure != tc.outcome || registry.Locks[id] || len(engine.Resources) != 1 {
+				t.Fatalf("launch returned %q, lock held %t, workers %d", failure, registry.Locks[id], len(engine.Resources))
+			}
+			if (attachment != nil) != tc.attached || slices.Contains(engine.Events, "attach") != tc.attached || slices.Contains(engine.Events, "start") {
+				t.Fatalf("unexpected launch operations after client loss: %v", engine.Events)
 			}
 		})
 	}

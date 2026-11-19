@@ -11,15 +11,35 @@ import (
 	"testing"
 	"time"
 
+	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
 	session "github.com/donvargax/itos-container/internal/engine/session/port"
+	terminal "github.com/donvargax/itos-container/internal/engine/terminal/port"
+	tf "github.com/donvargax/itos-container/internal/engine/terminal/port/porttest"
 )
+
+type signalCheck func(context.Context)
+
+func (check signalCheck) Run(ctx context.Context, _ approval.Durable, _ []string, _ session.Streams) session.RunResult {
+	check(ctx)
+	return session.RunResult{}
+}
 
 // A terminal run must keep consuming hangup signals after its lease has
 // reported the disconnect and stopped its own subscription, without turning
 // one into a cancellation; interrupt forwarding is unchanged.
 func TestCaptureConsumesHangupForTerminalRuns(t *testing.T) {
-	ctx, release := Capture(context.Background(), true)
-	defer release()
+	provider := &tf.Fake{Size: terminal.Dimensions{Columns: 113, Rows: 37}}
+	lease, err := provider.Acquire(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close()
+	runner := Runner{Next: signalCheck(func(ctx context.Context) { checkTerminalSignals(t, ctx) })}
+	runner.Run(t.Context(), approval.Durable{}, nil, session.Streams{Terminal: lease})
+}
+
+func checkTerminalSignals(t *testing.T, ctx context.Context) {
+	t.Helper()
 	if cause := context.Cause(ctx); cause != nil {
 		t.Fatalf("a fresh capture reported a cause: %v", cause)
 	}

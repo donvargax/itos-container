@@ -37,6 +37,39 @@ type observedTerminal struct {
 
 func (l observedTerminal) Close() terminal.Result { r := l.Lease.Close(); close(l.closed); return r }
 
+type partialTerminal struct {
+	terminal.Provider
+	failure error
+}
+
+func (p partialTerminal) Acquire(ctx context.Context) (terminal.Lease, error) {
+	lease, err := p.Provider.Acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return lease, p.failure
+}
+
+func TestTerminalAcquisitionRestoresPartialLeaseOnError(t *testing.T) {
+	fake := &tf.Fake{Size: terminal.Dimensions{Columns: 113, Rows: 37}, State: 9}
+	before := fake.Snapshot()
+	failure := &terminal.Failure{Kind: terminal.AcquisitionFailed}
+	lease, err := acquireTerminal(t.Context(), partialTerminal{fake, failure})
+	if lease != nil || !errors.Is(err, failure) || fake.Snapshot() != before {
+		t.Fatalf("partial acquisition returned lease %v, error %v, terminal state %v", lease, err, fake.Snapshot())
+	}
+}
+
+func TestTerminalAcquisitionRefusesAlreadyCancelledStartup(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	fake := &tf.Fake{Size: terminal.Dimensions{Columns: 113, Rows: 37}}
+	lease, err := acquireTerminal(ctx, fake)
+	if lease != nil || !errors.Is(err, context.Canceled) || fake.Raw() {
+		t.Fatalf("cancelled acquisition returned lease %v, error %v, raw %t", lease, err, fake.Raw())
+	}
+}
+
 func TestTerminalAcquisitionFailureClosesLateLeaseBeforeReturn(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		fake := &tf.Fake{Size: terminal.Dimensions{Columns: 113, Rows: 37}}
