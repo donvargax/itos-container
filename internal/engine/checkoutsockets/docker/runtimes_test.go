@@ -207,6 +207,7 @@ func TestRunscRegistration(t *testing.T) {
 			"foreign product":         func(e *engine) { e.pin.version.Product = "Docker Desktop" },
 			"changed before the read": func(e *engine) { e.pin.changed.Store(true) },
 			"unusable endpoint":       func(e *engine) { e.pin.endpoint = "tcp://%zz" },
+			"no request contexts":     func(e *engine) { e.plain = true },
 		} {
 			d := serve(t, reply(withRunsc(`{"path":"runsc"}`)))
 			e := newEngine(d.endpoint)
@@ -227,6 +228,55 @@ func TestRunscRegistration(t *testing.T) {
 			}
 			if e.pin.closes.Load() != wantCloses {
 				t.Errorf("%s: pin closed %d times, want %d", name, e.pin.closes.Load(), wantCloses)
+			}
+		}
+	})
+	t.Run("inspections_bound_to_the_call", func(t *testing.T) {
+		// The session keeps the lifetime it was established with, which can
+		// outlast the call, so each inspection must run on the call's context.
+		for name, c := range map[string]struct {
+			stall    string
+			deadline bool
+		}{
+			"cancelled during the version request": {"version", false},
+			"cancelled during the info request":    {"info", false},
+			"deadline during the version request":  {"version", true},
+			"deadline during the info request":     {"info", true},
+		} {
+			d := serve(t, reply(withRunsc(`{"path":"runsc"}`)))
+			e := newEngine(d.endpoint)
+			lifetime, release := context.WithCancel(context.Background())
+			t.Cleanup(release)
+			e.pin.lifetime, e.pin.stall = lifetime, c.stall
+			ctx, cancel := context.WithCancel(context.Background())
+			if c.deadline {
+				ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
+			}
+			defer cancel()
+			go func() {
+				select {
+				case <-e.pin.arrived:
+					if !c.deadline {
+						cancel()
+					}
+				case <-time.After(5 * time.Second):
+				}
+			}()
+			done := make(chan result, 1)
+			go func() { done <- observe(ctx, e) }()
+			select {
+			case got := <-done:
+				if got != cancelled {
+					t.Errorf("%s: observed %+v", name, got)
+				}
+				if e.pin.closes.Load() != 1 {
+					t.Errorf("%s: pin closed %d times", name, e.pin.closes.Load())
+				}
+			case <-time.After(2 * time.Second):
+				t.Errorf("%s: the inspection stayed pending after the call ended", name)
+			}
+			if d.requests.Load() != 0 {
+				t.Errorf("%s: %d daemon requests", name, d.requests.Load())
 			}
 		}
 	})
