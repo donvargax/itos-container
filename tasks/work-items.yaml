@@ -1712,8 +1712,8 @@ items:
   - id: slice-32
     title: run bind-mounts the approved Codex auth.json, and its lock file when present, read-write as single files
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-30, T-48]
     kind: slice
     why: >
