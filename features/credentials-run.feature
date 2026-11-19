@@ -178,9 +178,25 @@ Feature: Deliver the approved Claude token to one owned run
   # modify, attrib, close-write, moves, delete and queue overflow) and proves it
   # with a fixture-made transient create, write and remove of its own. Later
   # fixture or probe control writes go only to one fixture control directory and
-  # are journaled by exact name. Any other checkout event, an unjournaled name or
-  # an overflow fails every provisioning-surface assertion, even when the final
-  # marker scan and checkout comparison pass.
+  # are journaled by exact name. Sources, state roots and the account home lie
+  # outside every checkout, so their fixture edits are not checkout events. The
+  # only fixture edits inside a checkout are three policy edits, each a single
+  # journaled operation on that checkout's exact itos-container.yaml path: 05's
+  # policy row rewrites it in place while run is held at its post-freeze
+  # barrier; 10 rewrites the first project's in place after every earlier run's
+  # controller has exited and before the later run starts; 12 unlinks it after
+  # the killed controller has been reaped and before any fresh status or stop.
+  # One inotify instance per checkout keeps its events in order. The harness
+  # brackets each edit with uniquely named begin and end sentinel creates in the
+  # control directory, and in the same When calibrates the expected event kinds
+  # and count by performing the identical operation (same open flags and one
+  # write of the same size, or one unlink) on a calibration file there. Inside a
+  # bracket the policy path must show exactly that calibrated sequence, and no
+  # other unjournaled event may appear. The observer stays armed throughout.
+  # Any other checkout event, an extra or out-of-bracket event on the policy
+  # path, a missing bracketed edit, an unjournaled name or an overflow fails
+  # every provisioning-surface assertion, even when the final marker scan and
+  # checkout comparison pass.
   # Include proxy stdout, its Docker log and retained refusal log in 08's allowlist
   # row, whose ordinary refusal hostname contains NO marker. Require a nonempty
   # observed refusal and a successful controlled TLS exchange, not empty logs.
