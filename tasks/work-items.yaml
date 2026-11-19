@@ -2413,3 +2413,14 @@ items:
       choice in the session record. Prove that startup-scan-only operation requires explicit
       weaker-mode consent, including when an older approval exists. Broken down from
       p1-checkout-socket-kernel-enforcement.
+  - id: p1-status-checkout-socket-backend
+    title: Show the session’s approved socket protection in status
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [p1-run-checkout-socket-admission]
+    kind: idea
+    why: >
+      Read the frozen session record so status still reports “late host sockets reachable” for a
+      weaker-mode session after a controller restart or a change in host capabilities. Broken down
+      from p1-checkout-socket-kernel-enforcement.
