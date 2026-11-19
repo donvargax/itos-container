@@ -2239,6 +2239,11 @@ items:
       that a local fixture reaches its assertion with production ownership checks intact. Three
       consecutive sessions hit the same blocker, leaving the RUNTTY-20 and RUNTTY-22 assertions
       unchecked until CI.
+
+      This item already tracks the approval failures caused by UID 65534 on `/` and `/tmp` in the
+      shared sandbox. It calls for documenting the ancestor-ownership requirement and using
+      ID-EGRESS-09 to verify that a disposable fixture reaches its behavior assertion with
+      production checks intact.
   - id: p2-lifecycle-09-startup-timeout
     title: ID-LIFECYCLE-09 ended in run.startup-timeout once on main, past the first engine row
     phase: 1
