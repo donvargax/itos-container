@@ -37,8 +37,11 @@ func (d *egressDefinitions) Step(expression, function any) {
 		d.t.Fatalf("step %s has no function", expression)
 	}
 	arguments := fn.NumIn()
-	if arguments > 0 && fn.In(arguments-1) == reflect.TypeOf(&godog.Table{}) {
-		arguments--
+	if arguments > 0 {
+		switch fn.In(arguments - 1) {
+		case reflect.TypeOf(&godog.Table{}), reflect.TypeOf(&godog.DocString{}):
+			arguments--
+		}
 	}
 	if arguments != pattern.NumSubexp() {
 		d.t.Fatalf("step %s has an incompatible definition", expression)
@@ -51,9 +54,23 @@ func (d *egressDefinitions) Step(expression, function any) {
 func TestEgressNativeStepsDefined(t *testing.T) {
 	definitions := &egressDefinitions{t: t}
 	(&world{}).egressNativeSteps(definitions)
+	definitions.checkNativeRows("egress.feature", "@slice-27 && @engine", 8)
+}
+
+func TestExecNativeStepsDefined(t *testing.T) {
+	definitions := &egressDefinitions{t: t}
+	w := &world{}
+	w.execSteps(definitions)
+	w.execNativeSteps(definitions)
+	definitions.checkNativeRows("exec.feature", "@slice-38 && @engine", 11)
+}
+
+func (definitions *egressDefinitions) checkNativeRows(path, tags string, want int) {
+	t := definitions.t
+	t.Helper()
 	suite := godog.TestSuite{
-		Name:    "slice-27-native-definitions",
-		Options: &godog.Options{Paths: []string{"egress.feature"}, Tags: "@slice-27 && @engine", Output: io.Discard},
+		Name:    path,
+		Options: &godog.Options{Paths: []string{path}, Tags: tags, Output: io.Discard},
 	}
 	features, err := suite.RetrieveFeatures()
 	if err != nil {
@@ -71,13 +88,13 @@ func TestEgressNativeStepsDefined(t *testing.T) {
 					}
 				}
 				if matches != 1 {
-					t.Errorf("%s: %q matches %d egress definitions, expected exactly one", scenario.Name, step.Text, matches)
+					t.Errorf("%s: %q matches %d definitions, expected exactly one", scenario.Name, step.Text, matches)
 				}
 			}
 		}
 	}
-	if cases != 8 {
-		t.Fatalf("native egress scenarios = %d, expected 8", cases)
+	if cases != want {
+		t.Fatalf("%s has %d native rows, want %d", path, cases, want)
 	}
 }
 

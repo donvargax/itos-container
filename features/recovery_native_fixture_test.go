@@ -139,6 +139,10 @@ func (w *world) recoveryStartWithin(timeout time.Duration, args ...string) *reco
 }
 
 func (w *world) recoveryStartConfigured(timeout time.Duration, executable string, env map[string]string, args ...string) *recoveryProcess {
+	return w.recoveryStartAt(w.doctor.checkout, timeout, executable, env, args...)
+}
+
+func (w *world) recoveryStartAt(root string, timeout time.Duration, executable string, env map[string]string, args ...string) *recoveryProcess {
 	r := w.recovery
 	p := &recoveryProcess{exit: -1, done: make(chan struct{})}
 	if w.session != nil && w.session.api != nil {
@@ -173,7 +177,7 @@ func (w *world) recoveryStartConfigured(timeout time.Duration, executable string
 	}
 	p.cmd = exec.CommandContext(ctx, trace, append([]string{p.journal, p.pid, state, executable}, args...)...)
 	p.cmd.WaitDelay = time.Second
-	p.cmd.Dir, p.cmd.Env = w.doctor.checkout, w.env()
+	p.cmd.Dir, p.cmd.Env = root, w.env()
 	if w.recoveryLocal != nil && w.recoveryLocal.invocationDir != "" {
 		p.cmd.Dir = w.recoveryLocal.invocationDir
 	}
@@ -186,7 +190,7 @@ func (w *world) recoveryStartConfigured(timeout time.Duration, executable string
 	if w.anchors != nil {
 		p.cmd.Env = setEnv(p.cmd.Env, "SLICE_17_ACCESS_TRACE", "1")
 	}
-	p.cmd.Env = setEnv(p.cmd.Env, "ITOS_ROOT", w.doctor.checkout)
+	p.cmd.Env = setEnv(p.cmd.Env, "ITOS_ROOT", root)
 	if localRun {
 		p.cmd.Env = setEnv(p.cmd.Env, "SLICE_17_LOCAL_RUN", "1")
 		p.cmd.Env = setEnv(p.cmd.Env, "SLICE_17_LOCAL_MOUNT_ROOT", w.doctor.checkout)

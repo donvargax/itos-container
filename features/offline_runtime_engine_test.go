@@ -153,6 +153,11 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 			a.requests[index].Status = response.StatusCode
 			a.mu.Unlock()
 			if response.StatusCode == http.StatusSwitchingProtocols {
+				if strings.HasPrefix(entry.Path, "/exec/") && a.w.exec != nil && a.w.exec.native != nil {
+					a.mu.Lock()
+					a.w.exec.native.attachments[entry.Path] = response.Body
+					a.mu.Unlock()
+				}
 				return nil
 			}
 			if a.lifecycle != nil && strings.HasSuffix(entry.Path, "/wait") && response.StatusCode == http.StatusOK {
@@ -298,6 +303,9 @@ func (b *offlineWaitBody) Close() error {
 // mistaken for product-enforced isolation. Only owned IDs may be mutated.
 func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 	w := a.w
+	if strings.HasPrefix(entry.Path, "/exec/") {
+		return a.execSessionRequest(*entry)
+	}
 	if strings.HasPrefix(entry.Path, "/volumes/") {
 		return a.anchorVolumeAllowed(r, entry)
 	}
@@ -357,6 +365,8 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 	}
 	if r.Method == "POST" {
 		switch operation {
+		case "exec":
+			return a.execProbeCreate(*entry, observed)
 		case "attach":
 			for key, values := range r.URL.Query() {
 				if (key != "stream" && key != "stdin" && key != "stdout" && key != "stderr" && key != "logs") || len(values) != 1 || (values[0] != "1" && values[0] != "0" && values[0] != "true" && values[0] != "false") {
@@ -374,7 +384,7 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 		case "kill":
 			return len(r.URL.Query()) == 1 && len(r.URL.Query()["signal"]) == 1 &&
 				(r.URL.Query().Get("signal") == "SIGTERM" || r.URL.Query().Get("signal") == "SIGKILL" ||
-					(a.lifecycle != nil && r.URL.Query().Get("signal") == "SIGINT"))
+					((a.lifecycle != nil || (w.exec != nil && w.exec.native != nil)) && r.URL.Query().Get("signal") == "SIGINT"))
 		case "stop":
 			return reflect.DeepEqual(r.URL.Query(), url.Values{"signal": {"SIGTERM"}, "t": {"10"}})
 		}

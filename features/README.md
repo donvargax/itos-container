@@ -250,7 +250,7 @@ Since T-45 the engine tier runs in engine shards, the matrix of the `engine-shar
 `.github/workflows/ci.yml`: **offline** (`offline.feature` and `harness-home.feature`),
 **lifecycle** (`lifecycle.feature`, whose four `ID-LIFECYCLE-09` rows stay nested in
 `ID-LIFECYCLE-13`'s quiet row), **other**
-(`anchors.feature`, `checkout-overlap.feature`, `doctor.feature`, `hardlinks.feature`,
+(`anchors.feature`, `checkout-overlap.feature`, `doctor.feature`, `exec.feature`, `hardlinks.feature`,
 `recovery.feature`, `session.feature` and `sockets.feature`) and, since T-59, **egress**
 (`egress.feature`, moved whole from other after that shard's measured step passed 180
 seconds; slice-28's `egress_lifecycle.feature` joins it and slice-37's `run_terminal.feature`
@@ -293,7 +293,7 @@ harness subprocesses, as for the switch.
 
 `TestEngineShards` holds all of this without an engine. Its workflow subtest parses the actual
 workflow, names exactly the four shards and pins each shard's complete file set — offline
-its two files, lifecycle its one, other its seven, and egress `egress.feature`, plus
+its two files, lifecycle its one, other its eight, and egress `egress.feature`, plus
 `egress_lifecycle.feature` once the inventory has it, never the inventory's leftover — whatever
 each list's order or whitespace, so a file moved whole between shards fails even when every file
 still runs exactly once; its partition subtest selects
@@ -582,7 +582,7 @@ times that show the need. In the prepared CI tier only, the coordinator measures
 with:
 
 ```sh
-for features in 'offline.feature harness-home.feature' lifecycle.feature 'anchors.feature checkout-overlap.feature doctor.feature hardlinks.feature recovery.feature session.feature sockets.feature' egress.feature; do
+for features in 'offline.feature harness-home.feature' lifecycle.feature 'anchors.feature checkout-overlap.feature doctor.feature exec.feature hardlinks.feature recovery.feature session.feature sockets.feature' egress.feature; do
   env -u ITOS_CONTAINER_RED_SCENARIOS ITOS_CONTAINER_ENGINE_TESTS=1 ITOS_CONTAINER_ENGINE_FEATURES="$features" timeout --signal=TERM --kill-after=5s 180s setsid --wait go test ./features -count=1 -v -run '^TestFeatures$' -timeout=4m
 done
 ```
