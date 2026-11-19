@@ -1047,7 +1047,7 @@ items:
     title: The step 'no approval record or frozen input is produced' also checks that no frozen input exists
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p2-pin-ledger-check-shell
