@@ -932,52 +932,60 @@ Feature: An approved persistent home for one checkout's harness
       | normal exit                         |
       | controller loss followed by stop    |
 
-  # Each row starts from its own session. In the confirmed row the engine
+  # Each row starts from its own session. In both confirmed rows the engine
   # answers not-found for the recorded full worker ID throughout. All other
   # session resources are accounted for, so only the retained account can block
-  # cleanup in that row. The unconfirmed row withholds that answer until the
+  # cleanup in those rows. The unconfirmed row withholds that answer until the
   # stop retry. Inspect read-only copies of the database and sidecars as in 08.
-  # All three runs use the same grant-free policy, approval, checkout and home.
+  # As in HOME-12, changing the host state root still selects the original volume.
+  # Keep each row's grant-free policy and approval fixed across all three runs.
   # /bin/true can exit successfully even with the database read-only.
   @wip @slice-40 @ID-OPENCODELOGIN-09 @local-engine-fixture
   Scenario Outline: Incomplete OpenCode cleanup blocks home reuse until the original session is recovered
-    Given a synthetic OpenCode session with an independently recorded owned worker, a retained home and an acquired login whose staged pathname is gone
+    Given a synthetic OpenCode session in the original host XDG_STATE_HOME with an independently recorded owned worker, a retained home and an acquired login whose staged pathname is gone
+    And a second, empty host XDG_STATE_HOME for the same checkout, account home, UID/GID and daemon
     And the retained worker database contains the imported account for that grant, its synthetic key and an unrelated session with a known ID, title and message
     And the retained database, its directory and its SQLite sidecars are read-only to cleanup
     And the checkout now requests a different OpenCode provider
     When the fixture snapshots the retained OpenCode database and its sidecars before the first stop
     Then the account with the imported credential ID in that snapshot contains the granted synthetic key
-    When a fresh stop for that session runs with worker absence <confirmation>
+    When a fresh stop for that session runs in the original host XDG_STATE_HOME with worker absence <confirmation>
     And fresh status inspects the session under the same conditions
     Then status shows the frozen OpenCode provider and reports the original worker as "<resource>"
     And the engine recorder shows worker absence was <confirmation> for the recorded full ID during the first stop
     And the first stop exits nonzero and both commands report incomplete cleanup for the original session
     And each command gives exactly the retry argv "itos", "container", "stop" and the original session ID
-    When the checkout selects a version 1 offline policy for the original home and its matching grant-free approval while the retained store is still read-only
+    When the checkout selects a version 1 offline policy for the original home while the retained store is still read-only
+    And the fixture independently records a matching grant-free approval for that checkout and policy in each host XDG_STATE_HOME
+    And the run controller selects the <run root> host XDG_STATE_HOME
     And itos-container runs with "run -- /bin/true"
     Then the grant-free run exits nonzero and the engine recorder counts zero worker start requests during that run
     And read-only inspection before retry still finds the imported credential ID with its granted synthetic key
     When the fixture makes the retained database, its directory and its SQLite sidecars writable to cleanup
     Then an independent probe with cleanup's permissions opens the retained database file read-write and closes it without writing
     And read-only inspection before retry still finds the imported credential ID with its granted synthetic key
-    When itos-container runs with "run -- /bin/true"
+    When the run controller selects the <run root> host XDG_STATE_HOME
+    And itos-container runs with "run -- /bin/true"
     Then the grant-free run exits nonzero and the engine recorder counts zero worker start requests during that run
     And read-only inspection before retry still finds the imported credential ID with its granted synthetic key
-    When a fresh controller executes the original session's reported stop retry with the engine answering not-found for the recorded full worker ID
+    When a fresh controller in the original host XDG_STATE_HOME executes the reported stop retry with the engine answering not-found for the recorded full worker ID
     Then immediate read-only inspection finds no imported account in the retained OpenCode database
     And the granted key is absent from the database, its SQLite sidecars and the rest of the retained OpenCode data
     And the same database still contains the unrelated session with its original ID, title and message
-    And the retry reports cleanup complete for the original session and independent inspection confirms the worker and staging are absent
+    And the retry exits 0 and reports cleanup complete for the original session
+    And independent inspection confirms the worker and staging are absent
     And the original home volume is still present and the host login is byte-for-byte intact
     And neither stop starts a worker, rereads a host credential or invents a workload exit
-    When itos-container runs with "run -- /bin/true"
+    When the run controller selects the <run root> host XDG_STATE_HOME
+    And itos-container runs with "run -- /bin/true"
     Then it exits with code 0
     And the engine recorder shows that run started a new worker with the original volume mounted at "/home/itos" and no credential mounts
 
     Examples:
-      | confirmation | resource |
-      | confirmed    | absent   |
-      | unconfirmed  | unknown  |
+      | confirmation | resource | run root |
+      | confirmed    | absent   | original |
+      | confirmed    | absent   | second   |
+      | unconfirmed  | unknown  | original |
 
   # Management runs only on independently tracked disposable CI homes. Observe
   # active-worker refusal and a successful control before harness teardown.
