@@ -2420,14 +2420,15 @@ items:
       Read the frozen session record so status still reports “late host sockets reachable” for a
       weaker-mode session after a controller restart or a change in host capabilities. Broken down
       from p1-checkout-socket-kernel-enforcement.
-  - id: p1-run-landlock-checkout-sockets
+  - id: slice-46
     title: Enforce Landlock for foreground and attached workloads
     phase: 1
     owner: null
     status: todo
     depends_on: [T-65, slice-44, slice-38]
-    kind: idea
+    kind: slice
     why: >
+      Was p1-run-landlock-checkout-sockets.
       Mount the trusted init read-only and apply it before both foreground and independently
       attached exec commands. Prove ID-SOCKETS-02 and ID-SOCKETS-03 on the person’s ABI 9+ host,
       including worker-private IPC and checkout edits. Record the temporary hosted-CI exception in
