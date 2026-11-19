@@ -4,6 +4,17 @@
 // negotiates the API version, its GET /version and GET /info, which validate
 // the daemon as native, and this adapter's own GET /info, which reports the
 // runtimes.
+//
+// The second GET /info is not a repeat of the first. The readiness port keeps
+// only identity and platform fields of the response (its Info type), so the
+// validating read cannot carry the Runtimes map, and widening that shared port
+// for one reader would change every readiness caller and fake. The runtimes
+// are therefore read through the SDK, on a transport that dials only the
+// validated socket and refuses to start or to return once the session reports
+// the socket changed, so both reads reach the daemon that was validated.
+// Whatever fails to read, decode or arrive is an unreadable inventory
+// (RuntimeInspect or Cancelled); only a decoded, non-null map without the key
+// runsc confirms the runtime's absence.
 package docker
 
 import (
