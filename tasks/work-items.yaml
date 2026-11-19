@@ -2368,3 +2368,14 @@ items:
       Give doctor, approve and run one shared selection rule. Prefer Landlock ABI 9 or later, then
       an available runsc runtime. Test both backends, confirmed absence and failed detection through
       the engine port and its adapters. Broken down from p1-checkout-socket-kernel-enforcement.
+  - id: p1-build-landlock-worker-init
+    title: Build the trusted Landlock worker init
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The init must apply the pathname-socket restriction before executing the literal workload
+      argv. Test argument preservation and verify that a failed restriction prevents workload
+      execution. Broken down from p1-checkout-socket-kernel-enforcement.
