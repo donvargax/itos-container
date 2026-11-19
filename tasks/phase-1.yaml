@@ -8239,3 +8239,14 @@
 
     Run the package check with the new assertions first. The mixed and untyped cases must each
     fail on the current wording and pass with the same assertions after the renderer changes.
+- id: T-63
+  type: test
+  title: The step 'no approval record or frozen input is produced' also checks that no frozen input exists
+  why: >
+    The approvalNoRecord feature step returns success when the approval record is absent, even if
+    frozen input was published. Pin that false success with a focused regression in the features
+    package and make the step reject the leftover frozen input. Preserve the valid refusal where
+    neither artifact exists.
+  done_when:
+    - run: go test ./features -run '^TestApprovalNoRecordRejectsFrozenInput$'
+      timeout: 180
