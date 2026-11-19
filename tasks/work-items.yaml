@@ -2457,3 +2457,25 @@ items:
       before closing the client terminal, then deliver SIGHUP once the fixture observes teardown of
       the owned worker. The scenario must still report the disconnect, return workload exit 17,
       attempt terminal restoration and complete cleanup.
+  - id: p2-kernel-helper-leaves-no-feature-temp-dir
+    title: A kernel-helper child of the feature tests leaves no itos-container-feature-binaries directory in /tmp
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      features/engine_diagnostics_test.go:20 TestMain creates /tmp/itos-container-feature-binaries-*
+      before m.Run and removes it only after m.Run returns. A kernel-helper child re-runs the
+      features test binary with one -test.run selector, and TestApprovalKernelHelper
+      (features/approval_kernel_linux_test.go:16) then calls unix.Exec into the product. So the
+      child's TestMain never reaches RemoveAll, and every helper invocation leaks one empty
+      directory. 1391 of them sit in /tmp on the loop machine today. The Landlock helper slice-42 to
+      slice-46 bring would leak one per supervised doctor, approve or run invocation, which makes it
+      worse quickly on a machine several workers share. Wanted: helper mode is detected before the
+      setup (from its selector or its helper argument), or the directory is created only when a test
+      first needs a standalone probe, so a helper child makes nothing it cannot remove. This is
+      harness work, so a ledger task, checked by a regression that runs the approval kernel helper
+      and finds no new feature-binaries directory in a private TMPDIR. Phase p2: it blocks no
+      charter step, but it should land before the Landlock helper multiplies the leak. The harness's
+      TestMain is this project's own, not the template's, so no backport.
