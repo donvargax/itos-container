@@ -840,11 +840,14 @@ Feature: An approved persistent home for one checkout's harness
   # Inspect live worker configuration, including Env, argv, labels and mounts.
   # Scan raw create requests, protected approvals, snapshots and recovery state
   # as well as plain/JSON doctor and status and the run diagnostics.
+  # After exit, copy the original volume's database and sidecars as in 08
+  # before opening SQLite or OpenCode. Select the pre-existing ID explicitly
+  # so its saved key can be tested even if cleanup cleared the active selection.
   @wip @slice-40 @ID-OPENCODELOGIN-06 @engine
   Scenario: The worker receives only the selected OpenCode provider key
     Given two CI checkouts with isolated homes, one granted "opencode-go" and one granted "other-provider" from the same private auth.json
     And the fixture host has distinct markers for those two keys, an extra field and its OpenCode database
-    And the first checkout's retained worker database is seeded with a different active "opencode-go" account
+    And the first checkout's retained home has a different active "opencode-go" account whose key is stored there only in SQLite
     And an independent OpenCode control uses a copy of that home made before delivery
     And the fake provider registers the two granted keys and the retained account's key under three distinct synthetic principals
     When each granted worker runs "opencode --standalone auth import /run/itos-container/credentials/opencode-auth"
@@ -859,10 +862,18 @@ Feature: An approved persistent home for one checkout's harness
     And native mount inspection finds only the staged read-only credential file among credential mounts and both host stores retain their bytes
     And the marker checks find no credential in worker create or inspect data, the checkout, approval or session records, doctor, status, diagnostics or retained logs
     And the same checks detect each marker and encoding in its independent control
+    When both granted workers exit normally and their run commands return
+    Then immediate read-only inspection of the first checkout's original retained database finds the pre-existing account ID and no row for that worker's staged credential ID
+    And the first worker's granted key is absent from that database and its SQLite sidecars
+    When the first checkout selects matching approval with only the credential grant removed
+    And a fresh worker on that same volume selects the pre-existing "opencode-go" account by ID and requests the fake provider without importing credentials
+    And the independent control repeats its request from the pre-delivery copy
+    Then the fake provider authenticates the fresh worker and the independent control as the pre-existing "opencode-go" principal
 
   # The fake provider recognizes two key generations for one synthetic principal.
   # The fake provider identifies the generation on each request without logging
   # the key. One checkout runs three workers in sequence under the same approval.
+  # Capture the ID from each worker's staged file before that worker exits.
   @wip @slice-40 @ID-OPENCODELOGIN-07 @engine
   Scenario: Host rotation supplies a fresh key only to the next granted run
     Given a CI OpenCode file grant and a fake provider configured to accept its selected API key
@@ -877,7 +888,9 @@ Feature: An approved persistent home for one checkout's harness
     Then the fake provider still receives and rejects the old key
     When the second worker exits and a third granted worker repeats the import, switch and request under the same approval
     Then the fake provider accepts the replacement for the same principal
-    And both generations use the same approval fingerprint and no run refreshes or writes either host store
+    And all three runs use the same approval fingerprint
+    And the credential IDs read from the three workers' staged files are pairwise distinct
+    And no run refreshes or writes either host store
 
   # Inspect the retained home as soon as run returns on normal exit or fresh
   # stop finishes after controller loss. Take a read-only copy before changing
@@ -915,21 +928,24 @@ Feature: An approved persistent home for one checkout's harness
       | normal exit                         |
       | controller loss followed by stop    |
 
-  # Recovery cannot infer that the credential is gone from a missing staged
-  # pathname. The recorder keeps the acquired worker reference and can withhold
-  # its removal confirmation independently of the state of the staged copy.
-  # The first stop leaves the worker holding its database. As soon as the retry
-  # returns, capture the same retained database and sidecars as in 08, before
-  # starting OpenCode, launching another worker or running fixture teardown.
+  # The recorder keeps the acquired worker reference after the staged path is
+  # gone. Two independent faults apply to the first stop. The retained store,
+  # including its directory and SQLite sidecars, is read-only to cleanup, and
+  # the recorder withholds confirmation of worker removal. Lifting the faults
+  # leaves the account for the retried stop to remove. Take read-only copies
+  # as in 08, before the first stop and immediately after the retry returns.
   @wip @slice-40 @ID-OPENCODELOGIN-09 @local-engine-fixture
   Scenario: Incomplete OpenCode cleanup keeps the original session recoverable
     Given a synthetic OpenCode session with an independently recorded owned worker, a retained home and an acquired login whose staged pathname is gone
     And the retained worker database contains the imported account for that grant, its synthetic key and an unrelated session with a known ID, title and message
     And the checkout now requests a different OpenCode provider
-    When a fresh stop for that session cannot confirm worker removal and status inspects it
+    When the fixture snapshots the retained OpenCode database and its sidecars before the first stop
+    Then the account with the imported credential ID in that snapshot contains the granted synthetic key
+    When a fresh stop for that session runs while the fixture prevents account cleanup and withholds confirmation of worker removal
+    And fresh status inspects the session
     Then status shows the frozen OpenCode provider and keeps cleanup incomplete with the original session ID and its exact stop retry
-    And read-only inspection before the retry finds the imported account and its key in the retained home
-    When worker removal can be confirmed and the same stop is retried
+    And the first stop reports incomplete cleanup with that same retry
+    When the fixture lifts both faults and a fresh controller executes the reported stop retry
     Then immediate read-only inspection finds no imported account in the retained OpenCode database
     And the granted key is absent from the database, its SQLite sidecars and the rest of the retained OpenCode data
     And the same database still contains the unrelated session with its original ID, title and message
