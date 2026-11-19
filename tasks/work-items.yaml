@@ -1993,6 +1993,12 @@ items:
       scenario first committed without the tag is the case left. The red selector is this project's
       own (T-21), on top of the template's harness, so if this lands it goes to go-template-itos
       with the rest of the item.
+
+      Extend this item's scenario check to cover command-assembly probes. Commit 5b8bc5d on slice-38
+      supplied TestPublicExecCommand after nine exec scenarios reported a missing result without
+      reaching the parser. Add a regression with a selector that matches zero Go tests. The harness
+      should report the affected scenario ID and missing probe before evaluating the product
+      assertion.
   - id: p2-code-proof-draw-stable-across-main-merges
     title: The code proof's draw stays put when main is merged into an item's branch, so a repair is judged on the sites that failed
     phase: 1
