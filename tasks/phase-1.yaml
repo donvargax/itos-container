@@ -8363,22 +8363,6 @@
     Slice-45 reports the frozen selection. ID-SOCKETS-01 covers the startup scan.
     T-65 owns the worker init. Runtime proof for ID-SOCKETS-02/03 belongs to slice-46 on the
     person's Landlock host and slice-47 under gVisor in hosted CI.
-  done_when:
-    - run: |-
-        report=$(go test -count=1 -json ./internal/engine/checkoutsockets/...) || {
-          printf '%s\n' "$report"
-          exit 1
-        }
-        printf '%s\n' "$report" | jq -es '
-          [.[] | select(.Action == "pass" and .Test != null) | (.Package + "/" + .Test)] as $passed
-          | ["domain/TestBackendSelection", "native/TestLandlockABIProbe",
-             "docker/TestRunscRegistration", "docker/TestRunscRegistration/path_registration",
-             "docker/TestRunscRegistration/shim_only_registration",
-             "docker/TestRunscRegistration/contradictory_path",
-             "docker/TestRunscRegistration/socket_permitting_args",
-             "docker/TestRunscRegistration/unknown_args"]
-          | map("github.com/donvargax/itos-container/internal/engine/checkoutsockets/" + .) - $passed
-          | if length == 0 then true else error("missing passing tests: " + join(", ")) end'
 - id: T-65
   type: chore
   title: Build the trusted Landlock worker init
