@@ -45,7 +45,7 @@ func offlineStartupInspection(w *world, id string) map[string]any {
 			"CapDrop": []any{"ALL"}, "SecurityOpt": []any{"no-new-privileges=true"},
 			"Mounts": []any{map[string]any{"Type": "volume", "Source": "itos-container-anchor-" + w.session.token, "Target": "/workspace",
 				"VolumeOptions": map[string]any{"NoCopy": true}}},
-			"Tmpfs": map[string]any{"/tmp": "rw,nosuid,nodev,mode=1777"},
+			"Tmpfs": map[string]any{"/tmp": "rw,exec,nosuid,nodev,mode=1777"},
 		},
 	}
 }

@@ -152,7 +152,7 @@ func (w *world) lifecycleDisconnect() {
 		return
 	}
 	w.lifecycleCollect()
-	l.later = w.lifecycleHeartbeat()
+	w.lifecycleDisconnectProgress()
 	l.survivedLoss = w.recoveryNativePresent(true)
 	var err error
 	l.lostBoundary, err = w.offline.api.inspect(w.recovery.worker)
@@ -161,12 +161,44 @@ func (w *world) lifecycleDisconnect() {
 	w.lifecycleFreshRecovery(true)
 }
 
+func (w *world) lifecycleDisconnectProgress() {
+	l := w.lifecycle
+	// Controller return does not synchronize the worker's next file publication.
+	// Require a fresh publication after this independent observation starts,
+	// keeping the loss in place even though the controller is already gone.
+	// Bound observation from its recorded return time; this guard cannot extend
+	// the controller's teardown deadline.
+	previous := max(l.heartbeat, w.lifecycleHeartbeat())
+	timer := time.NewTimer(time.Until(l.returned.Add(5 * time.Second)))
+	tick := time.NewTicker(10 * time.Millisecond)
+	defer timer.Stop()
+	defer tick.Stop()
+	for {
+		l.later = w.lifecycleHeartbeat()
+		if l.later > previous {
+			return
+		}
+		select {
+		case <-timer.C:
+			l.err = errors.Join(l.err, fmt.Errorf("post-disconnection worker progress unavailable: heartbeat=%d later=%d", previous, l.later))
+			return
+		case <-tick.C:
+		}
+	}
+}
+
 func (w *world) lifecycleDisconnectReady() {
 	l := w.lifecycle
 	// An acknowledged, still-pending wait proves a healthy same-path transport
 	// before we remove observation. Closing only the proxy's upgraded handles
 	// also makes stream loss visible without touching the daemon or observer.
 	if !w.lifecycleAwait(5*time.Second, func() bool {
+		// Readiness precedes the first heartbeat tick. Do not disconnect until
+		// there is a positive baseline against which to judge later progress.
+		l.heartbeat = w.lifecycleHeartbeat()
+		if l.heartbeat <= 0 {
+			return false
+		}
 		a := w.offline.api
 		a.mu.Lock()
 		defer a.mu.Unlock()
@@ -179,7 +211,6 @@ func (w *world) lifecycleDisconnectReady() {
 	}) {
 		return
 	}
-	l.heartbeat = w.lifecycleHeartbeat()
 	l.signalled = time.Now() // transport-failure origin, not a synthetic signal
 	l.fault.disconnect()
 	w.offline.api.closeConnections()

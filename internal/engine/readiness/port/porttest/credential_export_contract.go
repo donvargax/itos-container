@@ -38,7 +38,7 @@ func credentialExportContract(t Reporter, observe func(*CredentialFiles, []polic
 			if tree == "/checkout" {
 				// Inventory meets only the covering directory of another filesystem.
 				private.Device, private.Inode, private.MountID = 2, 92, 4
-				rows += "4 2 0:2 / /checkout/private rw - tmpfs tmpfs rw\n"
+				rows += "4 2 0:2 / /checkout/private rw - ext4 ext4 rw\n"
 			} else {
 				token.Path, token.MountID = private.Path+"/token", 2
 				f.Nodes[token.Path] = token

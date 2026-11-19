@@ -204,7 +204,7 @@ func (t *controlTransaction) peerLocked(write bool) bool {
 
 func inReservationCollection(selected, root string) bool {
 	return domain.Exposed(selected, filepath.Join(root, "sessions")) ||
-		domain.Exposed(selected, filepath.Join(root, "admission"))
+		domain.Exposed(selected, filepath.Join(root, "admission")) || domain.Exposed(selected, filepath.Join(root, "homes"))
 }
 
 // prospective retains every existing ancestor even when the managed tree is

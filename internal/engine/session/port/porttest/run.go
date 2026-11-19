@@ -7,19 +7,23 @@ import (
 	"sync"
 
 	"github.com/donvargax/itos-container/internal/engine/session/port"
+	terminal "github.com/donvargax/itos-container/internal/engine/terminal/port"
 )
 
 // RunEngine is an in-memory lifecycle fake, including explicit boundary faults.
 type RunEngine struct {
-	OpenNil                       bool
-	AfterProxyWait                func()
-	Networks                      map[string]port.NetworkObservation
-	EgressFault                   string
-	ProxyOutput, ProxyErrorOutput string
-	ProxyExit                     <-chan struct{}
-	ProxyID                       string
-	Anchors                       map[string]port.AnchorObservation
-	eventMu                       sync.Mutex
+	CredentialStaging                   *CredentialStager
+	CredentialMounts                    []port.CredentialMount
+	CredentialPaths, CredentialAcquired []byte
+	OpenNil                             bool
+	AfterProxyWait                      func()
+	Networks                            map[string]port.NetworkObservation
+	EgressFault                         string
+	ProxyOutput, ProxyErrorOutput       string
+	ProxyExit                           <-chan struct{}
+	ProxyID                             string
+	Anchors                             map[string]port.AnchorObservation
+	eventMu                             sync.Mutex
 	*Engine
 	Boundary, AttachFailure, StartFailure, WaitFailure, DrainFailure port.Outcome
 	OpenFailure                                                      port.Outcome
@@ -29,6 +33,9 @@ type RunEngine struct {
 	Output, ErrorOutput                                              []byte
 	After                                                            func(string)
 	AfterStart, AfterWait                                            func()
+	AfterCancelledWait                                               func()
+	BeforeResize                                                     func()
+	ResizeFailure                                                    port.Outcome
 	WaitUntilCancel, IgnoreSignal                                    bool
 	SignalFailure                                                    port.Outcome
 	StdinClosed, DrainUntilCancel                                    bool
@@ -40,12 +47,14 @@ type RunEngine struct {
 }
 type runConnection struct {
 	*memoryConnection
-	run *RunEngine
+	run      *RunEngine
+	terminal terminal.Dimensions
 }
 type runAttachment struct {
-	run      *RunEngine
-	failure  port.Outcome
-	failures chan port.Outcome
+	run        *RunEngine
+	failure    port.Outcome
+	failures   chan port.Outcome
+	outputDone chan struct{}
 }
 
 func (e *RunEngine) event(name string) {
@@ -68,9 +77,13 @@ func (e *RunEngine) OpenRun(ctx context.Context, b port.Binding) (port.RunConnec
 		return nil, f
 	}
 	e.event("open")
-	return &runConnection{c.(*memoryConnection), e}, ""
+	return &runConnection{memoryConnection: c.(*memoryConnection), run: e}, ""
 }
 func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []string) (string, port.Outcome) {
+	if !r.ValidCredentials(c.binding) || r.Schema == 4 && !r.Credentials.Ready() {
+		return "", port.CredentialRefused
+	}
+	c.run.CredentialMounts = r.Credentials.Mounts()
 	c.run.Argv = slices.Clone(argv)
 	c.run.event("create")
 	id, f := c.Create(ctx, r)
@@ -79,6 +92,10 @@ func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []str
 		o := c.engine.Resources[id]
 		o.Mounts = true
 		o.AnchorName, o.AnchorExact = r.Anchor.Name, r.Schema >= 2
+		for _, m := range r.Credentials.Mounts() {
+			o.CredentialMounts[port.CredentialIndex(m.Kind)] = m
+		}
+		o.CredentialExact = true
 		c.engine.Resources[id] = o
 		c.engine.resourcesMu.Unlock()
 	}
@@ -95,7 +112,11 @@ func (c *runConnection) VerifyRun(ctx context.Context, id string, argv []string)
 	c.engine.resourcesMu.Lock()
 	o, ok := c.engine.Resources[id]
 	c.engine.resourcesMu.Unlock()
-	if !ok || o.Status != "created" || !slices.Equal(c.run.Argv, argv) {
+	expected := [2]port.CredentialMount{}
+	for _, m := range c.run.CredentialMounts {
+		expected[port.CredentialIndex(m.Kind)] = m
+	}
+	if !ok || o.Status != "created" || !slices.Equal(c.run.Argv, argv) || o.CredentialMounts != expected || len(c.run.CredentialMounts) > 0 && (!o.CredentialExact || !o.AnchorExact || o.ImageID != c.binding.ImageID) {
 		return port.IsolationUnverified
 	}
 	return ""
@@ -105,7 +126,7 @@ func (c *runConnection) Attach(_ context.Context, _ string, streams port.Streams
 	if c.run.AttachFailure != "" {
 		return nil, c.run.AttachFailure
 	}
-	a := runAttachment{run: c.run, failures: make(chan port.Outcome, 2)}
+	a := &runAttachment{run: c.run, failures: make(chan port.Outcome, 2), outputDone: make(chan struct{})}
 	if c.run.StdinClosed {
 		a.failures <- port.StdinClosed
 	} else if streams.In != nil {
@@ -113,10 +134,19 @@ func (c *runConnection) Attach(_ context.Context, _ string, streams port.Streams
 			a.failure = port.ExecutionFailed
 		}
 	}
+	if c.terminal.Valid() {
+		streams.Err = streams.Out
+	}
+	go a.forwardOutput(streams)
+	return a, ""
+}
+
+func (a *runAttachment) forwardOutput(streams port.Streams) {
+	defer close(a.outputDone)
 	for _, output := range []struct {
 		writer port.Writer
 		data   []byte
-	}{{streams.Out, c.run.Output}, {streams.Err, c.run.ErrorOutput}} {
+	}{{streams.Out, a.run.Output}, {streams.Err, a.run.ErrorOutput}} {
 		if output.writer != nil && len(output.data) != 0 {
 			if n, err := output.writer.Write(output.data); err != nil || n != len(output.data) {
 				a.failure = port.ExecutionFailed
@@ -126,7 +156,6 @@ func (c *runConnection) Attach(_ context.Context, _ string, streams port.Streams
 	if a.failure != "" {
 		a.failures <- a.failure
 	}
-	return a, ""
 }
 func (c *runConnection) Start(ctx context.Context, id string) port.Outcome {
 	if c.isProxy(id) {
@@ -135,6 +164,15 @@ func (c *runConnection) Start(ctx context.Context, id string) port.Outcome {
 	c.run.event("start")
 	if ctx.Err() != nil {
 		return port.ExecutionFailed
+	}
+	if len(c.run.CredentialMounts) > 0 {
+		c.run.CredentialAcquired = slices.Clone(c.run.CredentialPaths)
+		if c.run.CredentialStaging != nil {
+			c.run.CredentialAcquired = nil
+			for _, m := range c.run.CredentialMounts {
+				c.run.CredentialAcquired = append(c.run.CredentialAcquired, c.run.CredentialStaging.Files[m.Source]...)
+			}
+		}
 	}
 	if c.run.StartFailure != "" {
 		return c.run.StartFailure
@@ -170,6 +208,9 @@ func (c *runConnection) Wait(ctx context.Context, id string) (int, port.Outcome)
 		<-ctx.Done()
 	}
 	if ctx.Err() != nil {
+		if c.run.AfterCancelledWait != nil {
+			c.run.AfterCancelledWait()
+		}
 		return 0, port.ExecutionFailed
 	}
 	c.engine.resourcesMu.Lock()
@@ -184,6 +225,16 @@ func (c *runConnection) Wait(ctx context.Context, id string) (int, port.Outcome)
 	}
 	return c.run.Exit, c.run.WaitFailure
 }
+func (c *runConnection) Remove(ctx context.Context, id string) {
+	c.memoryConnection.Remove(ctx, id)
+	c.engine.resourcesMu.Lock()
+	_, present := c.engine.Resources[id]
+	c.engine.resourcesMu.Unlock()
+	if !present {
+		clear(c.run.CredentialAcquired)
+		c.run.CredentialAcquired = nil
+	}
+}
 func (c *runConnection) RemoveRun(ctx context.Context, id string) {
 	if c.isProxy(id) {
 		c.removeProxy(ctx, id)
@@ -191,6 +242,10 @@ func (c *runConnection) RemoveRun(ctx context.Context, id string) {
 	}
 	c.run.event("remove")
 	c.Remove(ctx, id)
+	if _, status := c.Inspect(ctx, id); status == port.NotFound {
+		clear(c.run.CredentialAcquired)
+		c.run.CredentialAcquired = nil
+	}
 }
 func (c *runConnection) Signal(ctx context.Context, id, signal string) port.Outcome {
 	if c.isProxy(id) {
@@ -213,10 +268,14 @@ func (c *runConnection) Signal(ctx context.Context, id, signal string) port.Outc
 	c.engine.Resources[id] = o
 	return ""
 }
-func (a runAttachment) Drain(ctx context.Context) port.Outcome {
+func (a *runAttachment) Drain(ctx context.Context) port.Outcome {
 	a.run.event("drain")
 	if a.run.DrainUntilCancel {
 		<-ctx.Done()
+	}
+	select {
+	case <-a.outputDone:
+	case <-ctx.Done():
 	}
 	a.run.DrainContextErr = ctx.Err()
 	if ctx.Err() != nil {
@@ -227,8 +286,8 @@ func (a runAttachment) Drain(ctx context.Context) port.Outcome {
 	}
 	return a.run.DrainFailure
 }
-func (a runAttachment) Close() { a.run.event("detach") }
-func (a runAttachment) Failures() <-chan port.Outcome {
+func (a *runAttachment) Close() { a.run.event("detach") }
+func (a *runAttachment) Failures() <-chan port.Outcome {
 	if a.run.StdinFailures != nil {
 		return a.run.StdinFailures
 	}

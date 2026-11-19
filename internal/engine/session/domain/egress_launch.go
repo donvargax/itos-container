@@ -128,7 +128,7 @@ func verifyLiveProxy(ctx context.Context, r port.Record, b port.Binding, c port.
 }
 func verifyEgressStart(ctx context.Context, i port.Intent, c port.RunConnection) port.Outcome {
 	r := i.Record()
-	if r.Schema != 3 {
+	if !r.HasEgress() {
 		return ""
 	}
 	if f := verifyLiveProxy(ctx, r, i.Binding(), c); f != "" {

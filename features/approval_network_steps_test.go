@@ -98,6 +98,13 @@ func approvalLongName(last int) string {
 
 func (w *world) approvalNetworkRequest(version int, names []string) error {
 	w.approval.policyVersion, w.approval.allow = version, names
+	// Ordinary review now observes the proxy prerequisites too. Keep explicit
+	// egress fault fixtures intact; only extend the earlier review fixture.
+	if names != nil && w.doctor.engine.egress == nil {
+		if err := w.localEgressFixture(); err != nil {
+			return err
+		}
+	}
 	if err := w.approvalNetworkFile(names); err != nil {
 		return err
 	}

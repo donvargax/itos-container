@@ -219,7 +219,7 @@ func (w *world) offlineExactConfiguration(config, host map[string]any) error {
 	wantHost := map[string]any{
 		"NetworkMode": "none", "ReadonlyRootfs": true, "CapDrop": []any{"ALL"}, "SecurityOpt": []any{"no-new-privileges"}, "PidsLimit": float64(4096),
 		"IpcMode": "private", "CgroupnsMode": "private", "Init": false, "LogConfig": map[string]any{"Type": "none", "Config": nil},
-		"Tmpfs": map[string]any{"/tmp": "rw,nosuid,nodev,mode=1777"},
+		"Tmpfs": map[string]any{"/tmp": "rw,exec,nosuid,nodev,mode=1777"},
 	}
 	for key, value := range wantHost {
 		if !reflect.DeepEqual(host[key], value) {

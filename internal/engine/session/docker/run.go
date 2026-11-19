@@ -17,9 +17,11 @@ import (
 
 	budget "github.com/donvargax/itos-container/internal/engine/budget/domain"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
+	terminal "github.com/donvargax/itos-container/internal/engine/terminal/port"
 )
 
 type runConnection struct {
+	terminal    terminal.Dimensions
 	proxyConfig *container.Config
 	proxyRecord port.Record
 	*connection
@@ -36,10 +38,17 @@ func (e Engine) OpenRun(ctx context.Context, b port.Binding) (port.RunConnection
 }
 
 func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []string) (string, port.Outcome) {
-	if (r.Schema == 3) != (c.binding.Egress != (port.EgressGrant{})) {
+	if !r.ValidHome(c.binding) {
+		return "", port.HomeRefused
+	}
+	if !r.ValidCredentials(c.binding) || r.Schema == 4 && !r.Credentials.Ready() {
+		return "", port.CredentialRefused
+	}
+
+	if r.HasEgress() != (c.binding.Egress != (port.EgressGrant{})) {
 		return "", port.Refused
 	}
-	if (r.Schema != 2 && r.Schema != 3) || !r.ValidAnchor(c.binding) || r.Anchor.Stage != "owned" {
+	if (r.Schema != 2 && r.Schema != 3 && r.Schema != 4) || !r.ValidAnchor(c.binding) || r.Anchor.Stage != "owned" {
 		return "", port.MountRefused
 	}
 	if !c.pin.Unchanged() {
@@ -75,8 +84,12 @@ func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []str
 		env["NO_PROXY"], env["no_proxy"] = "localhost,127.0.0.1,::1", "localhost,127.0.0.1,::1"
 	}
 	environment := environment(image.Config.Env, env)
+	if c.binding.Home {
+		environment = homeEnvironment(environment)
+	}
 	pids, init := int64(4096), false
 	config := &container.Config{
+		Tty:   c.terminal.Valid(),
 		Image: r.ImageID, User: r.UID + ":" + r.GID, WorkingDir: c.binding.Workspace,
 		Cmd: slices.Clone(argv), Entrypoint: []string{}, Env: environment,
 		AttachStdin: true, AttachStdout: true, AttachStderr: true, OpenStdin: true, StdinOnce: true,
@@ -84,14 +97,24 @@ func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []str
 		Labels:      map[string]string{"io.itos-container.intent": r.NameToken(), "io.itos-container.project": r.Project, "io.itos-container.fingerprint": r.Fingerprint},
 	}
 	host := &container.HostConfig{
+		ConsoleSize: [2]uint{uint(c.terminal.Rows), uint(c.terminal.Columns)},
 		NetworkMode: "none", ReadonlyRootfs: true, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges"},
 		Resources: container.Resources{PidsLimit: &pids}, RestartPolicy: container.RestartPolicy{Name: "no"},
 		IpcMode: "private", CgroupnsMode: "private", Init: &init, LogConfig: container.LogConfig{Type: "none"},
 		Mounts: []mount.Mount{{Type: mount.TypeVolume, Source: r.Anchor.Name, Target: "/workspace", VolumeOptions: &mount.VolumeOptions{NoCopy: true}}},
-		Tmpfs:  map[string]string{"/tmp": "rw,nosuid,nodev,mode=1777"},
+		// Moby prepends noexec to every tmpfs option list and only a later
+		// exec token overrides it (daemon/oci_linux.go, MergeTmpfsOptions),
+		// so the approved executable /tmp must name exec explicitly.
+		Tmpfs: map[string]string{"/tmp": "rw,exec,nosuid,nodev,mode=1777"},
 	}
-	if r.Schema == 3 {
+	if r.HasEgress() {
 		host.NetworkMode = container.NetworkMode(r.Egress.Internal.Name)
+	}
+	if c.binding.Home {
+		host.Mounts = append(host.Mounts, mount.Mount{Type: mount.TypeVolume, Source: r.Home.Name, Target: "/home/itos", VolumeOptions: &mount.VolumeOptions{NoCopy: true}})
+	}
+	for _, credential := range r.Credentials.Mounts() {
+		host.Mounts = append(host.Mounts, mount.Mount{Type: mount.TypeBind, Source: credential.Source, Target: credential.Target, ReadOnly: true})
 	}
 	result, err := c.api.ContainerCreate(call, client.ContainerCreateOptions{Name: r.Name, Config: config, HostConfig: host, NetworkingConfig: networking})
 	if err != nil || !c.pin.Unchanged() || !port.HexID(result.ID) {
@@ -136,13 +159,14 @@ func (c *runConnection) VerifyRun(ctx context.Context, id string, argv []string)
 	}
 	if c.expected == nil || !slices.Equal(r.Config.Cmd, argv) || !slices.Equal(r.Config.Cmd, c.expected.Cmd) ||
 		len(r.Config.Entrypoint) != 0 || r.Config.User != c.expected.User || r.Config.WorkingDir != c.expected.WorkingDir ||
-		!sameEnvironment(r.Config.Env, c.expected.Env) || r.Config.Tty || !r.Config.OpenStdin || !r.Config.StdinOnce ||
+		!sameEnvironment(r.Config.Env, c.expected.Env) || r.Config.Tty != c.expected.Tty || !r.Config.OpenStdin || !r.Config.StdinOnce ||
+		r.HostConfig.ConsoleSize != [2]uint{uint(c.terminal.Rows), uint(c.terminal.Columns)} ||
 		len(r.Config.Volumes) != 0 || r.Config.Healthcheck == nil || !slices.Equal(r.Config.Healthcheck.Test, []string{"NONE"}) ||
 		r.State.Status != "created" || r.State.Running || r.State.Pid != 0 || (r.State.StartedAt != "" && r.State.StartedAt != "0001-01-01T00:00:00Z") ||
-		!safeWorkerHost(r.HostConfig, c.record) || !safeMounts(r.Mounts, c.record.Anchor.Name) {
+		!safeHomeWorkerHost(r.HostConfig, c.record) || !safeHomeMounts(r.Mounts, c.record) {
 		return port.IsolationUnverified
 	}
-	if c.record.Schema == 3 {
+	if c.record.HasEgress() {
 		if !egressEndpoints(r.NetworkSettings, map[string]string{c.record.Egress.Internal.Name: c.record.Egress.Internal.ID}) {
 			return port.IsolationUnverified
 		}
@@ -168,44 +192,76 @@ func sameEnvironment(a, b []string) bool {
 	return slices.Equal(a, b)
 }
 
-func safeHost(h *container.HostConfig, root string) bool {
+func safeHost(h *container.HostConfig, root string, credentials ...port.CredentialMount) bool {
 	if h.NetworkMode != "none" || !h.ReadonlyRootfs || h.Privileged || h.AutoRemove || h.PublishAllPorts ||
 		len(h.CapAdd) != 0 || !slices.Equal(h.CapDrop, []string{"ALL"}) || len(h.GroupAdd) != 0 ||
 		h.PidsLimit == nil || *h.PidsLimit != 4096 || h.RestartPolicy.Name != "no" ||
 		h.PidMode != "" || h.IpcMode != "private" || h.UTSMode != "" || h.UsernsMode != "" || h.CgroupnsMode != "private" ||
 		len(h.Devices) != 0 || len(h.DeviceRequests) != 0 || len(h.DeviceCgroupRules) != 0 || len(h.PortBindings) != 0 ||
 		len(h.Binds) != 0 || len(h.VolumesFrom) != 0 || len(h.Links) != 0 || len(h.ExtraHosts) != 0 ||
-		len(h.Sysctls) != 0 || h.Init == nil || *h.Init || h.LogConfig.Type != "none" || len(h.Mounts) != 1 ||
-		len(h.Tmpfs) != 1 || h.Tmpfs["/tmp"] != "rw,nosuid,nodev,mode=1777" {
+		len(h.Sysctls) != 0 || h.Init == nil || *h.Init || h.LogConfig.Type != "none" || len(h.Mounts) != 1+len(credentials) ||
+		len(h.Tmpfs) != 1 || h.Tmpfs["/tmp"] != "rw,exec,nosuid,nodev,mode=1777" {
 		return false
 	}
 	if len(h.SecurityOpt) != 1 || (h.SecurityOpt[0] != "no-new-privileges" && h.SecurityOpt[0] != "no-new-privileges=true") {
 		return false
 	}
-	return safeAnchorMount(h.Mounts[0], root)
+	seen := map[string]bool{}
+	anchor := false
+	for _, m := range h.Mounts {
+		if safeVolumeMount(m, root, "/workspace") && !anchor {
+			anchor = true
+			continue
+		}
+		matched := false
+		for _, credential := range credentials {
+			if !seen[credential.Kind] && safeCredentialMount(m, credential) {
+				seen[credential.Kind] = true
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return anchor && len(seen) == len(credentials)
 }
 
-func safeAnchorMount(m mount.Mount, root string) bool {
-	return root != "" && m.Type == mount.TypeVolume && m.Source == root && m.Target == "/workspace" && !m.ReadOnly &&
+func safeVolumeMount(m mount.Mount, source, target string) bool {
+	return source != "" && m.Type == mount.TypeVolume && m.Source == source && m.Target == target && !m.ReadOnly &&
 		m.BindOptions == nil && m.VolumeOptions != nil && m.VolumeOptions.NoCopy && m.VolumeOptions.Subpath == "" &&
 		m.VolumeOptions.DriverConfig == nil && len(m.VolumeOptions.Labels) == 0
 }
 
-func safeMounts(mounts []container.MountPoint, root string) bool {
-	bind, tmp := false, false
+func safeMounts(mounts []container.MountPoint, root, homeName string, credentials ...port.CredentialMount) bool {
+	seen := map[string]bool{}
+	bind, tmp, home := false, false, false
 	for _, m := range mounts {
 		switch {
 		case m.Type == mount.TypeVolume && m.Name == root && m.Driver == "local" && m.Destination == "/workspace" && m.RW && (m.Propagation == "" || m.Propagation == mount.PropagationRPrivate) && !bind:
 			bind = true
+		case homeName != "" && !home && m.Destination == "/home/itos" && m.Type == mount.TypeVolume && m.Name == homeName && m.Driver == "local" && m.RW && (m.Propagation == "" || m.Propagation == mount.PropagationRPrivate):
+			home = true
 		case m.Type == mount.TypeTmpfs && m.Destination == "/tmp" && !tmp:
 			tmp = true
 		default:
-			return false
+			matched := false
+			for _, credential := range credentials {
+				if !seen[credential.Kind] && m.Type == mount.TypeBind && m.Source == credential.Source && m.Destination == credential.Target && !m.RW && m.Name == "" && m.Driver == "" && (m.Propagation == "" || m.Propagation == mount.PropagationRPrivate) {
+					seen[credential.Kind] = true
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				return false
+			}
 		}
 	}
 	// Docker represents HostConfig.Tmpfs separately on some API versions. The
 	// exact tmpfs options are always verified in HostConfig before start.
-	return bind
+	return bind && home == (homeName != "") && len(seen) == len(credentials)
 }
 
 type attachment struct {
@@ -216,10 +272,23 @@ type attachment struct {
 	failure  port.Outcome
 }
 
+// terminalDetachKeys pins the escape sequence the daemon applies to a TTY
+// attach's input. The daemon cannot disable that handling: an absent value
+// keeps Docker's default ctrl-p,ctrl-q, which it swallows as a detach while
+// dropping the attach, so those workload bytes would never arrive. This exact
+// byte sequence is the one input run cannot forward; it deliberately begins
+// with a byte no workload control-key exchange sends, and everything else,
+// Docker's default included, reaches the worker unchanged.
+const terminalDetachKeys = "ctrl-^,ctrl-_,ctrl-^,ctrl-_,ctrl-^,ctrl-_,ctrl-^,ctrl-_"
+
 func (c *runConnection) Attach(ctx context.Context, id string, streams port.Streams) (port.Attachment, port.Outcome) {
 	call, cancel := c.call(ctx)
 	defer cancel()
-	response, err := c.api.ContainerAttach(call, id, client.ContainerAttachOptions{Stream: true, Stdin: true, Stdout: true, Stderr: true})
+	options := client.ContainerAttachOptions{Stream: true, Stdin: true, Stdout: true, Stderr: true}
+	if c.terminal.Valid() {
+		options.DetachKeys = terminalDetachKeys
+	}
+	response, err := c.api.ContainerAttach(call, id, options)
 	if err != nil {
 		return nil, port.ExecutionFailed
 	}
@@ -242,7 +311,12 @@ func (c *runConnection) Attach(ctx context.Context, id string, streams port.Stre
 		if streams.Err != nil {
 			errout = streams.Err
 		}
-		_, err := stdcopy.StdCopy(out, errout, response.Reader)
+		var err error
+		if c.terminal.Valid() {
+			_, err = io.Copy(out, response.Reader)
+		} else {
+			_, err = stdcopy.StdCopy(out, errout, response.Reader)
+		}
 		if err != nil {
 			a.fail()
 		}

@@ -246,10 +246,15 @@ receive a Docker socket and never run the engine tier locally or spoof the CI co
 `TestEngineWorkflow` and `TestEngineFixtureWorkflow` parse the workflow and reject broken
 fixtures without executing Docker. The latter also checks the pinned recipe and helper guards.
 
-Since T-45 the engine tier runs in three engine shards, the matrix of the `engine-shard` job in
-`.github/workflows/ci.yml`: **offline** (`offline.feature`), **lifecycle** (`lifecycle.feature`,
-whose four `ID-LIFECYCLE-09` rows stay nested in `ID-LIFECYCLE-13`'s quiet row) and **other**
-(every other feature with an engine case). A shard is a job of whole feature files on its own
+Since T-45 the engine tier runs in engine shards, the matrix of the `engine-shard` job in
+`.github/workflows/ci.yml`: **offline** (`offline.feature` and `harness-home.feature`),
+**lifecycle** (`lifecycle.feature`, whose four `ID-LIFECYCLE-09` rows stay nested in
+`ID-LIFECYCLE-13`'s quiet row), **other**
+(`anchors.feature`, `checkout-overlap.feature`, `doctor.feature`, `hardlinks.feature`,
+`recovery.feature`, `run_terminal.feature`, `session.feature` and `sockets.feature`) and,
+since T-59, **egress** (`egress.feature`, moved whole from other after that shard's
+measured step passed 180 seconds). Slice-28's `egress_lifecycle.feature` joins egress
+when that branch merges. A shard is a job of whole feature files on its own
 native `ubuntu-latest` runner and daemon, with its own checkout of the exact `${{ env.TO }}`
 head, preflight, fixture preparation and cleanup. Nothing crosses runners, `fail-fast` is off
 so a red shard hides no other, and no feature is ever split. Each runs on main pushes,
@@ -287,14 +292,25 @@ shard's selection. The `ITOS_CONTAINER_ENGINE_` prefix keeps it from product chi
 harness subprocesses, as for the switch.
 
 `TestEngineShards` holds all of this without an engine. Its workflow subtest parses the actual
-workflow; its partition subtest selects each shard over the real feature files and requires
-each shard's rows and IDs to be the unsharded selection's in its files, the three together the
-whole tier exactly once, every feature with an engine case in exactly one shard, and
-`ID-LIFECYCLE-09` and `-13` in the lifecycle shard; its selector subtest runs fixture
-features with memory-only steps; and its broken-workflows subtest refuses a dropped, doubled,
-unknown or path-named feature, an empty or fourth shard, a weakened aggregate, a gate that
-accepts another result, `continue-on-error`, `fail-fast: true`, the feature input at job
-level and a second engine switch.
+workflow, names exactly the four shards and pins each shard's complete file set — offline
+its two files, lifecycle its one, other its seven, and egress `egress.feature`, plus
+`egress_lifecycle.feature` once the inventory has it, never the inventory's leftover — whatever
+each list's order or whitespace, so a file moved whole between shards fails even when every file
+still runs exactly once; its partition subtest selects
+each shard over the real feature files and requires each shard's rows and IDs to be the
+unsharded selection's in its files, the four together the whole tier exactly once, every
+feature with an engine case in exactly one shard, and `ID-LIFECYCLE-09` and `-13` in the
+lifecycle shard; its selector subtest
+runs fixture features with memory-only steps; its multiline egress report subtest formats an
+in-memory egress entry whose YAML literal block names `egress_lifecycle.feature` and
+`egress.feature` and requires the same one-line report the real partition logs to end with
+both files. The not-yet-listed egress file subtest checks that adding an unassigned file to
+the inventory cannot place it in egress. The broken-workflows subtest refuses a dropped, doubled,
+unknown or path-named feature, an empty or fifth shard, the old three-shard layout, a file
+swapped between egress and other, an unrelated file in the egress shard, a file moved whole
+from other into offline or lifecycle, a weakened
+aggregate, a gate that accepts another result, `continue-on-error`, `fail-fast: true`, the
+feature input at job level and a second engine switch.
 
 A read-only server preflight targets `unix:///var/run/docker.sock`, clearing caller-selected
 Docker host/context and TLS/API overrides. Missing CLI/socket, denied access, daemon failure,
@@ -542,10 +558,21 @@ binary's four-minute timeout. T-41 lengthened nothing the engine step runs: befo
 14, at 164 to 196 and 212 to 245. Nothing measured points at one step; the spread reads as
 runner speed. T-33's rule applied: the
 measured unsharded step exceeded 240 seconds, so whole-feature shards on separate native
-runners with an exact parsed-example partition check. Offline holds 24 examples, lifecycle 19
-and other 32, of which 12 are `ID-SOCKETS-01` refusals before any worker exists. An estimate
+runners with an exact parsed-example partition check. T-45 originally assigned 24 examples
+to offline, 19 to lifecycle and 32 to other, of which 12 are `ID-SOCKETS-01` refusals before
+any worker exists. T-59's
+measured move (171.2 s in the other shard at `83e4bc1`, run 43837945423, after 143.9 s at
+`a36768a` and 111 s and 90 s before slice-27's eight egress rows went live) took the whole
+`egress.feature`, its eight rows, into a fourth shard of its own. An estimate
 from those shares and a cold compile, not a measurement, puts the slowest shard between two
 and two and a half minutes on the slowest runner seen.
+
+For slice-34, the coordinator's 2026-11-16 observations put offline at 31 to 40 seconds,
+lifecycle at 43 to 110 and other at 90 to 140. The whole home feature went to offline,
+which had room under the 180-second gate. Its nine live home rows bring offline to 33
+examples. `TestEngineShards` also checks that manual selection of all four home IDs
+selects those nine rows in offline alone. Slice-37 adds 15 terminal rows to other,
+bringing that shard to 47 examples.
 
 The loop records each shard's step time from the public job metadata and, from its log, the
 runner image (`/etc/os-release`) and the preflight's Docker version, so a later image change
@@ -554,7 +581,7 @@ times that show the need. In the prepared CI tier only, the coordinator measures
 with:
 
 ```sh
-for features in offline.feature lifecycle.feature 'anchors.feature checkout-overlap.feature doctor.feature hardlinks.feature recovery.feature session.feature sockets.feature'; do
+for features in 'offline.feature harness-home.feature' lifecycle.feature 'anchors.feature checkout-overlap.feature doctor.feature hardlinks.feature recovery.feature run_terminal.feature session.feature sockets.feature' egress.feature; do
   env -u ITOS_CONTAINER_RED_SCENARIOS ITOS_CONTAINER_ENGINE_TESTS=1 ITOS_CONTAINER_ENGINE_FEATURES="$features" timeout --signal=TERM --kill-after=5s 180s setsid --wait go test ./features -count=1 -v -run '^TestFeatures$' -timeout=4m
 done
 ```
@@ -669,7 +696,7 @@ BusyBox is a fixture, not the pilot's full agent toolchain; additional contents 
 own behaviour specification.
 
 The preparation protocol is bounded to 180 seconds, including pulls, build, push, pull,
-smoke and warm-up, with a separate 30-second cleanup attempt on failure. It performs these checks:
+smoke and both warm-ups, with a separate 30-second cleanup attempt on failure. It performs these checks:
 
 1. Create one uniquely named registry, recording its ID and attempt identity outside the
    checkout under `RUNNER_TEMP`. Publish container port 5000 on an allocated **127.0.0.1** port,
@@ -706,31 +733,121 @@ smoke and warm-up, with a separate 30-second cleanup attempt on failure. It perf
    numeric non-root UID/GID, with no host mount, published port or declared volume. Do not start
    or exec this container. Before removal, check its recorded name, immutable built image ID,
    owner label and allowed mounts as for smoke; after removal, require exact absence, never
-   an inspection transport failure. Only after this succeeds publish `image`, `image_id`,
-   `uid` and `gid` together as step outputs.
+   an inspection transport failure.
+7. Follow the plain warm-up with exactly one product-shaped create/remove from `build.iid`,
+   the same validated prepared image by immutable ID. The shared definitions-only warm-up
+   library constructs the offline `CreateRun` wire body: empty entrypoint, benign `/bin/true`
+   argv, `/workspace` working directory, image environment with `HOME` and `TMPDIR` overlaid
+   to `/tmp`, numeric fixture UID/GID, attached stdin/stdout/stderr, open stdin, stdin once,
+   no TTY and healthcheck `NONE`. Preserve the SDK's other serialized fields. HostConfig uses
+   network none, read-only root, cap-drop ALL, no-new-privileges, PID limit 4096, restart no,
+   private IPC/cgroup namespaces, init false, logging none, and `/tmp` tmpfs with
+   `rw,exec,nosuid,nodev,mode=1777`. Its sole read-write workspace mount is a named local volume
+   with `NoCopy=true`, matching the product's checkout anchor rather than an anonymous
+   volume or direct bind. Allocate that volume with `type=none`, `o=bind` and a source through
+   a held `/proc/<pid>/fd/<fd>` directory descriptor at a fresh empty attempt-owned directory
+   under `RUNNER_TEMP`, outside both repository and fixture state. The supervisor holds the
+   descriptor through the bounded child and failure cleanup. Synthetic intent/project/
+   fingerprint and anchor session/device/inode/kind labels preserve the product's label
+   structure; both resources also carry the fixture owner. The create uses curl with config
+   and proxies disabled, only the local Unix Engine API socket, HTTP success checking and
+   full returned-ID validation. It never starts or execs the container.
 
-T-54 bounds the entire extra create, ownership inspection, removal and absence verification
-to ten seconds: coreutils timeout sends TERM at nine seconds and KILL one second later.
+   Refuse preexisting names before recording distinct `product.intent` and
+   `product-volume.intent` acquisition intents, and record the returned container ID in
+   `product.cid`. Record the held source and its device/inode before acquisition. Before
+   removal, require the container's exact name/image/labels and workspace volume/tmpfs
+   mounts, and the volume's exact name/labels/local driver/source/options. These checks are
+   separate from the unchanged tmpfs-only checks for registry, smoke and plain warm-up.
+   Remove and verify exact absence of the container before the volume. Transport and
+   permission failures never count as absence; foreign identity never authorizes removal.
+   Only after both warm-ups pass publish `image`, `image_id`, `uid` and `gid` together as
+   the sole step-output append.
+
+T-54 and T-55 bound each complete warm-up, including ownership inspection, removal and absence
+verification, to ten seconds: coreutils timeout sends TERM at nine seconds and KILL one second later.
 The shared [warm-up timing library](../tools/lib/engine-fixture-warmup.sh) measures monotonic
 Linux uptime outside that timeout child, through removal verification and before any failure
-cleanup. Each attempt emits one `engine warm-up timing: duration_ms=<integer> outcome=passed|failed`
-line. An unavailable or backwards clock uses `duration_ms=unknown` and fails preparation.
-Command, timeout, identity, removal-verification and timing-output failures also fail preparation
-with an `engine-fixture: warm-up` diagnostic and publish no fixture outputs. Timeout diagnostics
-name the ten-second bound. The existing failure trap and final `always()` cleanup both attempt
-the recorded warm-up resource as well as the other resources; an interrupted create without a
-CID is recovered only by the recorded name, image ID and owner label. Cleanup still tries the
-remaining resources and preserves the original preparation failure.
+cleanup. The product phase includes anchor allocation and teardown in its own bound and timing.
+Successful preparation prints exactly two lines in order:
 
-This phase runs before the first engine row in each of the offline, lifecycle and other shard
-jobs. It changes no product, fixture-call, startup or workflow limit, assertion or row selection,
-and adds no retry. Ordinary `TestEngineFixtureWarmup` regressions check executable source wiring
-and the same timing/timeout functions with harmless commands; they supply no runtime engine
-evidence. The coordinator must retain each pushed shard's tested SHA, warm-up duration and
-existing step/row timings, successful first rows and complete live selection, and final cleanup
-verdict. The Engine scenarios step still has its 180-second gate. One green run does not rule
-out future latency failures: if a first row still times out, report its warm-up duration,
-arrival-to-forward, forward-to-answer and controller-start intervals and stop for the coordinator.
+```text
+engine warm-up timing: duration_ms=<integer> outcome=passed
+engine product warm-up timing: duration_ms=<integer> outcome=passed
+```
+
+Each attempted phase prints exactly one truthful `passed` or `failed` outcome. Stop on the
+first failure, without inventing a timing for an unrun phase. An unavailable or backwards clock
+uses `duration_ms=unknown` and fails preparation.
+Command, timeout, identity, removal-verification and timing-output failures also fail preparation
+with an `engine-fixture: warm-up` diagnostic identifying plain or product and publish no fixture
+outputs. Timeout diagnostics name the ten-second bound. The existing failure trap and final
+`always()` cleanup both attempt the plain container, product container and anchor as well as the other resources; an interrupted
+create without a CID is recovered only by the recorded name, image ID, labels and permitted
+mounts. Cleanup still tries the remaining resources, preserves the original preparation failure
+and retains ownership records when incomplete. It never prunes or deletes shared images.
+
+Both phases run once before the first engine row in each of the offline, lifecycle, other and
+egress shard
+jobs. They change no product, fixture-call, startup or workflow limit, assertion or row selection,
+and add no retry. Ordinary `TestEngineFixtureWarmup`, `TestEngineFixtureWarmupProduct` and
+`TestEngineFixtureWorkflow` regressions check executable wiring, decoded request and data-only
+ownership fixtures, and the same timing/timeout functions with harmless commands; they supply
+no runtime engine evidence. The coordinator retains each pushed shard's tested SHA, both
+warm-up durations, existing step/row timings, complete live selection and final cleanup verdict.
+The Engine scenarios step still has its 180-second gate. The T-57 decision below supersedes
+the earlier instruction to stop and choose limits when a first row still times out.
+No fixture budget, assertion, retry or skipped row changes as part of these warm-ups.
+
+T-57 adds one launch inside each suite process, after selection admits engine rows and before
+any row setup or resource snapshot. `TestFeatures` enters `runPreparedFeatures`, which retains
+the first warm-up attempt and its result, including failure. The nested quiet-worker schedule
+and repeated suite invocations cannot repeat it. Disabled, invalid and empty selections do not
+prepare a warm-up. The native factory remains behind the engine-tier and `doctorRealGuard`
+checks; ordinary regressions substitute a disposable protocol endpoint without enabling Docker.
+
+The suite builds the original checkout in a separate temporary directory, including the
+account-home test assembly, so both carry the production 10/120/10-second limits. There is no
+`T-33-engine-tree` sibling to redirect that assembly to the shortened fixture. It seeds synthetic
+approval and isolated account/control state, independently validates the same fixture image and
+numeric identity used by rows, and invokes `run -- /bin/true` through the actual `offlineAPI`
+recorder. Stdin remains open until the controller exits. Product/assembly compilation has a
+60-second bound; invocation uses the existing 45-second watchdog. Recorder draining retains the
+10-second create-outcome allowance, and owned cleanup uses the existing 30-second allowance.
+The actual rows retain their 1/3/1-second budgets and existing selection, assertions and outcomes.
+
+On every attempted launch, including partial failures, the suite joins the controller and
+recorder, accounts for late create replies, and uses the existing full-identity checks to remove
+and independently verify absence of its worker and anchor. Unrelated objects and the shared image
+remain untouched. Socket, checkout, state, build and private coverage directories are disposed
+after their owners finish. Setup, build, invocation, recorder, timing and cleanup failures stop
+the suite before any scenario runs, with an `engine suite warm-up:` stage diagnostic. Original
+failures survive alongside cleanup failures. The phase prints one physical line:
+
+```text
+engine suite warm-up timing: arrival_ns=<n|missing> forwarded_ns=<n|missing> answer_ns=<n|missing> forward_to_answer_ns=<n|missing> outcome=<passed|failed>
+```
+
+The three offsets come from the single create journal entry relative to the monotonic origin
+immediately before controller start. The interval is `Answered - Forwarded`, not subprocess
+duration or controller reply time. Success requires ordered nonnegative timestamps, HTTP 201,
+an uncancelled create, workload completion and verified cleanup. Missing or duplicate creates,
+unordered observations and output errors fail the phase. No request body, approval, environment
+or host path enters that line. T-54/T-55 and the existing scenario/suite timing lines stay;
+warm-up elapsed time contributes to the suite/step but adds no selected or completed scenario.
+
+Either coverage input still requests instrumentation. Warm-up counters go to a private disposable
+directory outside both collected destinations, with no scenario ID or per-ID entry. The caller's
+inputs and subsequent worlds' destinations are unchanged. `TestEngineSuiteWarmup` exercises the
+same build/preparation/launch path against a stateful local endpoint, including failure retention,
+nested scheduling, late answers, cleanup refusal, exact journal intervals, output failures,
+compiled production limits and plain/aggregate/per-ID coverage isolation. The neighbouring
+`TestEngineSuiteBudget` still proves the rows' compiled 1/3/1-second limits.
+
+This local evidence proves the mechanism. The coordinator reads all three warm-up timing lines
+and the subsequent first-row create intervals after landing. A still-slow first create is for
+the coordinator to act on; successful first rows are not required as T-57's local acceptance
+evidence, and do not authorize changing a limit, assertion, retry or selected row.
 
 T-34 makes failures from the push through output publication name their stage and expected
 and observed values. The shared [validation functions](../tools/lib/engine-fixture-checks.sh)
@@ -1211,6 +1328,68 @@ and assertion-level red for all 49 rows. The combined implementation passes thos
 rows and the 25 local OFFLINE anchor rows. Fresh-process recovery is part of
 slice-17 under q-36/q-38; schema-2 status and stop account for the original anchor.
 Native green at the actual pushed head remains the coordinator's CI obligation.
+
+Slice-27's step checkpoint defines the twelve non-engine scenarios of `egress.feature`
+(`ID-EGRESS-01` to `-11` and `-20`). `an egress-capable local Engine API fixture` extends the
+recorded HTTP Engine API fixture with T-40's two networks, the proxy's stdout-ready record
+and exit, and a second, independent image response for the pinned proxy reference; its
+daemon is 28.0.0 with API 1.48, and the proxy image's config ID differs from the worker's.
+The fixture checks every create, start and removal against the protected intent the product
+must have written first, and keeps a mismatch for the Then steps. It executes no workload,
+proxy or helper. `no engine mutation or image acquisition was attempted` also permits, for
+an allowlist fixture only and only where image inspection is permitted, the plain inspection
+of that pinned reference. `ID-EGRESS-07` reaches the observation adapter through
+`TestEgressExecutableContractProbe` in the test assembly, with ELF inputs the scenario
+writes and `TestEgressSyntheticELFCarriesExactlyItsProperty` reads back independently.
+`ID-EGRESS-03` and `-20` run a copy of the built assembly from inside their checkout.
+`ID-EGRESS-09` seeds both original sessions itself, including the egress session's runtime
+evidence at `intents/<project>/<token>.egress.json` (`{"proxy_image_id":…,"schema":1}`).
+
+With `@wip` removed for the run only, all 43 rows failed at their first Then on 2026-11-13;
+the failing assertions are in the checkpoint's hand-back. `ID-EGRESS-07` subsequently went
+live with its readiness rule and ELF adapter. Slice-27 now removes the remaining work-in-progress
+tags and wires the inspector, runtime handoff, hidden proxy and real refusal-log writer.
+The local egress, approval, policy and run selection passes. Native green remains the
+coordinator's CI obligation; local fixtures cannot establish a network boundary.
+
+The eight real-engine scenarios, `ID-EGRESS-12` to `-19`, have accepted first-Then red at
+5478523 in CI run 43531516406. Every Given and When passed. `TestEgressNativeStepsDefined` holds every one of their steps to exactly
+one definition. Their Givens provision only trusted controls: a private checkout and state, a
+synthetic approval, the worker probe (`testdata/slice-27/probe`) and TLS endpoints
+(`testdata/slice-27/endpoint`) in fixture containers on `11.22.33.0/24`, `fd27:27::/64` and,
+for the private case, `192.168.227.0/24`. An endpoint generates its key in memory and
+publishes only certificates and receipts; a receipt is written for every exchange and for
+every connection, with its byte count. The product runs against the engine's own socket with
+no recorder. The worker stops at a barrier file in its checkout, where the harness inspects
+the product's resources by their labels and attaches the proxy to the fixture networks,
+recording that attachment apart; it never touches the worker or the product's two networks.
+Independent controls are the harness's own verified exchanges with each endpoint, before and
+after the run. `TestEgressTrustedProgramsExchangeWithoutAnEngine` runs both programs against
+each other through a stand-in proxy and has the standard library parse the crafted
+ClientHellos. The proxy container runs the same test assembly, whose `TestMain` hands
+`__egress-proxy` to the product's entry point.
+
+`ID-EGRESS-15` and `-16`, the route and DNS scenarios, reuse slice-14's control unchanged: its
+listener and resolver container on its own internal network (`172.30.14.0/24`,
+`fd14:14::/64`), holding the private, metadata and loopback destinations in its own
+namespace, with its host listeners and its nonce-and-receipt protocol. The egress fixture
+adds routes to that inventory before the control starts (`extraRoutes`): a host service
+bound to every IPv4 address, TCP and UDP on 443 and an alternate loopback address. The
+worker's attempts are made by slice-14's client, which the slice-27 probe starts inside the
+worker once before its barrier and once after, so the first phase runs while the proxy has
+no fixture network and the second after the harness has also attached the proxy to the
+control's network: a proxy that forwarded would then have a route. The probe adds what that
+client has no operation for, each ignoring the proxy variables: a direct TLS exchange with
+the allowed endpoint's address, a datagram shaped as a QUIC version 1 Initial, plain
+exchanges with other ports of the proxy's own address, non-CONNECT requests to the proxy,
+and DNS over TCP to Docker's embedded resolver for an alias on the control's network. Its
+positive controls run the same probe inside the control's namespace with other nonces. A
+worker attempt passes only if it was made and got no answer, and no listener, resolver or
+endpoint holds its nonce; Docker's own resolver may refuse a name without a transport
+error, every other route must fail. `TestEgressProbeReportsAReachableRouteAsReached` runs
+each of the probe's new operations against a local listener that answers and one that does
+not exist, so a denial is never the operation's own inability to report success;
+slice-14's client is not run on the host there, only a stand-in for its report.
 
 | Tag               | Meaning                                                                              |
 | ----------------- | ------------------------------------------------------------------------------------ |

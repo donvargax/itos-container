@@ -8,10 +8,14 @@ import (
 	"slices"
 	"strconv"
 
+	approval "github.com/donvargax/itos-container/internal/engine/approval/port"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 )
 
-type UI struct{ Out, Err io.Writer }
+type UI struct {
+	Out, Err    io.Writer
+	Credentials func([]approval.CredentialGrant, bool) []string
+}
 type Problem struct {
 	Rule    string `json:"rule"`
 	Exit    int    `json:"exit"`
@@ -27,7 +31,11 @@ func problem(f port.RecoveryFailure) Problem {
 	}
 	switch f.Outcome {
 	case port.Usage:
-		p.Rule, p.Exit, p.Message, p.Fix = "recovery.usage", 2, "Invalid recovery invocation.", "Use status with no positional arguments, or stop with exactly one complete lowercase 64-digit session ID."
+		p.Rule, p.Exit, p.Message, p.Fix = "recovery.usage", 2, "Invalid recovery invocation.", "Use status [--homes], stop <session-id>, or stop --home <home-id> with exactly one of --reset and --delete. IDs must be complete lowercase 64-digit hexadecimal values."
+	case port.ConsentRequired:
+		p.Rule, p.Exit, p.Message, p.Fix = "recovery.consent-required", 1, "Discarding home contents requires terminal consent.", "Review the exact home and action at a terminal, then answer y/N."
+	case port.HomeInUse:
+		p.Rule, p.Exit, p.Message, p.Fix = "recovery.home-in-use", 1, "The retained home has a protected session claim.", "Use itos container stop <session-id> with that session's original state-root selection, then request fresh home consent."
 	case port.Refused:
 		p.Rule, p.Exit, p.Message, p.Fix = "recovery.not-owned", 1, "The original session ownership could not be verified.", "Use the same effective project and host user; inspect the protected evidence without adopting other resources."
 	case port.Unsafe:
@@ -36,8 +44,11 @@ func problem(f port.RecoveryFailure) Problem {
 		p.Rule, p.Exit, p.Message, p.Fix = "recovery.invalid-state", 2, "Protected recovery state is invalid or incomplete.", "Have the host user inspect the retained original record, intent and snapshot."
 	case port.Environment, port.EnvironmentMissing:
 		p.Rule, p.Exit, p.Message, p.Fix = "recovery.environment", 3, "The supported local engine environment is unavailable.", "Restore the original Linux amd64 native Docker environment."
-	case port.Uncertain, port.Incomplete, port.IntentWrite, port.OwnershipWrite, port.CompletionWrite, port.ExecutionFailed:
+	case port.HomeUnavailable, port.Uncertain, port.Incomplete, port.IntentWrite, port.OwnershipWrite, port.CompletionWrite, port.ExecutionFailed:
 		p.Rule, p.Exit, p.Message, p.Fix = "recovery.temporary", 75, "Recovery observation or durable completion is uncertain.", "Retry inspection or stop in the same effective project when the original engine and protected state are available."
+	}
+	for _, claim := range f.HomeClaims {
+		p.Fix += " Select the original managed state root " + strconv.QuoteToASCII(claim.StateRoot) + " and run: itos container stop " + claim.Session + "."
 	}
 	return p
 }
@@ -93,11 +104,29 @@ func (u UI) Print(r port.RecoveryResult, withJSON bool) int {
 				exit = strconv.Itoa(*e.WorkloadExit)
 			}
 			_, _ = fmt.Fprintf(u.Out, "session %s project %s fingerprint %s state %s resource %s controller %s cleanup %s workload_exit %s stop_candidate %t\n", e.ID, e.Project, e.Fingerprint, e.State, e.Resource, e.Controller, e.Cleanup, exit, e.StopCandidate)
+			if len(e.Credentials) > 0 && u.Credentials != nil {
+				_, _ = fmt.Fprintf(u.Out, "session %s credential grants:\n", e.ID)
+				for _, line := range u.Credentials(e.Credentials, e.CredentialNetwork) {
+					_, _ = fmt.Fprintln(u.Out, line)
+				}
+			}
 			if e.Anchor != "" {
 				_, _ = fmt.Fprintf(u.Out, "worker resource=%s anchor=%s cleanup=%s\n", e.Resource, e.Anchor, e.Cleanup)
 			}
+			if e.Home != nil {
+				_, _ = fmt.Fprintf(u.Out, "home storage=%s state=%s name=%s\n", e.Home.Storage, e.Home.State, e.Home.Name)
+			}
 			if e.MountDetector != "" {
 				_, _ = fmt.Fprintf(u.Out, "mount_detector %s\n", e.MountDetector)
+			}
+			if e.Egress != nil {
+				_, _ = fmt.Fprintln(u.Out, "profile", e.Egress.Profile)
+				for _, name := range e.Egress.Allow {
+					_, _ = fmt.Fprintln(u.Out, "network.allow:", name)
+				}
+				for _, limitation := range e.Egress.Limitations {
+					_, _ = fmt.Fprintln(u.Out, limitation)
+				}
 			}
 			if len(e.Retry) != 0 {
 				_, _ = fmt.Fprintf(u.Out, "Use the same effective project: itos container stop %s\n", e.ID)

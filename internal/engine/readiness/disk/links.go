@@ -25,10 +25,11 @@ type fileScan struct {
 	deadline  time.Time
 	now       func() time.Time
 	readDir   func(*os.File, int) ([]os.DirEntry, error)
+	lstat     func(*os.Root, string) (fs.FileInfo, error)
 }
 
 func newFileScan() *fileScan {
-	return &fileScan{remaining: checkoutEntries, deadline: time.Now().Add(checkoutScanTime), now: time.Now, readDir: (*os.File).ReadDir}
+	return &fileScan{remaining: checkoutEntries, deadline: time.Now().Add(checkoutScanTime), now: time.Now, readDir: (*os.File).ReadDir, lstat: (*os.Root).Lstat}
 }
 
 func (s *fileScan) expired() bool { return !s.now().Before(s.deadline) }
@@ -65,7 +66,7 @@ func (s *fileScan) inspectFiles(root *os.Root, depth int, open func(*os.Root, st
 				return port.CheckoutUnavailable
 			}
 			s.remaining--
-			info, err := root.Lstat(entry.Name())
+			info, err := s.lstat(root, entry.Name())
 			if err != nil {
 				return port.CheckoutUnavailable
 			}

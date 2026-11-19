@@ -16,6 +16,7 @@ type Checkout struct {
 	Changed, Opened bool
 	Roots           []string
 	Inspections     int
+	PinnedReads     int
 	Revalidations   int
 	LinkCounts      map[string]uint64
 	Unreadable      bool
@@ -56,6 +57,14 @@ func (c *Checkout) Unchanged() bool {
 }
 func (c *Checkout) Close() { c.Opened = false }
 
+func (c *Checkout) PinnedIdentity() (port.CheckoutIdentity, port.Failure) {
+	c.PinnedReads++
+	if !c.Opened {
+		return port.CheckoutIdentity{}, port.CheckoutUnavailable
+	}
+	return c.Identity, port.None
+}
+
 // Engine records selection and budget without dialing or measuring real time.
 type Engine struct {
 	Session         *Session
@@ -74,6 +83,10 @@ func (e *Engine) Open(selection, root string, budget time.Duration) (port.Sessio
 	return e.Session, port.None
 }
 
+func (e *Engine) OpenCatalog(selection string, budget time.Duration) (port.Session, port.Failure) {
+	return e.Open(selection, "", budget)
+}
+
 // Session holds observed data independently from the domain's decisions. The
 // shared contract checks the same mapping and error outcomes on the SDK adapter.
 type Session struct {
@@ -88,6 +101,7 @@ type Session struct {
 	InfoReads                                 int
 	ImageReads                                []string
 	VersionReads, Revalidations               int
+	AfterImage                                func()
 }
 
 func (s *Session) Endpoint() string { return s.Address }
@@ -112,6 +126,9 @@ func (s *Session) Info() (port.Info, port.Failure) {
 	return s.InfoData, port.None
 }
 func (s *Session) Image(reference string) (port.Image, port.Failure) {
+	if s.AfterImage != nil {
+		defer s.AfterImage()
+	}
 	s.ImageReads = append(s.ImageReads, reference)
 	if s.ImageFailure != port.None {
 		return port.Image{}, s.ImageFailure

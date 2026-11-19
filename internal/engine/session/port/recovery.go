@@ -65,23 +65,29 @@ type RunRegistry interface {
 }
 
 type RecoveryEntry struct {
-	MountDetector string   `json:"mount_detector,omitempty"`
-	Anchor        string   `json:"anchor,omitempty"`
-	ID            string   `json:"id"`
-	Project       string   `json:"project"`
-	Fingerprint   string   `json:"fingerprint"`
-	State         string   `json:"state"`
-	Resource      string   `json:"resource"`
-	Controller    string   `json:"controller"`
-	Cleanup       string   `json:"cleanup"`
-	WorkloadExit  *int     `json:"workload_exit"`
-	StopCandidate bool     `json:"stop_candidate"`
-	Retry         []string `json:"retry"`
+	Home              *HomeDisclosure            `json:"home,omitempty"`
+	Staging           string                     `json:"staging,omitempty"`
+	Egress            *EgressDisclosure          `json:"egress,omitempty"`
+	Credentials       []approval.CredentialGrant `json:"credentials,omitempty"`
+	CredentialNetwork bool                       `json:"-"`
+	MountDetector     string                     `json:"mount_detector,omitempty"`
+	Anchor            string                     `json:"anchor,omitempty"`
+	ID                string                     `json:"id"`
+	Project           string                     `json:"project"`
+	Fingerprint       string                     `json:"fingerprint"`
+	State             string                     `json:"state"`
+	Resource          string                     `json:"resource"`
+	Controller        string                     `json:"controller"`
+	Cleanup           string                     `json:"cleanup"`
+	WorkloadExit      *int                       `json:"workload_exit"`
+	StopCandidate     bool                       `json:"stop_candidate"`
+	Retry             []string                   `json:"retry"`
 }
 type RecoveryFailure struct {
-	Gaps    []RefusalGap
-	Session string
-	Outcome Outcome
+	HomeClaims []HomeClaim
+	Gaps       []RefusalGap
+	Session    string
+	Outcome    Outcome
 }
 type RecoveryResult struct {
 	Entries  []RecoveryEntry

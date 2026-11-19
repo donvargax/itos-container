@@ -160,7 +160,7 @@ func (w *world) credentialSteps(sc *godog.ScenarioContext) {
 }
 
 func (w *world) credentialFixture() error {
-	root, err := os.MkdirTemp("/tmp", "slice-29-credentials-")
+	root, err := os.MkdirTemp("/var/tmp", "slice-29-credentials-")
 	if err != nil {
 		return err
 	}
@@ -179,6 +179,18 @@ func (w *world) credentialFixture() error {
 		if err := os.MkdirAll(path, 0o700); err != nil {
 			return err
 		}
+	}
+	account := filepath.Join(w.manifest.host, "account-home")
+	if err := os.MkdirAll(account, 0700); err != nil {
+		return err
+	}
+	w.manifest.env["SLICE_21_ACCOUNT_HOME"] = account
+	if !isProbeBinary(w.bin) {
+		binary, err := w.productProbeBinary()
+		if err != nil {
+			return err
+		}
+		w.bin = binary
 	}
 	w.manifest.env["ITOS_ROOT"] = w.manifest.checkout
 	w.manifest.env["DOCKER_HOST"] = w.policy.env["DOCKER_HOST"]
