@@ -558,13 +558,16 @@ Feature: An explicitly selected terminal for an owned foreground run
   # window hangs up must not kill the controller mid-teardown: the run still
   # reports the disconnect, restores and completes owned removal. The fixture
   # holds the revalidated worker's wait briefly so the late signal provably
-  # lands while teardown is still running.
+  # lands while teardown is still running. The closed master may make even a
+  # successful restoration unverifiable on some kernels, so the honest
+  # contract is the attempt with any failure separately reported, never a
+  # claim that the vanished terminal stayed usable.
   @slice-37 @ID-RUNTTY-22 @linux @local-engine-fixture
   Scenario: A late hangup signal cannot kill the controller during owned teardown
     Given a local terminal-run fixture with shared terminal stdin and stdout
     When the fixture closes the client master and delivers SIGHUP after owned teardown has begun
     Then terminal run reports "run.terminal-disconnected" and returns the workload exit 17
-    And both caller terminal handles remain usable and only owned resources are confirmed absent
+    And terminal restoration is attempted with any failure reported separately while owned cleanup completes
 
   # Disconnect cannot manufacture an exit or ownership authority. The cleanup
   # failure row retains observed 17, then a fresh status/stop after the fixture

@@ -249,6 +249,11 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 			entry.Close()
 			return c, nil, "", failure
 		}
+		// A client that is already gone must not have its worker created.
+		if failure := lostClientTerminal(streams.Terminal); failure != "" {
+			entry.Close()
+			return c, nil, "", failure
+		}
 	}
 	if ctx.Err() != nil {
 		entry.Close()
@@ -304,6 +309,10 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 	if failure = startupOperation(ctx, "boundary inspection", func(call context.Context) port.Outcome { return c.VerifyRun(call, resource, argv) }); failure != "" {
 		return c, nil, "", failure
 	}
+	// A client that hung up across the create edge must not be attached to.
+	if failure := lostClientTerminal(streams.Terminal); failure != "" {
+		return c, nil, "", failure
+	}
 	var a port.Attachment
 	failure = startupOperation(ctx, "attach establishment", func(call context.Context) port.Outcome {
 		var f port.Outcome
@@ -338,6 +347,10 @@ func (s Runner) registeredLaunch(ctx context.Context, id string, argv []string, 
 	}
 	if state, ok := ctx.Value(startupKey{}).(*startupState); ok {
 		state.binding, state.record = intent.Binding(), intent.Record()
+	}
+	// A client that hung up across the attach edge must not be started for.
+	if failure := lostClientTerminal(streams.Terminal); failure != "" {
+		return c, a, "", failure
 	}
 	if failure = startupOperation(ctx, "start acknowledgement", func(call context.Context) port.Outcome {
 		if state, ok := ctx.Value(startupKey{}).(*startupState); ok {

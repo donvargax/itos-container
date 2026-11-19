@@ -27,6 +27,32 @@ func (c finiteConnection) Resize(ctx context.Context, id string, size terminal.D
 	return failure
 }
 
+// lostClientTerminal reports a client terminal that has already ended before an
+// irreversible launch edge. After the client is gone no owned workload may be
+// created, attached or started for it, whatever ended the lease; the lease's
+// own fresh poll makes the check immediate even when the periodic observer has
+// not published the loss yet.
+func lostClientTerminal(lease terminal.Lease) port.Outcome {
+	if lease == nil {
+		return ""
+	}
+	select {
+	case <-lease.Done():
+		if lease.Result().Cause == terminal.Hangup {
+			return port.TerminalDisconnected
+		}
+		return port.TerminalUnavailable
+	default:
+	}
+	switch lease.Check() {
+	case terminal.Hangup:
+		return port.TerminalDisconnected
+	case terminal.ObservationFailed:
+		return port.TerminalUnavailable
+	}
+	return ""
+}
+
 // waitForeground owns terminal events only while the command is live. It joins
 // the existing wait before returning into the shared recovery path; no resize
 // observer or independent cleanup routine can survive that transition.
