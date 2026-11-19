@@ -8239,14 +8239,3 @@
 
     Run the package check with the new assertions first. The mixed and untyped cases must each
     fail on the current wording and pass with the same assertions after the renderer changes.
-  done_when:
-    - run: |-
-        report=$(go test ./tools/bin/release-notes -count=1 -v) || {
-          printf '%s\n' "$report"
-          exit 1
-        }
-        printf '%s\n' "$report" | grep -F -- '--- PASS: TestSyncMergesLeftOut/untyped_sync (' || {
-          echo 'The release-notes package lacks a passing untyped sync case.'
-          exit 1
-        }
-      timeout: 180

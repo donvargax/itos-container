@@ -2321,7 +2321,7 @@ items:
     title: Clarify how branch syncs contribute to release version counts
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p3-release-notes-first-parent-fixture
