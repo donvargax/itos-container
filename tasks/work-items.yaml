@@ -2298,8 +2298,8 @@ items:
   - id: slice-40
     title: Deliver an approved OpenCode login to one container run
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [T-48, slice-34, slice-30]
     kind: slice
     why: >
