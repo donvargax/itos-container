@@ -2245,6 +2245,11 @@ items:
       blocking approval-backed tests before they reach their assertions. It names ID-EGRESS-09 as
       the check that a worker can produce local red/green evidence with the production ownership
       checks intact.
+
+      This item already tracks UID 65534 on `/` and `/tmp` in the shared runner. Recovery fixtures
+      hit the same ancestor-ownership check as approval fixtures. Use ID-EGRESS-09 to verify that
+      the chosen fixture environment reaches its behavior assertion with production ownership checks
+      intact.
   - id: p2-lifecycle-09-startup-timeout
     title: ID-LIFECYCLE-09 ended in run.startup-timeout once on main, past the first engine row
     phase: 1
