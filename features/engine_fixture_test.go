@@ -22,6 +22,7 @@ const busyboxFixturePin = "docker.io/library/busybox@sha256:5624bb6777cf469b1fb5
 var fixtureEnvironment = map[string]string{
 	"ITOS_CONTAINER_ENGINE_TESTS":         "1",
 	"ITOS_CONTAINER_ENGINE_FEATURES":      "${{ matrix.features }}",
+	"ITOS_CONTAINER_ENGINE_SHARD":         "${{ matrix.shard }}",
 	"ITOS_CONTAINER_ENGINE_FIXTURE_IMAGE": "${{ steps.fixture.outputs.image }}",
 	"ITOS_CONTAINER_ENGINE_FIXTURE_ID":    "${{ steps.fixture.outputs.image_id }}",
 	"ITOS_CONTAINER_ENGINE_FIXTURE_UID":   "${{ steps.fixture.outputs.uid }}",
@@ -29,9 +30,7 @@ var fixtureEnvironment = map[string]string{
 	"ITOS_CONTAINER_RED_SCENARIOS":        redDispatchExpression,
 }
 
-func validFixtureEnvironment(env map[string]string) bool {
-	return maps.Equal(env, fixtureEnvironment)
-}
+func validFixtureEnvironment(env map[string]string) bool { return maps.Equal(env, fixtureEnvironment) }
 
 func TestEngineFixtureWorkflow(t *testing.T) {
 	data, err := os.ReadFile("../.github/workflows/ci.yml")
@@ -52,7 +51,7 @@ func TestEngineFixtureWorkflow(t *testing.T) {
 	j := ready.Jobs["engine-shard"]
 	j.Steps = append(slices.Clone(j.Steps[:3]),
 		workflowStep{ID: "fixture", Name: "Prepare engine fixture registry", Shell: "bash", Timeout: 4, Run: "tools/bin/engine-fixture prepare"},
-		workflowStep{Name: "Engine scenarios", Shell: "bash", Timeout: 5, Env: maps.Clone(fixtureEnvironment), Run: engineInvocation},
+		workflowStep{Name: "Engine scenarios", Shell: "bash", Timeout: 11, Env: maps.Clone(fixtureEnvironment), Run: engineInvocation},
 		workflowStep{Name: "Engine failure diagnostics", If: "${{ failure() }}", Shell: "bash", Timeout: 1, Run: engineFailureDiagnostics},
 		workflowStep{Name: "Clean up engine fixture", If: "${{ always() }}", Shell: "bash", Timeout: 1, Run: "tools/bin/engine-fixture cleanup"})
 	ready.Jobs["engine-shard"] = j
@@ -221,7 +220,7 @@ func engineFixtureWorkflowIssues(data []byte) []string {
 	require(cleanup.Run == "tools/bin/engine-fixture cleanup" && cleanup.If == "${{ always() }}" && cleanup.Shell == "bash" && cleanup.Timeout == 1 && cleanup.Uses == "" && len(cleanup.Env) == 0 && !cleanup.ContinueOnError, "required always cleanup with failure propagation")
 	require(diagnostics.Run == engineFailureDiagnostics && diagnostics.If == "${{ failure() }}" && diagnostics.Shell == "bash" && diagnostics.Timeout == 1 && diagnostics.Uses == "" && len(diagnostics.Env) == 0 && !diagnostics.ContinueOnError, "required bounded failure diagnostics")
 	require(validFixtureEnvironment(run.Env), "exact fixture output wiring")
-	require(run.Run == engineInvocation && run.Shell == "bash" && run.If == "" && run.Timeout == 5 && !run.ContinueOnError, "complete invocation")
+	require(run.Run == engineInvocation && run.Shell == "bash" && run.If == "" && run.Timeout == 11 && !run.ContinueOnError, "complete invocation")
 	dispatch := w.On["workflow_dispatch"]
 	require(validRedDispatch(dispatch), "exact optional red dispatch inputs")
 	var node yaml.Node

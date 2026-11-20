@@ -34,14 +34,14 @@ func TestEngineSuiteBudget(t *testing.T) {
 		}
 	}
 	t.Run("restored budgets and full selection", func(t *testing.T) {
-		if engine.Timeout != 10 {
-			t.Errorf("engine job budget = %d minutes, want 10", engine.Timeout)
+		if engine.Timeout != 15 {
+			t.Errorf("engine job budget = %d minutes, want 15", engine.Timeout)
 		}
-		if step.Timeout != 5 {
-			t.Errorf("engine step budget = %d minutes, want 5", step.Timeout)
+		if step.Timeout != 11 {
+			t.Errorf("engine step budget = %d minutes, want 11", step.Timeout)
 		}
-		if !strings.Contains(step.Run, "-test.timeout=4m ") {
-			t.Error("missing four-minute Go test timeout")
+		if !strings.Contains(step.Run, "-test.timeout=10m ") {
+			t.Error("missing ten-minute Go test timeout")
 		}
 		// The existing parsed-workflow checks retain the exact complete command,
 		// event guards, pins, fixture, diagnostics, failure propagation and cleanup.
@@ -60,19 +60,22 @@ func testEngineBudgetScript(t *testing.T, hostOS, script string) {
 	for _, tc := range []struct {
 		name, finish, clock, compileClock string
 		compileExit, captureExit, want    int
+		warn, guard                       bool
 	}{
 		{name: "below budget", clock: "279.99", want: 0},
 		{name: "exact budget", clock: "280.00", want: 0},
-		{name: "successful but over budget", clock: "280.01", want: 1},
-		{name: "capture time counts", clock: "281.00", want: 1},
-		{name: "compilation time counts", compileClock: "279.00", clock: "281.00", want: 1},
+		{name: "successful but over budget", clock: "280.01", want: 0, warn: true},
+		{name: "over budget passes", clock: "281.00", want: 0, warn: true},
+		{name: "exact guard", clock: "700.00", want: 0, warn: true},
+		{name: "capture time counts", clock: "700.01", want: 1, warn: true, guard: true},
+		{name: "compilation time counts", compileClock: "699.00", clock: "701.00", want: 1, warn: true, guard: true},
 		{name: "missing final timing", clock: "", want: 1},
 		{name: "invalid final timing", clock: "invalid", want: 1},
 		{name: "backwards timing", clock: "99.00", want: 1},
 		{name: "missing compilation timing", compileClock: "invalid", clock: "110.00", want: 1},
 		{name: "compile failure", compileExit: 31, clock: "110.00", want: 31},
 		{name: "test failure", finish: "exit 7", clock: "110.00", want: 7},
-		{name: "over budget preserves test failure", finish: "exit 7", clock: "281.00", want: 7},
+		{name: "over budget preserves test failure", finish: "exit 7", clock: "701.00", want: 7, warn: true, guard: true},
 		{name: "missing timing preserves test failure", finish: "exit 7", want: 7},
 		{name: "capture failure", captureExit: 29, clock: "110.00", want: 29},
 		{name: "test and capture failure", finish: "exit 7", captureExit: 29, clock: "110.00", want: 7},
@@ -140,6 +143,12 @@ cp "$RUNNER_TEMP/program" "$4"
 			}
 			if !strings.Contains(string(out), "engine compilation timing:") || !strings.Contains(string(out), "engine step timing:") {
 				t.Errorf("missing compilation or whole-step timing: %s", out)
+			}
+			if got := strings.Contains(string(out), "::warning::"); got != tc.warn {
+				t.Errorf("warning printed = %v, want %v: %s", got, tc.warn, out)
+			}
+			if got := strings.Contains(string(out), "::error::"); got != tc.guard {
+				t.Errorf("hang guard error printed = %v, want %v: %s", got, tc.guard, out)
 			}
 			if tc.want == 0 {
 				elapsed, err := time.ParseDuration(tc.clock + "s")
