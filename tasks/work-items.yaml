@@ -2511,3 +2511,19 @@ items:
     status: done
     depends_on: []
     kind: task
+  - id: p2-engine-log-loses-timing-line
+    title: The Engine scenarios log keeps its last lines, the step timing line included
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      In run 44721305064 (T-69, d797fbc) and main run 44715951391, the downloaded log of the Engine
+      scenarios step ends in a burst of "features TestMain received signal 23 (urgent I/O
+      condition)" lines (160 in one run). In the other shard the log stops at 10:41:39 while the
+      step ran until 10:44:10. So the go test result lines and the "engine step timing:
+      duration_ms=... outcome=..." line that T-69 prints on every run never reach the log; only the
+      API step times and the warning annotations show a shard s time. TestMain s signal logging
+      floods the output; find why SIGURG is logged and why the tail is lost, and keep the step s
+      last lines, the timing line above all, in the log.
