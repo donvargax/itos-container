@@ -413,6 +413,7 @@ func (w *world) terminalLocalSteps(sc *godog.ScenarioContext, fixture **terminal
 		f.local = true
 		e := newTerminalEngine()
 		e.hold, e.exit, e.killDelay = true, 17, 2*time.Second
+		e.startDelay = time.Second
 		w.doctor.engine.offline.terminal = e
 		w.doctor.cleanup = append(w.doctor.cleanup, e.finish)
 		closed, signalled := false, false

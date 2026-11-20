@@ -193,6 +193,11 @@ func (f *terminalInvocation) invoke(args, inherited string) error {
 		env = append(env, "SLICE_17_LOCAL_RUN=1", "SLICE_17_LOCAL_MOUNT_ROOT="+w.doctor.checkout)
 	}
 	guard := 5 * time.Second
+	if terminal := w.doctor.engine.offline.terminal; terminal != nil {
+		// A delay the fixture injects into /start is harness bookkeeping, not a
+		// looser bound: no product deadline or other scenario's guard changes.
+		guard += terminal.startDelay
+	}
 	if terminal := w.doctor.engine.offline.terminal; terminal != nil && terminal.fault == "start accepted but its reply times out" {
 		// The ordinary SDK keeps its real ten-second finite-call deadline.
 		// A harness kill must not replace that failure or the 30 s cleanup total.
