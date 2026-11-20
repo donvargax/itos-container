@@ -8927,3 +8927,14 @@
     wrapper in memory and stand in. Then the implementation commit changes ci.yml with the updated
     tests, then a docs commit. No local mutation run; CI judges changed code, and the shell gets no
     mutation proof, so the rows above are its guard.
+- id: T-70
+  type: build
+  title: Track shell-pinned tools in update automation
+  why: >
+    Keep the offline owned-run milestone's proof tooling maintained by extending existing update
+    automation to tools/bin/pinned, preserving verified checksums alongside version updates. Already
+    covers updating launcher versions together with verified archive checksums to maintain the
+    milestone's proof tooling. The person chose to do this foundation item now, 2026-11-20. Checks
+    run through itos ci run (a task check or a Go test it executes); no .github/workflows edits.
+  done_when:
+    - run: "go test ./tools/pinned -count=1 -run 'TestPinnedUpdateManagers' -v | grep -q -- '--- PASS: TestPinnedUpdateManagers'"

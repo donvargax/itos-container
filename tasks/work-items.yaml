@@ -66,24 +66,13 @@ items:
     status: dropped
     depends_on: []
     kind: idea
-  - id: p1-track-shell-pinned-tools
+  - id: T-70
     title: Track shell-pinned tools in update automation
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      Keep the offline owned-run milestone's proof tooling maintained by extending existing update
-      automation to tools/bin/pinned, preserving verified checksums alongside version updates.
-
-      Already covers updating launcher versions together with verified archive checksums to maintain
-      the milestone's proof tooling.
-
-      The person chose to do this foundation item now, 2026-11-20.
-
-      Checks run through itos ci run (a task check or a Go test it executes); no .github/workflows
-      edits.
+    kind: task
   - id: T-8
     title: Record a fresh foundation mutation baseline with pinned itos-cc
     phase: 1
