@@ -8548,3 +8548,20 @@
              "/runtimes/missing_inventory", "/runtimes/refused_inventory"]
           | map("TestSocketBackendFixture" + .) - $passed
           | if length == 0 then true else error("missing passing tests: " + join(", ")) end'
+- id: T-67
+  type: ci
+  title: Cursor Bugbot satisfies the review gate
+  why: >
+    Codex is out of code-review usage (about 2026-11-23), and itos push --ready waits on every
+    login in push.pr.review_by. The person approved Cursor Bugbot as the second reviewer.
+    Settled decisions: review_by is [cursor] alone, because itos waits on every login listed and a
+    list with Codex would still block on Codex. The login is cursor, not cursor[bot]: itos drops a
+    [bot] suffix on both sides and GraphQL names the bot without it (PR 75's review came from
+    cursor[bot]). Codex stays in push.pr.reviewers as kind codex, so it is still asked, and cursor
+    is added there as kind bugbot. Codex's review threads must still be resolved before merge.
+    itos reads the itos.yaml of the checkout it runs from, so this item's own pull request is
+    judged by the new rule. The change is to itos.yaml alone, committed as ci with Task T-67, and
+    it also updates the comment above push.pr to name Bugbot. The check reads the effective config
+    and fails today because review_by is [chatgpt-codex-connector] and no reviewer has kind bugbot.
+  done_when:
+    - run: itos config get push.pr.review_by | grep -qx "\[\"cursor\"\]" && itos config get push.pr.reviewers | grep -qx "\[{\"login\":\"chatgpt-codex-connector\",\"kind\":\"codex\"},{\"login\":\"cursor\",\"kind\":\"bugbot\"}\]"
