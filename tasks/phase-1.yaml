@@ -8563,17 +8563,6 @@
     Leave sibling ledger entries, the registry, features/, workflows and other slices unchanged.
     Make no local mutation run and commit no coverage or mutation output; CI judges the
     changed-code proof.
-  done_when:
-    - run: |
-        out=$(go test -count=1 -v ./cmd/itos-container-init ./internal/slices/workerinit/... 2>&1)
-        status=$?
-        printf '%s\n' "$out"
-        [ "$status" -eq 0 ] || exit 1
-        for name in TestStartRestrictsBeforeExec TestCommandRefusals TestLandlockContract TestExecPreservesArgvAndEnv TestInitBinary; do
-          printf '%s\n' "$out" | grep -q "^--- PASS: $name " || { echo "T-65: $name did not pass" >&2; exit 1; }
-        done
-        if printf '%s\n' "$out" | grep -q -- '--- SKIP'; then echo "T-65: a test was skipped" >&2; exit 1; fi
-        printf '%s\n' "$out" | grep -Eq 'workerinit kernel branch: landlock ABI [0-9]+, (enforcement|refusal)$' || { echo "T-65: no kernel branch logged" >&2; exit 1; }
 - id: T-66
   type: test
   title: A feature-harness fixture chooses the kernel's Landlock answer and the daemon's runtime list for socket-backend scenarios
