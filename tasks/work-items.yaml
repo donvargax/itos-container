@@ -70,7 +70,7 @@ items:
     title: Track shell-pinned tools in update automation
     phase: 1
     owner: donvargax
-    status: todo
+    status: doing
     depends_on: []
     kind: task
   - id: T-8
