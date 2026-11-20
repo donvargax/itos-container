@@ -2534,3 +2534,17 @@ items:
       Split the file along its own seams (fixture environment, workflow pins, preparation) into
       sibling test files, restore the function to normal formatting, and keep every test and
       assertion unchanged.
+  - id: p2-credential-brokering
+    title: "Decide how a sandboxed agent gets credentials it cannot keep after the run: pass in, broker or mint per credential."
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Today the worker reads real long-lived credentials, so a hostile agent can copy one out and
+      use it after the run; the shared read-write Codex login also lets it replace the host's login.
+      The design compares passing in, TLS-intercepting brokers, base-URL brokers and short-lived
+      minted tokens, and recommends API keys passed in for model logins plus per-run GitHub App
+      tokens, with no interception. It waits on the person's decision and on slice-31 and slice-33
+      landing; the design is at docs/plans/credential-brokering.md.
