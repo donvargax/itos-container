@@ -8936,5 +8936,129 @@
     covers updating launcher versions together with verified archive checksums to maintain the
     milestone's proof tooling. The person chose to do this foundation item now, 2026-11-20. Checks
     run through itos ci run (a task check or a Go test it executes); no .github/workflows edits.
+
+    The problem. tools/bin/pinned pins four release tools (golangci-lint 2.14.0, goreleaser 2.18.2,
+    git-cliff 2.14.2, itos-cc 0.47.2), each with a SHA-256 and a GitHub asset ID per platform.
+    .github/renovate.json5 enables only gomod, github-actions and renovate-config, so nothing
+    notices a new release of these tools. itos-template left custom.regex out on purpose, because
+    a version-only update would leave the hashes beside the version stale. That danger is real
+    here, and worse than a failed check. The launcher downloads by asset ID first. A moved version
+    with old IDs and old sums would download the old archive and pass its old checksum. It would
+    then cache that archive under the new version's directory: a silently wrong tool. Renovate's
+    github-releases datasource gives versions only. No built-in Renovate datasource gives a
+    release asset's numeric ID, so the update automation cannot write the asset IDs. The rule below therefore
+    lets Renovate track and propose each version. It makes the launcher and this check refuse any
+    version whose per-platform SHA-256 and asset ID were not recorded for that version. An update
+    lands only after its pins are refreshed and verified on the update's branch, and never with
+    stale ones.
+
+    The rule, in three files. The task touches only tools/bin/pinned, .github/renovate.json5 and
+    a new tools/pinned/update_managers_test.go. It adds no module (go.mod and go.sum stay unchanged)
+    and makes no .github/workflows edit.
+
+    1. tools/bin/pinned. In each tool's case arm, the line directly above its `version=` line is
+    exactly `# renovate: depName=<owner>/<repo>`, a tab-indented comment. The four comments are
+    golangci/golangci-lint, goreleaser/goreleaser, orhun/git-cliff and donvargax/itos-cc. Each is
+    the repository the arm's url= and download_url= already name. Every platform line also sets
+    `for_version=<version>`, the release its sum= and asset_id= were taken from. Today that is the
+    arm's own version, so every value the launcher resolves stays as it is now. After the tool
+    case's closing esac, and before the `dir=$root/.tools/$tool-$version` line, one line refuses
+    a mismatch: `[ "$for_version" = "$version" ] || die "$tool $version has no verified pin for
+    $platform: its SHA-256 and asset ID are for $for_version"`. die exits 2. The refusal comes
+    before the cache lookup and any download, so a version moved alone never fetches or caches
+    anything. The header comment gains a few lines on the refresh. When a version moves, every
+    platform line's sum= is taken from the release's published checksums and its asset_id= from
+    the release API, and the two must agree with the release API's asset digest. for_version is
+    set only after that, as T-4 and T-25 verified theirs. A move of itos-cc also records its
+    migration in docs/upgrading.md, as T-4 did. Every other line keeps today's text: the platform
+    sets, archive and member names, URLs, retries, the 403 fallback, checksum-before-extraction,
+    the cache and --path. Existing comments stay too. Where goreleaser and git-cliff have a note
+    above version=, the new comment goes between that note and the version= line.
+
+    2. .github/renovate.json5. The file keeps its name and stays JSON5, which itos.yaml's file
+    check requires. It is written in the HuJSON subset of JSON5: every key double-quoted, comments
+    and trailing commas allowed. The test then parses it with github.com/tailscale/hujson
+    v0.0.0-20260727124030-b80ff77dac4f. That library is already pinned in go.mod (the manifest
+    parser uses it) and maintained by Tailscale. Go's JSON5 libraries are unmaintained forks, so
+    none is added. enabledManagers gains "custom.regex" after the existing three. A customManagers
+    array gains exactly one entry, with these values. customType is "regex". managerFilePatterns
+    is ["/^tools/bin/pinned$/"], the current option name; fileMatch is not used. matchStrings is
+    one pattern, written in the file as the JSON string
+    "# renovate: depName=(?<depName>\\S+)\\n\\t+version=(?<currentValue>\\S+)\\n".
+    datasourceTemplate is "github-releases". extractVersionTemplate is "^v(?<version>.+)$", since
+    every tool's tags are v plus the version. Each match is the comment plus its version line, so
+    Renovate rewrites only that version and never a for_version stamp. commitTrailers changes from
+    ["Task: T-2"] to ["Task: T-70"]. T-2 is a done gofmt fix that guards nothing Renovate moves.
+    itos ci run runs the checks of the tasks a range's footers name (itos internal/plan TasksIn).
+    So every Renovate commit, this tool update's included, runs this check in CI, as T-14's checks
+    do for itos-template. A version moved alone therefore turns its branch red, and branch
+    automerge never lands it. A comment says this in the file's own style. Every other key keeps
+    today's value: $schema, extends, ignoreDeps, automergeType, automergeSchedule, semanticCommits,
+    commitBody and packageRules. No preset manager gains a match: no `# renovate:` comment exists
+    outside tools/bin/pinned.
+
+    3. TestPinnedUpdateManagers, in tools/pinned/update_managers_test.go. It goes in a file of its
+    own because pinned_test.go would pass revive's 600-line limit. It reads ../bin/pinned and
+    ../../.github/renovate.json5 from the tree. It fetches nothing and runs no Renovate, and it
+    has these subtests.
+    config: hujson.Standardize and encoding/json decode the file into a map. The top-level key set
+    is exactly today's ten plus customManagers. enabledManagers is exactly gomod, github-actions,
+    renovate-config, custom.regex. commitTrailers is exactly ["Task: T-70"]. The eight preserved
+    keys equal, as decoded JSON, the values written in the test. customManagers holds exactly the
+    entry above, with no other key.
+    tracked: the tools are the launcher's `case "$tool" in` arms other than `*)`, read from the
+    script, so a fifth tool with no comment fails. The test compiles the config's match string
+    with Go's regexp, which accepts (?<name>…) groups. Over the launcher it yields exactly one
+    match per arm, inside that arm, and no other match. For each match, depName is the repository
+    in the arm's api.github.com url=. currentValue equals the version the arm resolves.
+    download_url holds /download/v<currentValue>/.
+    verified/<tool>/<platform>: the script is cut before `\ndir=$root/.tools/$tool-$version`, as
+    TestGitCliffPin cuts it. The uname expression is replaced by an environment value, and
+    `printf '%s\n' "$version" "$for_version" "$sum" "$asset_id"` is appended. It runs under
+    `sh -s -- <tool>` for Linux-x86_64, Linux-aarch64, Darwin-x86_64, Darwin-arm64,
+    MINGW64_NT-10.0-x86_64 and MINGW64_NT-10.0-aarch64. The supported sets stay exactly today's.
+    golangci-lint has all six. goreleaser and git-cliff have the four Linux and Darwin ones.
+    itos-cc has those four plus windows-amd64. A supported platform exits 0, with for_version
+    equal to version and a 64-hex sum and a numeric asset_id. An unsupported one exits 2, saying
+    `no pinned <tool> for <platform>`.
+    stale/<tool>/<platform>: the test does in memory what Renovate's update does. It replaces only
+    the currentValue span of that tool's match with 999.0.0 and runs the same cut script on every
+    supported platform. Each run exits 2 with empty stdout, and stderr holds `pinned: <tool>
+    999.0.0 has no verified pin for <platform>: its SHA-256 and asset ID are for <old version>`.
+    TestGitCliffPin, TestPinnedDownload, TestPinnedAssetRedirect and
+    TestPinnedForbiddenAssetFallback stay unchanged and keep passing. fixtureLauncher replaces the
+    whole region holding the new refusal line.
+
+    How the check fails today, and what it guards. The check passes only on the parent test's own
+    line. go test -v prints that line unindented as `--- PASS: TestPinnedUpdateManagers (<n>s)`
+    and each subtest's line indented, so grep -x on the whole unindented line matches no subtest,
+    and the pipeline's status, which is grep's, is 0 only when the whole parent test passed. Today
+    the package has no TestPinnedUpdateManagers. go test prints "no tests to run" and PASS, grep
+    finds no such line and exits 1, so the check exits 1. The test written against today's tree
+    fails as a whole, so its parent line reads --- FAIL and the check still exits 1. config fails
+    because hujson refuses the unquoted `$schema` key at line 3, and enabledManagers lacks
+    custom.regex. tracked finds no match. Each supported platform's verified row fails because sh
+    refuses the unset for_version. stale has no match to move. Five verified rows already pass
+    today and keep passing, because that behaviour does not change: goreleaser and git-cliff on
+    MINGW64_NT-10.0-x86_64 and MINGW64_NT-10.0-aarch64, and itos-cc on MINGW64_NT-10.0-aarch64.
+    Each hits its arm's `*) die "no pinned $tool for $platform"` and exits 2 before the appended
+    printf reads for_version. Their passing subtest lines do not satisfy the anchored check, so a
+    test-only commit, or a partial implementation such as one without the refusal line, still
+    fails it. Even with comments alone, a moved version exits 0 and prints the old sum and asset
+    ID: the silent case above, which the stale rows fail. With the work, every row passes, and so
+    does the parent. Later, a Renovate commit
+    that moves a version alone is the stale row made real. Its verified rows fail, and the
+    launcher itself refuses in CI's golangci-lint step and in the release's goreleaser and
+    git-cliff steps.
+
+    Commits and proof. One build commit carries the three files; a test commit of the new test
+    first is allowed but not required. The implementer may commit freely in its workspace. The
+    host makes the landing commits and runs itos, submission, publication and review. Neither
+    .github/renovate.json5 nor tools/ is a proof.code path, so this has no mutation proof, and the
+    rows above are the shell's and the config's guard. tools/bin/pinned is an enforcement input,
+    so the hook runs the architecture fixture matrix on that commit, which is expected. No step
+    needs the network: Renovate's lookups run centrally, outside this task. Whether Renovate's
+    own run accepts the config is outside what an offline check can prove, so this claims no more
+    than the test shows.
   done_when:
-    - run: "go test ./tools/pinned -count=1 -run 'TestPinnedUpdateManagers' -v | grep -q -- '--- PASS: TestPinnedUpdateManagers'"
+    - run: "go test ./tools/pinned -count=1 -run '^TestPinnedUpdateManagers$' -v | grep -qx -- '--- PASS: TestPinnedUpdateManagers ([0-9.]*s)'"
