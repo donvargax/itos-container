@@ -2479,6 +2479,15 @@ items:
       and finds no new feature-binaries directory in a private TMPDIR. Phase p2: it blocks no
       charter step, but it should land before the Landlock helper multiplies the leak. The harness's
       TestMain is this project's own, not the template's, so no backport.
+
+      T-66's spec already covers the new helper: its no_feature_binaries_left row requires that a
+      Landlock-helper invocation leaves no feature-binaries directory. The spec says outright that
+      the slice-4 fchmodat2 helper's leak stays with this idea, so folding the idea into T-66 would
+      undo a decision already made. Once T-66 lands, check how it avoids the directory. If it spots
+      helper mode before TestMain's setup for every helper selector, TestApprovalKernelHelper is
+      fixed too, and this idea shrinks to its own regression: run the approval kernel helper with a
+      private TMPDIR and find no new directory. Then remove the 1391 leaked directories in the loop
+      host's /tmp by hand.
   - id: T-66
     title: A feature-harness fixture chooses the kernel's Landlock answer and the daemon's runtime list for socket-backend scenarios
     phase: 1
