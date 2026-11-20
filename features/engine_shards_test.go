@@ -127,7 +127,7 @@ func engineShardIssues(data []byte) []string {
 	require(shard.Name == "Engine shard (${{ matrix.shard }})", "shard job name")
 	require(shard.If == eventGuard, "shard event guard")
 	require(shard.Runner == "ubuntu-latest" && shard.Container == nil && len(shard.Services) == 0, "shard native runner")
-	require(shard.Timeout == 10, "shard job budget")
+	require(shard.Timeout == 15, "shard job budget")
 	require(!shard.ContinueOnError && len(shard.Needs) == 0, "shard failure propagation and independence")
 	require(shard.Strategy.FailFast != nil && !*shard.Strategy.FailFast, "fail-fast false")
 	require(len(shard.Env) == 0, "step-local feature input and engine switch")
@@ -189,8 +189,8 @@ func engineShardIssues(data []byte) []string {
 		prefix := "jobs." + shardJobID + ".steps." + strconv.Itoa(i) + ".env."
 		enabled = prefix + "ITOS_CONTAINER_ENGINE_TESTS"
 		require(step.Env[shardFeaturesVariable] == "${{ matrix.features }}", "step-local feature input")
-		require(strings.Contains(step.Run, "elapsed > 180000 && result == 0") && !strings.Contains(step.Run, "elapsed > 240000"), "180-second step budget")
-		require(step.Timeout == 5 && step.If == "" && !step.ContinueOnError, "shard step budget and failure propagation")
+		require(strings.Contains(step.Run, "(( elapsed > 180000 ))") && strings.Contains(step.Run, "(( elapsed > 600000 ))") && strings.Contains(step.Run, "(( elapsed > 600000 && result == 0 ))") && !strings.Contains(step.Run, "elapsed > 180000 && result == 0") && !strings.Contains(step.Run, "elapsed > 240000"), "soft step budget and hang guard")
+		require(step.Timeout == 11 && step.If == "" && !step.ContinueOnError, "shard step budget and failure propagation")
 	}
 	require(scenarios == 1, "exactly one Engine scenarios step")
 
@@ -429,7 +429,7 @@ func shardBaseline(t *testing.T) []byte {
     name: Engine shard (${{ matrix.shard }})
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -440,12 +440,14 @@ func shardBaseline(t *testing.T) []byte {
           - {shard: egress, features: "%s"}
     steps:
       - name: Engine scenarios
-        timeout-minutes: 5
+        timeout-minutes: 11
         env:
           ITOS_CONTAINER_ENGINE_TESTS: "1"
           ITOS_CONTAINER_ENGINE_FEATURES: ${{ matrix.features }}
         run: |
-          if (( elapsed > 180000 && result == 0 )); then result=1; fi
+          if (( elapsed > 180000 )); then echo warn; fi
+          if (( elapsed > 600000 )); then echo error; fi
+          if (( elapsed > 600000 && result == 0 )); then result=1; fi
   engine:
     name: Engine scenarios (Linux amd64)
     needs: [engine-shard]
@@ -552,14 +554,22 @@ func testBrokenShardWorkflows(t *testing.T) {
 		})},
 		{"a second engine switch", "engine switch", editAggregate(func(j *workflowJob) { j.Steps[0].Env["ITOS_CONTAINER_ENGINE_TESTS"] = "1" })},
 		{"the engine switch in job env", "engine switch", editShard(func(j *workflowJob) { j.Env = map[string]string{"ITOS_CONTAINER_ENGINE_TESTS": "1"} })},
-		{"the 240-second budget", "180-second step budget", editShard(func(j *workflowJob) {
-			j.Steps[0].Run = strings.ReplaceAll(j.Steps[0].Run, "180000", "240000")
+		{"the guard raised above 600 seconds", "soft step budget and hang guard", editShard(func(j *workflowJob) {
+			j.Steps[0].Run = strings.ReplaceAll(j.Steps[0].Run, "600000", "900000")
 		})},
-		{"no budget", "180-second step budget", editShard(func(j *workflowJob) { j.Steps[0].Run = "true" })},
+		{"the guard removed", "soft step budget and hang guard", editShard(func(j *workflowJob) {
+			j.Steps[0].Run = strings.ReplaceAll(j.Steps[0].Run, "(( elapsed > 600000 && result == 0 ))", "false")
+		})},
+		{"the warning made a failure", "soft step budget and hang guard", editShard(func(j *workflowJob) {
+			j.Steps[0].Run = strings.ReplaceAll(j.Steps[0].Run, "(( elapsed > 180000 ))", "(( elapsed > 180000 && result == 0 ))")
+		})},
+		{"a step limit not above the guard", "shard step budget and failure propagation", editShard(func(j *workflowJob) { j.Steps[0].Timeout = 10 })},
+		{"no budget", "soft step budget and hang guard", editShard(func(j *workflowJob) { j.Steps[0].Run = "true" })},
 		{"a shard guard lost", "shard event guard", editShard(func(j *workflowJob) { j.If = "" })},
 		{"a shard that needs another job", "shard failure propagation and independence", editShard(func(j *workflowJob) { j.Needs = []string{"ci"} })},
 		{"a shard on another runner", "shard native runner", editShard(func(j *workflowJob) { j.Runner = "windows-latest" })},
 		{"a longer shard job", "shard job budget", editShard(func(j *workflowJob) { j.Timeout = 20 })},
+		{"a shorter shard job", "shard job budget", editShard(func(j *workflowJob) { j.Timeout = 10 })},
 	} {
 		t.Run("reject "+tc.name, func(t *testing.T) {
 			var broken engineWorkflow
