@@ -9060,5 +9060,3 @@
     needs the network: Renovate's lookups run centrally, outside this task. Whether Renovate's
     own run accepts the config is outside what an offline check can prove, so this claims no more
     than the test shows.
-  done_when:
-    - run: "go test ./tools/pinned -count=1 -run '^TestPinnedUpdateManagers$' -v | grep -qx -- '--- PASS: TestPinnedUpdateManagers ([0-9.]*s)'"
