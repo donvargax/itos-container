@@ -350,3 +350,6 @@ questions:
   - id: q-87
     item: "slice-28"
     question: "slice-28: the implementer (attempt 9) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-28-implementer-9.result.json"
+  - id: q-88
+    item: "slice-42"
+    question: "slice-42: the drafter (attempt 24) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-42-drafter-24.result.json"
