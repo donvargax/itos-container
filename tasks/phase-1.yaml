@@ -8545,3 +8545,49 @@
     judged by the new rule. The change is to itos.yaml alone, committed as ci with Task T-67, and
     it also updates the comment above push.pr to name Bugbot. The check reads the effective config
     and fails today because review_by is [chatgpt-codex-connector] and no reviewer has kind bugbot.
+- id: T-68
+  type: test
+  title: ID-RUNTTY-22 closes the client terminal only after launch is complete
+  why: >
+    ID-RUNTTY-22 (features/run_terminal.feature, "A late hangup signal cannot kill the controller
+    during owned teardown") fails now and then in CI with exit 75 where it expects exit 17. It
+    blocked slice-37 and T-64's coverage run and it also fails on other heads (runs 44476995073,
+    44554398342). It always passes alone in about four seconds, so it fails only under CI load.
+    Charter step 5 proof waits on it. Cause: the fixture is wrong; the product is right. The step
+    "the fixture closes the client master and delivers SIGHUP after owned teardown has begun"
+    (features/run_terminal_local_linux_test.go) closes the client master as soon as the fake
+    engine's `ready` channel closes (features/run_terminal_engine_test.go). `ready` closes when the
+    fake writes its output frame, which runs beside the /start reply, so it is no sign that launch
+    is finished. Under load the master closes while the controller is still inside launch (Start,
+    anchor detection, the post-start record). A hangup before the workload's exit is observed cannot
+    yield 17: the controller reports the disconnect with exit 75 and "owned run could not be
+    completed" (run 44554398342), or fails its worker-inspect with run.execution-unavailable and
+    run.mount-refused (run 44476995073). Both are the right product answers for a disconnect during
+    launch (see the RUNTTY-14 row "unknown, 75"). The scenario means a disconnect during teardown,
+    after launch. Settled fix, harness only, no product change and no scenario text change: 1. The
+    fake engine gets a `startDelay` knob that holds the reply to POST /start (not the output frame)
+    for a fixed time, with the recorder lock released while it waits, as the "start accepted but its
+    reply times out" fault already does. The RUNTTY-22 step sets it to one second. This forces the
+    bad interleaving every time: output is ready while the controller is still in Start. 2. The step
+    closes the client master only after the recorder's journal shows a POST /containers/<id>/wait
+    from the controller's PID. Launch is complete when the controller waits, and that request exists
+    in the journal for every controller, so no extra product signal is needed. It must not close on
+    `ready` alone. 3. The gate is a small function over the journal, `launchObserved(requests
+    []doctorRequest, pid int) bool`, so a test can cover it without an engine. 4. The existing
+    second gate (SIGHUP only after the owned /kill request, with killDelay 2s) stays. The scenario
+    still has to report run.terminal-disconnected, exit 17, an attempted terminal restoration and
+    finished owned cleanup. Nothing may be loosened. Red first. Commit 1 (test, Item or Task
+    footer): the startDelay knob and its use in the step, and the test below, with the gate not yet
+    in place. At that commit the scenario fails deterministically at "terminal run reports
+    run.terminal-disconnected and returns the workload exit 17" with exit 75, run with `go test
+    ./features -run TestFeatures -scenarios='^@ID-RUNTTY-22$'`. The sandbox ran it once without the
+    knob and it passed (it only fails under load), so with the knob the failing run should be shown
+    locally if the sandbox runs RUNTTY-22 at all, else by CI (gh workflow run ci.yml -f
+    red_scenarios=...). Commit 2 adds the gate; the same run then passes. Local limits: the unit
+    test needs no engine and runs anywhere. The scenario runs in this sandbox (it passed in 4s on
+    2026-11-20 without the knob). CI alone proves it under load.
+  done_when:
+    - run: "sh -c 'go test ./features -run \"^TestLaunchObserved$\" -v | grep -q -- \"--- PASS: TestLaunchObserved\"'"
+      timeout: 300
+    - run: go test ./features -run TestFeatures -scenarios='^@ID-RUNTTY-22$'
+      timeout: 600

@@ -2444,29 +2444,13 @@ items:
       Launch and verify the worker under runsc when Landlock ABI 9 is unavailable. Prove
       ID-SOCKETS-02 and ID-SOCKETS-03 in hosted CI with their positive controls, and verify that a
       runsc failure stops startup. Broken down from p1-checkout-socket-kernel-enforcement.
-  - id: p1-runtty-22-late-sighup-fixture
-    title: Make ID-RUNTTY-22 deliver SIGHUP during owned teardown
+  - id: T-68
+    title: ID-RUNTTY-22 closes the client terminal only after launch is complete
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      The fixture failed on slice-37 and again during T-64’s required coverage run, blocking proof
-      for charter step 5, late host socket protection. Wait for an observable post-start event
-      before closing the client terminal, then deliver SIGHUP once the fixture observes teardown of
-      the owned worker. The scenario must still report the disconnect, return workload exit 17,
-      attempt terminal restoration and complete cleanup.
-
-      Cause is the harness. features/run_terminal_local_linux_test.go closes the client master when
-      the fake engine writes its output frame (terminalEngine.ready, run_terminal_engine_test.go),
-      which happens beside the /start reply and before the controller has finished launch. A hangup
-      that lands while launch is unfinished leaves the exit unobserved, so the controller correctly
-      returns 75, not 17. Failed runs: 44476995073 (run.execution-unavailable, then
-      run.mount-refused with worker-inspect unavailable), 44554398342 (run.terminal-disconnected,
-      exit 75, owned run could not be completed), 44640050211, 44697663966 and 44705336143 (reported
-      by the coordinator; their logs were gone or still running). It passes alone here in 4s, so it
-      only fails under CI load.
+    kind: task
   - id: p2-kernel-helper-leaves-no-feature-temp-dir
     title: A kernel-helper child of the feature tests leaves no itos-container-feature-binaries directory in /tmp
     phase: 1
