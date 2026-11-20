@@ -8372,3 +8372,19 @@
     Broken down from p1-checkout-socket-kernel-enforcement.
   done_when:
     - run: go test -count=1 ./cmd/itos-container-init ./internal/slices/workerinit/...
+- id: T-66
+  type: test
+  title: A feature-harness fixture chooses the kernel's Landlock answer and the daemon's runtime list for socket-backend scenarios
+  why: >
+    Charter milestone two, step 5 (late host sockets unreachable) needs doctor, approve and run
+    scenarios (slice-42, slice-43, slice-44) that set the host's backend on purpose. They need the
+    same test helper: a kernel-helper child that sets no_new_privs and installs a seccomp filter
+    sending landlock_create_ruleset to user notification, so the harness can answer 'ABI <n>',
+    ENOSYS or EOPNOTSUPP. It also needs a fake daemon /info whose Runtimes list the scenario picks,
+    plus newDoctorAPI's default and the doctor.sockets.* failure rule names. Today all of this
+    exists only in slice-42's uncommitted drafts in the driver stashes. Whichever slice lands first
+    would build it, and the three specs could drift apart. It is harness work, so a ledger task
+    whose check is a regression running the helper for each kernel answer and runtime list. It needs
+    no scenario IDs, so it can land while minting is blocked and unblock all three slices.
+  done_when:
+    - run: go test -list '^TestSocketBackendFixture$' ./features | grep -qx TestSocketBackendFixture && go test -count=1 -v -run '^TestSocketBackendFixture$' ./features

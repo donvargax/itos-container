@@ -2479,22 +2479,10 @@ items:
       and finds no new feature-binaries directory in a private TMPDIR. Phase p2: it blocks no
       charter step, but it should land before the Landlock helper multiplies the leak. The harness's
       TestMain is this project's own, not the template's, so no backport.
-  - id: p1-socket-backend-harness-fixture
+  - id: T-66
     title: A feature-harness fixture chooses the kernel's Landlock answer and the daemon's runtime list for socket-backend scenarios
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      Charter milestone two, step 5 (late host sockets unreachable) needs doctor, approve and run
-      scenarios (slice-42, slice-43, slice-44) that set the host's backend on purpose. They need the
-      same test helper: a kernel-helper child that sets no_new_privs and installs a seccomp filter
-      sending landlock_create_ruleset to user notification, so the harness can answer 'ABI <n>',
-      ENOSYS or EOPNOTSUPP. It also needs a fake daemon /info whose Runtimes list the scenario
-      picks, plus newDoctorAPI's default and the doctor.sockets.* failure rule names. Today all of
-      this exists only in slice-42's uncommitted drafts in the driver stashes. Whichever slice lands
-      first would build it, and the three specs could drift apart. It is harness work, so a ledger
-      task whose check is a regression running the helper for each kernel answer and runtime list.
-      It needs no scenario IDs, so it can land while minting is blocked and unblock all three
-      slices.
+    kind: task
