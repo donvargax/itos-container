@@ -2,12 +2,22 @@ package features
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 )
 
-// launchObserved is false until the controller's wait on the worker shows
-// that launch is complete.
-func launchObserved(_ []doctorRequest, _ int, _ string) bool { return false }
+// launchObserved reports whether the controller with this PID has asked the
+// engine to wait on the worker, which it does only after launch is complete.
+// The path suffix is matched as the owned /kill gate matches it, so an API
+// version prefix does not matter and the query string is not part of it.
+func launchObserved(requests []doctorRequest, pid int, id string) bool {
+	for _, request := range requests {
+		if request.PID == pid && request.Method == http.MethodPost && strings.HasSuffix(request.Path, "/containers/"+id+"/wait") {
+			return true
+		}
+	}
+	return false
+}
 
 func TestLaunchObserved(t *testing.T) {
 	const id = "0123456789abcdef"
