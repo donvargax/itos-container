@@ -2527,3 +2527,16 @@ items:
       API step times and the warning annotations show a shard s time. TestMain s signal logging
       floods the output; find why SIGURG is logged and why the tail is lost, and keep the step s
       last lines, the timing line above all, in the log.
+  - id: p2-split-engine-fixture-test
+    title: features/engine_fixture_test.go is split below the 600-line lint limit instead of squeezed under it
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      T-69 (ec00492) put validFixtureEnvironment on one line so features/engine_fixture_test.go
+      stays under revive s 600-line file limit. Squeezing lines to pass a linter games the gate.
+      Split the file along its own seams (fixture environment, workflow pins, preparation) into
+      sibling test files, restore the function to normal formatting, and keep every test and
+      assertion unchanged.
