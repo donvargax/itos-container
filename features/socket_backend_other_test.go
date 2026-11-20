@@ -4,6 +4,7 @@ package features
 
 import (
 	"os/exec"
+	"strings"
 	"testing"
 )
 
@@ -15,6 +16,24 @@ const socketBackendSupported = false
 func socketBackendChild() {}
 
 func runSocketBackendFixture(*testing.T) {}
+
+// TestSocketBackendPinRefusedWhereUnsupported holds the rule the fixture keeps
+// where nothing supervises: a world cannot pin an answer, so runEnv never
+// starts its program unfiltered while it reads the pin as supervision, and
+// never drops the approval umask that its /bin/sh wrapper sets.
+func TestSocketBackendPinRefusedWhereUnsupported(t *testing.T) {
+	w := &world{}
+	err := w.pinKernelAnswer("ABI 8")
+	if err == nil {
+		t.Fatal("pinning an answer succeeded on a host that cannot supervise it")
+	}
+	if !strings.Contains(err.Error(), "socket backend fixture") {
+		t.Errorf("the refusal does not name the fixture: %v", err)
+	}
+	if w.landlock != nil {
+		t.Error("the refused pin left the world pinned")
+	}
+}
 
 // landlockRun is the supervision of one invocation. Nothing supervises here.
 type landlockRun struct{}
