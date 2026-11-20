@@ -9029,14 +9029,24 @@
     TestPinnedForbiddenAssetFallback stay unchanged and keep passing. fixtureLauncher replaces the
     whole region holding the new refusal line.
 
-    How the check fails today, and what it guards. Today the package has no
-    TestPinnedUpdateManagers. go test prints "no tests to run" and PASS, grep finds no `--- PASS:
-    TestPinnedUpdateManagers` and exits 1, so the check exits 1. The test written against today's
-    tree fails at every subtest's assertion. config fails because hujson refuses the unquoted
-    `$schema` key at line 3, and enabledManagers lacks custom.regex. tracked finds no match.
-    verified fails because sh refuses the unset for_version. stale has no match to move. Even
-    with comments alone, a moved version exits 0 and prints the old sum and asset ID: the silent
-    case above. With the work, every row passes. Later, a Renovate commit
+    How the check fails today, and what it guards. The check passes only on the parent test's own
+    line. go test -v prints that line unindented as `--- PASS: TestPinnedUpdateManagers (<n>s)`
+    and each subtest's line indented, so grep -x on the whole unindented line matches no subtest,
+    and the pipeline's status, which is grep's, is 0 only when the whole parent test passed. Today
+    the package has no TestPinnedUpdateManagers. go test prints "no tests to run" and PASS, grep
+    finds no such line and exits 1, so the check exits 1. The test written against today's tree
+    fails as a whole, so its parent line reads --- FAIL and the check still exits 1. config fails
+    because hujson refuses the unquoted `$schema` key at line 3, and enabledManagers lacks
+    custom.regex. tracked finds no match. Each supported platform's verified row fails because sh
+    refuses the unset for_version. stale has no match to move. Five verified rows already pass
+    today and keep passing, because that behaviour does not change: goreleaser and git-cliff on
+    MINGW64_NT-10.0-x86_64 and MINGW64_NT-10.0-aarch64, and itos-cc on MINGW64_NT-10.0-aarch64.
+    Each hits its arm's `*) die "no pinned $tool for $platform"` and exits 2 before the appended
+    printf reads for_version. Their passing subtest lines do not satisfy the anchored check, so a
+    test-only commit, or a partial implementation such as one without the refusal line, still
+    fails it. Even with comments alone, a moved version exits 0 and prints the old sum and asset
+    ID: the silent case above, which the stale rows fail. With the work, every row passes, and so
+    does the parent. Later, a Renovate commit
     that moves a version alone is the stale row made real. Its verified rows fail, and the
     launcher itself refuses in CI's golangci-lint step and in the release's goreleaser and
     git-cliff steps.
@@ -9051,4 +9061,4 @@
     own run accepts the config is outside what an offline check can prove, so this claims no more
     than the test shows.
   done_when:
-    - run: "go test ./tools/pinned -count=1 -run 'TestPinnedUpdateManagers' -v | grep -q -- '--- PASS: TestPinnedUpdateManagers'"
+    - run: "go test ./tools/pinned -count=1 -run '^TestPinnedUpdateManagers$' -v | grep -qx -- '--- PASS: TestPinnedUpdateManagers ([0-9.]*s)'"
