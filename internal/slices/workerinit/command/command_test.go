@@ -31,6 +31,11 @@ func TestCommandRefusals(t *testing.T) {
 		}
 	}
 
+	// The shortest valid line, `-- <command>`, starts the workload: it is not a usage refusal.
+	if code, stderr, calls := run([]string{"--", "tool"}, 10, nil, nil, nil, nil); code != 126 || stderr != "itos-container-init: exec-failed\n" || !slices.Equal(calls, []string{"abi", "restrict", "lookup", "exec"}) {
+		t.Errorf("-- tool = %d, %q, calls %v; want it started", code, stderr, calls)
+	}
+
 	rows := []struct {
 		name                          string
 		abi                           int
