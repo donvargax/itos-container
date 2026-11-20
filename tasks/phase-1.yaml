@@ -8377,14 +8377,133 @@
   title: A feature-harness fixture chooses the kernel's Landlock answer and the daemon's runtime list for socket-backend scenarios
   why: >
     Charter milestone two, step 5 (late host sockets unreachable) needs doctor, approve and run
-    scenarios (slice-42, slice-43, slice-44) that set the host's backend on purpose. They need the
-    same test helper: a kernel-helper child that sets no_new_privs and installs a seccomp filter
-    sending landlock_create_ruleset to user notification, so the harness can answer 'ABI <n>',
-    ENOSYS or EOPNOTSUPP. It also needs a fake daemon /info whose Runtimes list the scenario picks,
-    plus newDoctorAPI's default and the doctor.sockets.* failure rule names. Today all of this
-    exists only in slice-42's uncommitted drafts in the driver stashes. Whichever slice lands first
-    would build it, and the three specs could drift apart. It is harness work, so a ledger task
-    whose check is a regression running the helper for each kernel answer and runtime list. It needs
-    no scenario IDs, so it can land while minting is blocked and unblock all three slices.
+    scenarios (slice-42, slice-43, slice-44) that choose the backend the host offers. The product
+    asks the kernel itself: T-64's native probe issues landlock_create_ruleset(NULL, 0,
+    LANDLOCK_CREATE_RULESET_VERSION) through golang.org/x/sys. cmd's probe assembly gets no
+    Landlock seam or default, so nothing can shadow slice-46's real-kernel proof on the person's
+    host (triage on slice-42, 2026-11-19). The harness therefore answers at the system call. That
+    fixture exists today only in the slices' uncommitted drafts, which already differ, and
+    whichever slice landed first would build it. This task builds it once under features/. It
+    needs no scenario and no scenario ID, so it can land while minting is blocked. Nothing under
+    cmd/ or internal/ changes.
+
+    A world that pins an answer starts each later product invocation, on every route that applies
+    the wrapper described below, through a helper mode of the features test binary, as
+    TestApprovalKernelHelper does for fchmodat2. The helper locks its thread, sets no_new_privs
+    and installs a seccomp filter with SECCOMP_FILTER_FLAG_NEW_LISTENER. The filter's only action
+    other than allow is SECCOMP_RET_USER_NOTIF for landlock_create_ruleset under
+    AUDIT_ARCH_X86_64. The helper hands the listener to the harness over a descriptor of its own
+    and execs the program in the same process. The program keeps the pid the route started, its
+    path, argv (argv[0] included), environment, working directory, standard streams, process
+    attributes and the route's own extra descriptors at their numbers. None of the helper's
+    descriptors reaches it. It runs with no_new_privs, which an unprivileged filter requires. The
+    helper never runs the program unfiltered. A filter the kernel refuses, or a program the helper
+    cannot execute, is the invocation step's error, never an exit status that a product assertion
+    reads.
+
+    The harness supervises an invocation until its started process has exited, never waiting on a
+    timer. It answers the version query, whose arguments are NULL, 0 and
+    LANDLOCK_CREATE_RULESET_VERSION, from the world's answer as it stands when the query arrives.
+    "ABI <n>", n a nonnegative decimal, returns n. "ENOSYS", "EOPNOTSUPP" or "EPERM" fails with
+    that errno. Any other landlock_create_ruleset call fails with EPERM, and pinning any other text
+    is refused. Pinning is safe while invocations run. A step may arrange one action to run when
+    the next version query arrives, before its answer is read, as slice-43's drafted daemon
+    takeover needs; the action's error fails the step. The harness records each supervised
+    invocation's calls in order. Each call records whether it was the version query and the answer
+    delivered, so a step can tell exactly one version query from none and from other calls. A call
+    counts once its answer is delivered. If SECCOMP_IOCTL_NOTIF_SEND fails with ENOENT, either a
+    signal interrupted the call, which Go's restarting handlers turn into a new notification, or
+    the program ended. Any other notification or failed answer is a fixture error that fails the
+    step. x/sys v0.48.0 has the constants and ioctl numbers but not the seccomp_notif and
+    seccomp_notif_resp types, so the harness declares those layouts. No library is added:
+    libseccomp-golang needs cgo and libseccomp's headers, and the filter is a few BPF instructions.
+
+    One wrapper serves every route: a route applies it to the exec.Cmd it builds before Start and
+    ends it after Wait. This task applies it in runEnv, composed with runEnv's umask wrapper, so
+    that it covers runDoctor, which doctor and the fingerprint approval use. Approve's terminal
+    processes, run's preflight process and the other routes that start the product themselves
+    adopt it in the slice that first pins an answer for them. A world that pins nothing starts its
+    product directly, as today. The harness has no default answer, so every existing scenario and
+    slice-46's proof see the host's kernel. Scenario cleanup ends any supervision still running. A
+    helper invocation leaves no itos-container-feature-binaries-* directory. TestMain makes one
+    before m.Run, and an exec'ing helper never removes it. The slice-4 helper's own leak stays
+    with p2-kernel-helper-leaves-no-feature-temp-dir.
+
+    newDoctorAPI's /info gains DefaultRuntime runc and, by default, the inventory "runc only".
+    Once doctor detects, every ordinary doctor world on CI, below ABI 9, then confirms none rather
+    than failing its fallback. A world names the selected fixture daemon's inventory, which each
+    later request reads afresh. "runc only" is Runtimes {"runc":{"path":"runc"}}. "runc and runsc"
+    adds "runsc":{"path":"/usr/local/bin/runsc"}. "runsc permitting host sockets" gives that runsc
+    "runtimeArgs":["--host-uds=open"]. "unidentified runsc" adds "runsc":{}, as Moby reports a shim
+    registration. "missing inventory" omits Runtimes. Each keeps DefaultRuntime runc, and an
+    unknown name is refused. These are the shapes T-64's docker tests judge. No command reads
+    Runtimes yet, so the default changes no live scenario.
+
+    Product output is not this task's. The checkout_sockets member, the plain backend line and the
+    doctor.sockets.* rules with their exits are slice-42's scenarios to specify, and slice-43 and
+    slice-44 reuse them. The fixture asserts none of them; doctorProblem already requires the flat
+    field subject such a rule carries. The step texts stay with the slices, as do the ITOS_ROOT and
+    working-directory arrangement, a second socket for one daemon and the approval worlds' own
+    default inventory. The slices' steps pass the answers and inventory names above through
+    unchanged.
+
+    TestSocketBackendFixture holds the fixture. On Linux amd64 it never skips, so a host that
+    refuses the filter fails it. Elsewhere it skips, and the package still builds for the manual
+    macOS and Windows jobs. Its programs are a probe the features binary carries, which makes the
+    calls a row asks for. The probe reports each reply, its argv, working directory, environment,
+    standard input, pid and descriptors. Each row that runs a program also requires the harness's
+    record of that invocation, so none passes against an unsupervised start. Go reports a space in
+    a row's name as an underscore.
+
+    kernel_answer/<answer> runs for ABI 9, ABI 8, ABI 0, ENOSYS, EOPNOTSUPP and EPERM. Through
+    runEnv, one version query receives exactly that reply, n with no errno or -1 with the errno,
+    and the invocation's record holds that one call. The rows share one world and re-pin before
+    each invocation, so each record holds only its own call. In other_call_refused, a call with
+    flags 0 gets EPERM and is recorded as not the version query. A version query in the same
+    invocation still gets the pinned answer. In arrival_action, ABI 8 is pinned, and an action
+    arranged for the next arrival re-pins ABI 9. Both version queries of one invocation receive 9,
+    and the action runs once. In no_query, a program exits 7 at once without a call. The step
+    reports exit 7 and a supervised invocation with no call, and it returns within two seconds. In
+    exec_unchanged, one program with one extra descriptor at 3 is started wrapped and unwrapped.
+    Both report the same argv, working directory, environment, standard input, and descriptor
+    numbers and kinds. Each reports the pid of its started process, and both pass their standard
+    output and error through. Only the wrapped query reaches the harness. In
+    no_feature_binaries_left, TMPDIR names a private empty directory. A supervised version query
+    gets its answer, and that directory then holds no itos-container-feature-binaries-* entry. In
+    helper_failure, a helper whose filter the kernel refuses fails its step, naming the fixture,
+    and its program never runs. Starting the helper inside another supervised invocation causes
+    that, because the kernel refuses a second listener with EBUSY. A program that cannot be
+    executed fails the step too. In refused_answers, pinning ABI -1, ABI x, abi 9, EINVAL or empty
+    text fails. On one fixture daemon that newDoctorAPI makes, runtimes/default reads GET
+    /v1.56/info before any choice. Then runtimes/runc_only, runc_and_runsc,
+    runsc_permitting_host_sockets, unidentified_runsc and missing_inventory each choose that
+    inventory and read again. Each read decodes to exactly the Runtimes above, or none, and
+    DefaultRuntime runc. runtimes/refused_inventory refuses an unknown name.
+
+    The check runs that test once with -json and requires a pass event for it and for each of its
+    twenty named rows, so a skipped, renamed or missing row fails it. Today it exits 5, since go
+    test finds no test to run and jq names all twenty-one missing passes. First commit the
+    regression in a test commit with --task T-66, beside stubs that compile, start every program
+    unsupervised, record nothing and accept every choice. Each row that runs a program then fails
+    at its record, the refusal rows at their refusals and the runtimes rows at their /info reads.
+    Build the fixture in a second test commit and run the same check green. Since runEnv and
+    newDoctorAPI change for every world, also run the ordinary feature suite once, without -race.
+    Use -race only on this test, selected with -run. features/README.md describes the fixture
+    beside the older-kernel approval fixture.
   done_when:
-    - run: go test -list '^TestSocketBackendFixture$' ./features | grep -qx TestSocketBackendFixture && go test -count=1 -v -run '^TestSocketBackendFixture$' ./features
+    - run: |-
+        report=$(go test -count=1 -json -run '^TestSocketBackendFixture$' ./features) || {
+          printf '%s\n' "$report"
+          exit 1
+        }
+        printf '%s\n' "$report" | jq -es '
+          [.[] | select(.Action == "pass" and .Test != null) | .Test] as $passed
+          | ["", "/kernel_answer/ABI_9", "/kernel_answer/ABI_8", "/kernel_answer/ABI_0",
+             "/kernel_answer/ENOSYS", "/kernel_answer/EOPNOTSUPP", "/kernel_answer/EPERM",
+             "/other_call_refused", "/arrival_action", "/no_query", "/exec_unchanged",
+             "/no_feature_binaries_left", "/helper_failure", "/refused_answers",
+             "/runtimes/default", "/runtimes/runc_only", "/runtimes/runc_and_runsc",
+             "/runtimes/runsc_permitting_host_sockets", "/runtimes/unidentified_runsc",
+             "/runtimes/missing_inventory", "/runtimes/refused_inventory"]
+          | map("TestSocketBackendFixture" + .) - $passed
+          | if length == 0 then true else error("missing passing tests: " + join(", ")) end'
