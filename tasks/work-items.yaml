@@ -79,12 +79,6 @@ items:
 
       Already covers updating launcher versions together with verified archive checksums to maintain
       the milestone's proof tooling.
-    deferred: >
-      Foundation leftover: per docs/charter.md (Foundation leftovers are taken only when they block
-      the next step), it waits, as it does not block milestone two. It also touches
-      .github/renovate.json5, outside the factory (weir) scope, and needs GitHub hosts to refresh
-      pins. Weir's decider denied it as queue head on 2026-11-20. The person can bring it back with
-      itos work resume.
   - id: T-8
     title: Record a fresh foundation mutation baseline with pinned itos-cc
     phase: 1
