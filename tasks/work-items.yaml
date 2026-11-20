@@ -2548,3 +2548,7 @@ items:
       minted tokens, and recommends API keys passed in for model logins plus per-run GitHub App
       tokens, with no interception. It waits on the person's decision and on slice-31 and slice-33
       landing; the design is at docs/plans/credential-brokering.md.
+
+      The person corrected the Codex part of q-90 on 2026-11-20: Codex defaults to a sandbox-only
+      ChatGPT login in the harness home (device login, never the host auth.json), with an API key
+      only as the fallback when a weekly limit is reached. The design is amended to match.
