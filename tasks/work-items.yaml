@@ -2503,3 +2503,15 @@ items:
     status: doing
     depends_on: []
     kind: task
+  - id: p1-bugbot-review-gate
+    title: Cursor Bugbot satisfies the review gate
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Codex is out of code-review usage, and itos push --ready waits on every login in review_by.
+      The person approved Cursor Bugbot as the second reviewer. Make review_by name cursor alone,
+      keep Codex in reviewers so it is still asked, and add cursor as a bugbot reviewer. Codex
+      threads still have to be resolved before merge.
