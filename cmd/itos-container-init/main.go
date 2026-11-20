@@ -17,11 +17,14 @@ import (
 	"github.com/donvargax/itos-container/internal/slices/workerinit/process"
 )
 
+// exit is os.Exit; a test replaces it so main runs in process.
+var exit = os.Exit
+
 func main() {
 	// A Landlock domain and no_new_privs belong to one thread, and only the
 	// thread that executes hands them to the workload. Everything below runs
 	// on this one, and starts no goroutine.
 	runtime.LockOSThread()
 	handler := command.Init{Landlock: landlock.New(), Process: process.New()}
-	os.Exit(handler.Run(os.Args[1:], os.Stderr))
+	exit(handler.Run(os.Args[1:], os.Stderr))
 }

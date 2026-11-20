@@ -195,3 +195,33 @@ func socketDir(t *testing.T) string {
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	return dir
 }
+
+// TestMainRefusesInProcess runs main itself, so its own lines are measured:
+// a usage refusal never reaches Landlock or the workload.
+func TestMainRefusesInProcess(t *testing.T) {
+	stderr, err := os.CreateTemp(t.TempDir(), "stderr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = stderr.Close() })
+
+	oldArgs, oldStderr, oldExit := os.Args, os.Stderr, exit
+	t.Cleanup(func() { os.Args, os.Stderr, exit = oldArgs, oldStderr, oldExit })
+	code := -1
+	os.Args, os.Stderr, exit = []string{"itos-container-init"}, stderr, func(c int) { code = c }
+
+	main()
+	// main locks this goroutine to its thread; release it for later tests.
+	runtime.UnlockOSThread()
+
+	if code != 125 {
+		t.Errorf("main exited %d, want 125", code)
+	}
+	got, err := os.ReadFile(stderr.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "itos-container-init: usage\n" {
+		t.Errorf("main wrote %q, want the usage line", got)
+	}
+}
