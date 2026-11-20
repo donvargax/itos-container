@@ -18,6 +18,9 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	// A helper or probe of the socket-backend fixture runs here, before the
+	// directory below exists: an exec'ing helper never returns to remove it.
+	socketBackendChild()
 	if os.Getenv("ITOS_CONTAINER_ENGINE_TESTS") == "1" || os.Getenv("ITOS_CONTAINER_SIGNAL_DIAGNOSTIC_CHILD") == "1" {
 		logFeatureSignals(runtime.GOOS)
 	}
