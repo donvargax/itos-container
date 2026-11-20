@@ -2,7 +2,10 @@
 
 ## Status
 
-Proposed, for the person's decision, 2026-11-20.
+Proposed, for the person's decision, 2026-11-20. Amended the same day: the person corrected
+the Codex recommendation (question 3), because an API key bills the OpenAI API, not the
+ChatGPT subscription, and their rule is subscriptions first, with API credits only as the
+fallback when a weekly limit is reached.
 
 This is research under the [charter](../charter.md)'s "Not yet", which lists a capability
 broker as a research direction. It selects nothing to build. It changes no code, scenario,
@@ -414,13 +417,30 @@ interception. Record C as the next step for API keys only, not built now.
 2. **Claude: the `setup-token` token passed in.** Its copy works for a year, but only for
    model requests [3]. That limits the damage to the person's plan usage. A Claude API key
    is a second kind on the same seam, for people who bill by API.
-3. **Codex: default to an API key passed in.** The charter's shared read-write ChatGPT login
-   is the largest gap in today's design. The worker can read a refresh token that does not
-   expire on its own, and can replace the host's login. No broker short of option B removes
-   that, and B for a ChatGPT login is untested and its terms unresearched. An API key on the
-   existing seam closes the host-substitution threat with no new mechanism. OpenAI
-   recommends API keys for automation [20]. The shared login stays available only as the
-   person's explicit choice, with the threat disclosed at approval.
+3. **Codex: default to a ChatGPT login of the sandbox's own.** The charter's shared
+   read-write ChatGPT login is the largest gap in today's design. The worker can read a
+   refresh token that does not expire on its own, and can replace the host's login. The
+   default becomes a separate login kept in the run's persistent harness home
+   ([decision 0030](../decisions/0030-persistent-harness-home.md)), made once there with
+   device login (`codex login --device-auth` [20]), and never the host's `auth.json`. It keeps
+   billing on the ChatGPT subscription, the person's rule. It closes the host-substitution
+   threat: the worker never sees the host's file. It leaves the sandbox's own refresh token
+   readable by the worker (A's gap, for that login only). An API key on the same seam stays
+   as an explicit fallback kind, for when the subscription's weekly limit is reached. The
+   shared host login is no longer offered.
+
+   *Do two logins of one ChatGPT account refresh independently?* Not stated by OpenAI. Each
+   `codex login` writes its own `auth.json` [20], and a refresh replaces the refresh token,
+   which then works once [55][56]. OpenAI's own guidance is one `auth.json` per runner, never
+   one file across machines or concurrent jobs [57]. So two separate logins should keep
+   separate token chains (analysis). But an open Codex bug reports one account on three hosts,
+   each with its own `auth.json`, where logging in on one host "appears to invalidate" the
+   refresh tokens on the others [58], with no maintainer answer yet; a maintainer has said
+   Codex is not designed for several concurrent logins on one system [59]. Independence is
+   therefore likely but unconfirmed. The first increment must test it on the real account,
+   host and sandbox both refreshing, before it is the default. If the logins do interfere,
+   the failure is a logged-out run or host, not a leaked credential: the run stops and asks
+   for a new device login.
 4. **GitHub: an installation token minted per run (D).** A's real gap here is that a copied
    personal token keeps write access after the run, for days or months [37]. GitHub is the
    credential whose misuse others see: pushes, pull requests, comments. A one-hour token,
@@ -443,7 +463,9 @@ interception. Record C as the next step for API keys only, not built now.
    nothing for this now.
 
 **Gaps this leaves, stated plainly.** A copied `setup-token` token works for model requests
-for up to a year. A copied API key works until revoked. A copied GitHub token works for up
+for up to a year. A copied sandbox Codex refresh token works until it, or the sandbox's next
+refresh, rotates it; the host's Codex login is never exposed. A copied API key, when that
+fallback is chosen, works until revoked. A copied GitHub token works for up
 to an hour, or until teardown when revocation succeeds. A GitHub run longer than an hour
 loses access unless a refresh design follows. Use during the run, data exfiltration through
 allowed hosts and fronting remain, as for every option.
@@ -452,8 +474,10 @@ allowed hosts and fronting remain, as for every option.
 no scenario uses a real account (charter).
 
 1. Slice-31 and slice-33 as designed.
-2. A Codex API-key kind on the same seam, answering decision 0025's question 1 for
-   unattended runs.
+2. A sandbox-only Codex ChatGPT login in the harness home, logged in once by device login,
+   replacing the shared read-write directory and answering decision 0025's question 1 for
+   unattended runs. Its first test is whether host and sandbox logins refresh independently.
+   A Codex API-key kind on the same seam follows as the explicit fallback.
 3. A GitHub App kind: policy and approval binding, a minting port with an I/O-free fake, a
    fake GitHub endpoint in CI, revocation at teardown recorded in recovery.
 4. Later, and only on the person's word: a refresh design for long GitHub runs, then C.
@@ -469,11 +493,14 @@ Each lists the recommended answer first.
 2. **Claude login for unattended runs.** Recommended: the `setup-token` token passed in, as
    chartered, with an API key as a second kind. Never broker the subscription. Alternative:
    API keys only, which removes any doubt about the terms at the cost of API billing.
-3. **Codex login.** Recommended: an API key passed in by default; the shared read-write
-   ChatGPT login only by explicit choice, with the refresh-token and host-substitution
-   threats shown at approval. Alternatives: a sandbox-only ChatGPT login the host never
-   reads, kept in the harness home; or keep the shared login as the default, as q-72 set.
-   This changes charter step 2.
+3. **Codex login.** Recommended (the person's correction, 2026-11-20): a sandbox-only
+   ChatGPT login by default, kept in the harness home, logged in once there by device login,
+   never the host's `auth.json`; it keeps the subscription and closes host substitution. An
+   API key stays as an explicit fallback kind for when the weekly limit is reached.
+   Alternatives: an API key by default, which bills the API instead of the subscription; or
+   keep the shared login as the default, as q-72 set. This changes charter step 2. Open
+   point: whether two logins of one account refresh independently is unconfirmed (see the
+   recommendation) and is the first thing to test.
 4. **GitHub.** Recommended: GitHub App installation tokens minted per run, limited to the
    approved repository and permissions, revoked at teardown, with the host controller
    calling GitHub to mint and revoke. Alternative: require a fine-grained personal token
@@ -551,3 +578,8 @@ Each lists the recommended answer first.
 52. Anthropic engineering, Claude Code sandboxing: https://anthropic.com/engineering/claude-code-sandboxing
 53. Claude Code on the web: https://code.claude.com/docs/en/claude-code-on-the-web
 54. Claude Code, LLM gateway protocol: https://code.claude.com/docs/en/llm-gateway-protocol.md
+55. Codex issue 41973, refresh token revoked; single-use refresh tokens: https://github.com/openai/codex/issues/41973
+56. Codex Security issue 2243, a shared single-use refresh token: https://github.com/openai/codex-security/issues/2243
+57. Codex, maintain account auth in CI/CD: https://learn.chatgpt.com/docs/auth/ci-cd-auth
+58. Codex issue 17340, refresh token already used, across hosts: https://github.com/openai/codex/issues/17340
+59. Codex issue 9634, refresh token already used: https://github.com/openai/codex/issues/9634
