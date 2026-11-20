@@ -8585,10 +8585,11 @@
     POST and a path that ends in "/containers/<id>/wait", matched as a suffix as the existing
     /kill gate matches. A query string is not part of the path and does not matter; a version
     prefix such as /v1.56 does not matter. The controller waits only after launch, and the journal
-    shows that request for any controller, so no new product signal is needed. The step takes the
-    container ID from the journal's create request or the fake's record, whichever the code
-    shows is there; if it cannot know it before the close, it matches /containers/<id>/wait with
-    any id from that PID, and the id parameter stays so the function can be tested either way.
+    shows that request for any controller, so no new product signal is needed. The step reads the
+    worker's ID from the fake's record (the single key of a.started, read under a.mu), and fails
+    the step if there is not exactly one. It never matches a /wait for any other ID. The journal's
+    create request carries no id; a.started[id] is set at features/run_terminal_engine_test.go:73
+    before the hold.
     4. The existing second gate (SIGHUP only after the owned /kill request, with killDelay 2s) is
     unchanged.
     The scenario must still report run.terminal-disconnected, exit 17, an attempted terminal
@@ -8608,7 +8609,8 @@
 
     Red first, two commits, both with --item T-68.
     Commit 1 (test): the startDelay knob, its use and the guard extension in the step, a stub
-    `launchObserved` that compiles and returns false for every input but is not called by the step,
+    `launchObserved` (its unused parameters named _ so revive passes) that compiles and returns false
+    for every input but is not called by the step,
     and TestLaunchObserved with its rows. At this commit the step still closes on `ready`. The
     implementer then runs and reports both red outputs. First, check 1: the accepts_ rows fail at
     their assertions and the rejects_ rows pass against the constant false, so go test fails and the
