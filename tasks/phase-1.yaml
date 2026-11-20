@@ -8708,17 +8708,20 @@
     step env holds ITOS_CONTAINER_ENGINE_SHARD equal to `${{ matrix.shard }}`.
 
     The tests that already pin the old budget move with the workflow, without getting weaker.
-    TestEngineSuiteBudget: its "restored budgets" check pins 15, 11 and `-test.timeout=10m `; the
-    rows at 280.01 and 281.00 now exit 0 and print the warning; "compilation time counts" and
-    "capture time counts" are re-based on the guard (compile 699.00 with final 701.00 exits 1 with
-    the error; final 700.01 exits 1; add a row where final 700.00 exits 0); "over budget preserves
-    test failure" is re-based on 701.00 and still exits 7. Its missing, invalid and backwards timing,
+    TestEngineSuiteBudget: its "restored budgets" check pins 15, 11 and `-test.timeout=10m `. Its
+    rows become exactly: "successful but over budget" at 280.01 wants 0 plus the warning; a new
+    "over budget passes" at 281.00 wants 0 plus the warning; "capture time counts" at 700.01 wants
+    1; "compilation time counts" with compile 699.00 and final 701.00 wants 1 plus the error; a new
+    "exact guard" at 700.00 wants 0; "over budget preserves test failure" at 701.00 wants 7. Its
+    missing, invalid and backwards timing,
     compile failure, capture failure and signal rows stay. engine_workflow_test.go (TestEngineWorkflow
     line 313, `engine.Timeout`, and line 325, `run.Timeout` and validFixtureEnvironment) and
     engine_fixture_test.go (`fixtureEnvironment` at lines 22-34 is an exact map and gains
     `"ITOS_CONTAINER_ENGINE_SHARD": "${{ matrix.shard }}"`; its `Timeout: 5` at lines 55 and 224)
     move to 15 and 11. engine_diagnostics_test.go moves its copy of the wrapper (engineInvocation)
-    and its program fixture's `-test.timeout=4m` argv to the new text. engine_shards_test.go pins the
+    and its program fixture's `-test.timeout=4m` argv to the new text. engine_shards_test.go's own
+    pins become exact pins of 15 and 11, not looser bounds (`shard.Timeout == 10` at line 130, the
+    step `Timeout == 5` at line 193, and the shardBaseline text at lines 432, 443 and 448), and it pins the
     three new expressions (`(( elapsed > 180000 ))`, `(( elapsed > 600000 ))`, `(( elapsed > 600000
     && result == 0 ))`) in place of `elapsed > 180000 && result == 0`, and its negative controls
     become: guard removed, guard raised above 600000, warning made a failure, step, job or Go limits
@@ -8755,7 +8758,7 @@
       timeout: 60
     - run: |
         f=docs/decisions/0024-engine-tier-shards.md
-        s=$(awk '/^### .*, 2026-11-20$/{p=1;next} /^#/{p=0} p' "$f" | tr -s '\n' ' ')
+        s=$(awk '/^### Soft budget, 2026-11-20$/{p=1;next} /^#/{p=0} p' "$f" | tr -s '\n' ' ')
         [ -n "$s" ] || exit 1
         for w in 'hang guard' '600' 'warn' 'supersede' 'test.timeout'; do
           case $s in *"$w"*) ;; *) echo "0024 amendment lacks: $w" >&2; exit 1 ;; esac
