@@ -8404,4 +8404,4 @@
     it also updates the comment above push.pr to name Bugbot. The check reads the effective config
     and fails today because review_by is [chatgpt-codex-connector] and no reviewer has kind bugbot.
   done_when:
-    - run: itos config get push.pr.review_by | grep -qx "\[\"cursor\"\]" && itos config get push.pr.reviewers | grep -q "\"kind\":\"bugbot\""
+    - run: itos config get push.pr.review_by | grep -qx "\[\"cursor\"\]" && itos config get push.pr.reviewers | grep -qx "\[{\"login\":\"chatgpt-codex-connector\",\"kind\":\"codex\"},{\"login\":\"cursor\",\"kind\":\"bugbot\"}\]"
