@@ -2488,6 +2488,14 @@ items:
       fixed too, and this idea shrinks to its own regression: run the approval kernel helper with a
       private TMPDIR and find no new directory. Then remove the 1391 leaked directories in the loop
       host's /tmp by hand.
+
+      This item already tracks the slice-4 fchmodat2 helper's leak. Its own text says to check how
+      T-66 avoids the directory once T-66 lands. T-66 now has the answer: TestMain dispatches helper
+      mode before it makes the directory (socketBackendChild in features/engine_diagnostics_test.go
+      on the T-66 branch). So the item's fix is to route TestApprovalKernelHelper's selector through
+      that same pre-setup dispatch, plus its planned regression: run the approval kernel helper with
+      a private TMPDIR and find no new itos-container-feature-binaries directory. After that, remove
+      the leaked directories in the loop host's /tmp by hand. No new design is needed.
   - id: T-66
     title: A feature-harness fixture chooses the kernel's Landlock answer and the daemon's runtime list for socket-backend scenarios
     phase: 1
