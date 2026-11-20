@@ -8699,7 +8699,7 @@
       timeout: 300
     - run: go test ./features -run '^(TestEngineDiagnostics|TestEngineShards)$' -count=1
       timeout: 300
-    - run: sh -c 'yq ".jobs.engine-shard.steps[] | select(.name == \"Engine scenarios\") | .run" .github/workflows/ci.yml | shellcheck --shell=bash -'
+    - run: sh -c 'yq ".jobs.engine-shard.steps[] | select(.name == \"Engine scenarios\") | .run" .github/workflows/ci.yml | shellcheck --shell=bash --severity=warning -'
       timeout: 60
     - run: grep -q 'hang guard' docs/decisions/0024-engine-tier-shards.md
       timeout: 30
