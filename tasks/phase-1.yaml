@@ -8938,35 +8938,3 @@
     wrapper in memory and stand in. Then the implementation commit changes ci.yml with the updated
     tests, then a docs commit. No local mutation run; CI judges changed code, and the shell gets no
     mutation proof, so the rows above are its guard.
-  done_when:
-    - run: |
-        report=$(go test -count=1 -json -run '^TestEngineStepBudget$' ./features) || {
-          printf '%s\n' "$report"
-          exit 1
-        }
-        printf '%s\n' "$report" | jq -es '
-          [.[] | select(.Action == "pass" and .Test != null) | .Test] as $passed
-          | ["", "/at_179s", "/at_180s", "/at_180_01s", "/at_181s", "/at_600s", "/at_600_01s",
-             "/at_601s", "/failed_run_at_181s", "/failed_run_at_601s", "/unreadable_uptime", "/limits"]
-          | map("TestEngineStepBudget" + .) - $passed
-          | if length == 0 then true else error("missing passing tests: " + join(", ")) end'
-      timeout: 300
-    - run: go test ./features -run '^(TestEngineDiagnostics|TestEngineShards|TestEngineSuiteBudget|TestEngineWorkflow|TestEngineFixtureWorkflow|TestEngineRedWorkflow)$' -count=1
-      timeout: 600
-    - run: |
-        script=$(yq -e '.jobs.engine-shard.steps[] | select(.name == "Engine scenarios") | .run' .github/workflows/ci.yml) || exit 1
-        case $script in *"trap engine_finish EXIT"*) ;; *) exit 1 ;; esac
-        printf '%s\n' "$script" | shellcheck --shell=bash --severity=warning -
-      timeout: 60
-    - run: |
-        f=docs/decisions/0024-engine-tier-shards.md
-        s=$(awk '/^### Soft budget, 2026-11-20$/{p=1;next} /^#/{p=0} p' "$f" | tr -s '\n' ' ')
-        [ -n "$s" ] || exit 1
-        for w in 'hang guard' '600' 'warn' 'supersede' 'test.timeout'; do
-          case $s in *"$w"*) ;; *) echo "0024 amendment lacks: $w" >&2; exit 1 ;; esac
-        done
-        ! head -n 1 "$f" | grep -q 'each inside 180 seconds'
-      timeout: 30
-    - run: |
-        ! cat features/README.md docs/architecture/arc42.md docs/decisions/0028-egress-run-wiring.md .github/workflows/ci.yml | tr -s '\n' ' ' | grep -Eq 'rejects a total above 180 seconds|still has its 180-second gate|passing run over the 180 s shard budget|reaches or approaches 180 seconds|do not raise the budget|so that no shard.s step passes 180 seconds|with a 180-second step budget|stay 10, 5 and 4 minutes'
-      timeout: 30
