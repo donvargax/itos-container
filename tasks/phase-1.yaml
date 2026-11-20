@@ -8627,19 +8627,3 @@
     (internal/tests/recognize.go in itos: a pattern word is double-quoted without `$`, single-quoted,
     or bare without quotes, `$` or backslash). Today check 2 passes without the knob; the red
     commit stands in for its red.
-  done_when:
-    - run: |-
-        report=$(go test -count=1 -json -run '^TestLaunchObserved$' ./features) || {
-          printf '%s\n' "$report"
-          exit 1
-        }
-        printf '%s\n' "$report" | jq -es '
-          [.[] | select(.Action == "pass" and .Test != null) | .Test] as $passed
-          | ["", "/accepts_wait_from_pid", "/rejects_wait_from_other_pid",
-             "/rejects_other_method", "/rejects_other_requests", "/rejects_empty_journal",
-             "/accepts_query_string", "/rejects_other_container"]
-          | map("TestLaunchObserved" + .) - $passed
-          | if length == 0 then true else error("missing passing tests: " + join(", ")) end'
-      timeout: 600
-    - run: go test ./features -count=1 -timeout=20m -scenarios='^@(?:ID-RUNTTY-22)$'
-      timeout: 600

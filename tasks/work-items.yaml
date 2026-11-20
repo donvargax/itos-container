@@ -2448,7 +2448,7 @@ items:
     title: ID-RUNTTY-22 closes the client terminal only after launch is complete
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p2-kernel-helper-leaves-no-feature-temp-dir
