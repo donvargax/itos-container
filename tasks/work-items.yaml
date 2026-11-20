@@ -2491,7 +2491,7 @@ items:
   - id: T-66
     title: A feature-harness fixture chooses the kernel's Landlock answer and the daemon's runtime list for socket-backend scenarios
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
