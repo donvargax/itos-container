@@ -8747,3 +8747,163 @@
     judged by the new rule. The change is to itos.yaml alone, committed as ci with Task T-67, and
     it also updates the comment above push.pr to name Bugbot. The check reads the effective config
     and fails today because review_by is [chatgpt-codex-connector] and no reviewer has kind bugbot.
+- id: T-68
+  type: test
+  title: ID-RUNTTY-22 closes the client terminal only after launch is complete
+  why: >
+    ID-RUNTTY-22 (features/run_terminal.feature, "A late hangup signal cannot kill the controller
+    during owned teardown") fails now and then in CI with exit 75 where it expects exit 17. It
+    blocked slice-37 and T-64's coverage run and has failed on other heads (runs 44476995073 and
+    44554398342). It passes alone in about four seconds, so it fails only under CI load. Charter
+    step 5 proof waits on it.
+
+    Cause: the fixture is wrong and the product is right. The step "the fixture closes the client
+    master and delivers SIGHUP after owned teardown has begun"
+    (features/run_terminal_local_linux_test.go) closes the client master as soon as the fake
+    engine's `ready` channel closes (features/run_terminal_engine_test.go). `ready` closes when the
+    fake writes its output frame, which runs beside the /start reply, so it does not show that
+    launch is finished. Under load the master closes while the controller is still inside launch
+    (Start, anchor detection, the post-start record). A hangup before the workload's exit is
+    observed cannot give 17: the controller reports the disconnect with exit 75 and "owned run
+    could not be completed" (run 44554398342), or its worker-inspect fails and it reports
+    run.execution-unavailable and run.mount-refused (run 44476995073). Both are the right product
+    answers for a disconnect during launch (see the RUNTTY-14 row "unknown, 75"). The scenario
+    means a disconnect during teardown, after launch.
+
+    Settled fix: harness only, no product change and no scenario text change.
+    1. The fake engine gets a `startDelay` knob. It holds the reply to POST /start, not the output
+    frame, for the given time. The hold selects on time.After(startDelay) or the request's
+    r.Context().Done(), with the recorder lock released while it waits, as the existing "start
+    accepted but its reply times out" fault does. The RUNTTY-22 step sets it to one second. That
+    forces the bad interleaving every time: output is ready while the controller is still in
+    Start.
+    2. invoke's harness guard (features/run_terminal_linux_test.go, the 5 s `guard`) grows by
+    exactly the step's startDelay and by nothing else. This is settled and is not a loosening of
+    a gate: it is bookkeeping for a delay the fixture itself injects, and no product bound, no
+    scenario assertion and no other scenario's guard changes.
+    3. The step closes the client master only once `launchObserved(requests, pid, id)` is true. It
+    must not close on `ready` alone. The function takes the recorder's journal ([]doctorRequest),
+    the controller's PID and the container ID, and is true when some request has that PID, method
+    POST and a path that ends in "/containers/<id>/wait", matched as a suffix as the existing
+    /kill gate matches. A query string is not part of the path and does not matter; a version
+    prefix such as /v1.56 does not matter. The controller waits only after launch, and the journal
+    shows that request for any controller, so no new product signal is needed. The step reads the
+    worker's ID from the fake's record (the single key of a.started, read under a.mu), and fails
+    the step if there is not exactly one. It never matches a /wait for any other ID. The journal's
+    create request carries no id; a.started[id] is set at features/run_terminal_engine_test.go:73
+    before the hold.
+    4. The existing second gate (SIGHUP only after the owned /kill request, with killDelay 2s) is
+    unchanged.
+    The scenario must still report run.terminal-disconnected, exit 17, an attempted terminal
+    restoration and finished owned cleanup. Nothing may be loosened.
+
+    TestLaunchObserved (features/, no engine) has these rows, named by t.Run with underscores for
+    spaces, and the first check requires a pass event for each:
+    - accepts_wait_from_pid: POST /v1.56/containers/<id>/wait from the pid is accepted.
+    - rejects_wait_from_other_pid: the same request from another PID is rejected.
+    - rejects_other_method: GET, and any method but POST, on /wait is rejected.
+    - rejects_other_requests: a journal holding only /start, /json, /attach or /kill, from the
+    pid, is rejected.
+    - rejects_empty_journal: an empty journal is rejected.
+    - accepts_query_string: POST /containers/<id>/wait?condition=not-running from the pid is
+    accepted.
+    - rejects_other_container: a /wait for a different container ID from the pid is rejected.
+
+    Red first, two commits, both with --item T-68.
+    Commit 1 (test): the startDelay knob, its use and the guard extension in the step, a stub
+    `launchObserved` (its unused parameters named _ so revive passes) that compiles and returns false
+    for every input but is not called by the step,
+    and TestLaunchObserved with its rows. At this commit the step still closes on `ready`. The
+    implementer then runs and reports both red outputs. First, check 1: the accepts_ rows fail at
+    their assertions and the rejects_ rows pass against the constant false, so go test fails and the
+    check prints its report and exits 1. Second, the scenario check: RUNTTY-22 fails at "terminal
+    run reports run.terminal-disconnected and returns the workload exit 17" with exit 75, since
+    the master closes on `ready` while /start is held. The sandbox runs RUNTTY-22 (it passed in 4 s
+    on 2026-11-20 without the knob), so both are shown locally.
+    Commit 2 (test): implement `launchObserved` and wire it into the step in place of the `ready`
+    wait. Then both checks pass.
+
+    Check 2 is written in the form CI reads back as a selection (itos.yaml
+    tests.scenario.recognize, as: pattern), so CI runs it in its one run. Its pattern is single
+    quoted because it holds `$` and parentheses, which itos's reading accepts only in single quotes
+    (internal/tests/recognize.go in itos: a pattern word is double-quoted without `$`, single-quoted,
+    or bare without quotes, `$` or backslash). Today check 2 passes without the knob; the red
+    commit stands in for its red.
+- id: T-69
+  type: ci
+  title: The engine shards' 180-second step budget warns; only a 600-second hang guard fails
+  why: >
+    The person's standing rule: caps are soft and warn; only a hang guard stops. Today the Engine
+    scenarios step in .github/workflows/ci.yml (engine_finish, the line `if (( elapsed > 180000 &&
+    result == 0 )); then result=1; fi`) fails an engine shard whose run otherwise passed when it
+    took more than 180 seconds. That budget is decision 0024 (T-45), restated in
+    docs/architecture/arc42.md (Engine tier), features/README.md (shard list, failure-report notes,
+    timing paragraph) and decision 0028's egress note. A slow runner thus turns a green run red, and
+    the fix has been to chase the clock, which the rule says not to do. This is foundation CI work
+    under docs/charter.md: no container behaviour, so no scenarios or step definitions; its checks
+    are tests of the wrapper itself. Settled by the chief for the person, who may override on the
+    pull request: 1. The line `engine step timing: duration_ms=<ms> outcome=<passed|failed>` stays
+    and prints on every run. 2. Above 180000 ms the wrapper prints one GitHub annotation,
+    `::warning::Engine shard <shard> took <ms> ms, over the 180000 ms soft budget`, and does not
+    fail. The shard name comes from a new step env ITOS_CONTAINER_ENGINE_SHARD set to `${{
+    matrix.shard }}`. At 180000 ms or below nothing is printed beyond the timing line. 3. Above
+    600000 ms a run that otherwise passed fails (result=1) with `::error::Engine shard <shard> took
+    <ms> ms, over the 600000 ms hang guard`; this is the only time-based failure. Exactly 600000 ms
+    warns and passes. A run that failed for another reason keeps its own exit status and is never
+    turned into a different one by timing; it may print the warning. Missing, invalid or backwards
+    uptime still fails a passing run, as today. 4. The old limits would fire before 600 s (Go test
+    -timeout 4m, step timeout-minutes 5, job timeout-minutes 10), so raise them just enough that the
+    600 s guard is the one that fires: `-test.timeout=10m`, the Engine scenarios step
+    `timeout-minutes: 11`, the engine-shard job `timeout-minutes: 15`. Fixture preparation (4 min),
+    the preflight and the aggregate keep theirs. The 600 s guard counts from the step's start, so
+    the job's 15 minutes also cover checkout, setup-go and preparation. 5. Record it as an amendment
+    section in docs/decisions/0024-engine-tier-shards.md (dated 2026-11-20, in the style of its
+    "Slice-34 placement" section, saying what it supersedes: the 180-second failure and the 4/5/10
+    minute limits; the title's "inside 180 seconds" becomes a target) and update every statement of
+    180 s as a gate: ci.yml's comment above engine-shard (it says "so that no shard's step passes
+    180 seconds"), arc42.md, features/README.md (the shard list, the failure-report line that names
+    a passing run over the 180 s budget, the timing paragraph that "rejects a total above 180
+    seconds" and the 10/5/4 limits, the later sentence "still has its 180-second gate"), decision
+    0028's egress note ("reaches or approaches 180 seconds"; keep the advice to move egress.feature
+    whole only as a response to a warning the person judges persistent, and drop "do not raise the
+    budget"). Historical statements in 0024 and 0028 that describe what was decided then stay as
+    written. tools/bin/engine-failure-report: read it; if it treats a passing over-budget run as a
+    failure, make it treat only over 600 s that way. Spec for the tests. New
+    features/engine_budget_test.go, TestEngineStepBudget, Linux only like TestEngineDiagnostics. It
+    reads the Engine scenarios step's script from ../.github/workflows/ci.yml, takes the text before
+    the line `trap engine_finish EXIT`, and runs it under bash with a driver appended that redefines
+    `engine_now` (so uptime is scripted, not read), sets engine_started to 0 and calls engine_finish
+    after a scripted `engine_now` value, with ITOS_CONTAINER_ENGINE_SHARD=egress. Rows, each
+    asserting exit status and output lines: at_179s (17900 centiseconds): exit 0, the timing line
+    says duration_ms=179000 outcome=passed, no `::warning::` and no `::error::`. at_180s: exit 0, no
+    warning (not above). at_181s: exit 0, the timing line says duration_ms=181000 outcome=passed,
+    one `::warning::` naming `egress` and `181000`, no `::error::`. at_600s: exit 0, warning, no
+    error. at_601s: exit 1, timing line outcome=failed, one `::error::` naming `egress` and
+    `601000`. failed_run_at_181s: the driver exits 7 first, the status stays 7, the line says
+    outcome=failed. failed_run_at_601s: status stays 7, not 1. unreadable_uptime: engine_now returns
+    1, the passing run exits 1, outcome=failed, no warning or error on an unknown time. The same
+    test also reads ci.yml's parsed workflow and requires the step's `-test.timeout=10m`, the step
+    timeout 11, the job timeout 15, and the ITOS_CONTAINER_ENGINE_SHARD env. Existing tests change
+    with the workflow, not weaker: features/engine_diagnostics_test.go holds a copy of the wrapper
+    (engineInvocation) and its program fixture checks `-test.timeout=4m` in the argv, so both move
+    to the new text; features/engine_shards_test.go requires the pinned expression `elapsed > 180000
+    && result == 0` (and its negative controls "the 240-second budget" and "no budget"): it pins the
+    new expressions instead (the 180000 warning and 600000 guard conditions), and the negative
+    controls become: guard removed, guard raised above 600000, warning made a failure, step or job
+    or Go limits not above the guard. Red first is a test commit holding engine_budget_test.go,
+    committed before the workflow change, whose rows at_181s, at_601s and the limits fail at their
+    assertions against today's wrapper (today 181 s exits 1, 601 s prints no ::error::, limits are
+    4m/5/10). Then the implementation commit changes ci.yml with the two updated tests; then a docs
+    commit for the decision amendment and docs. No local mutation run; CI judges changed code.
+    engine_finish's shell is not Go, so the sampled proof sees only the Go test changes.
+  done_when:
+    - run: "sh -c 'go test ./features -run \"^TestEngineStepBudget$\" -v | grep -q -- \"--- PASS: TestEngineStepBudget\"'"
+      timeout: 300
+    - run: go test ./features -run '^(TestEngineDiagnostics|TestEngineShards)$' -count=1
+      timeout: 300
+    - run: sh -c 'yq ".jobs.engine-shard.steps[] | select(.name == \"Engine scenarios\") | .run" .github/workflows/ci.yml | shellcheck --shell=bash --severity=warning -'
+      timeout: 60
+    - run: grep -q 'hang guard' docs/decisions/0024-engine-tier-shards.md
+      timeout: 30
+    - run: sh -c '! grep -q "rejects a total above 180 seconds" features/README.md'
+      timeout: 30

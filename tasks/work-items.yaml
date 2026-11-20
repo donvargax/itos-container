@@ -2444,19 +2444,13 @@ items:
       Launch and verify the worker under runsc when Landlock ABI 9 is unavailable. Prove
       ID-SOCKETS-02 and ID-SOCKETS-03 in hosted CI with their positive controls, and verify that a
       runsc failure stops startup. Broken down from p1-checkout-socket-kernel-enforcement.
-  - id: p1-runtty-22-late-sighup-fixture
-    title: Make ID-RUNTTY-22 deliver SIGHUP during owned teardown
+  - id: T-68
+    title: ID-RUNTTY-22 closes the client terminal only after launch is complete
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
-    kind: idea
-    why: >
-      The fixture failed on slice-37 and again during T-64’s required coverage run, blocking proof
-      for charter step 5, late host socket protection. Wait for an observable post-start event
-      before closing the client terminal, then deliver SIGHUP once the fixture observes teardown of
-      the owned worker. The scenario must still report the disconnect, return workload exit 17,
-      attempt terminal restoration and complete cleanup.
+    kind: task
   - id: p2-kernel-helper-leaves-no-feature-temp-dir
     title: A kernel-helper child of the feature tests leaves no itos-container-feature-binaries directory in /tmp
     phase: 1
@@ -2508,5 +2502,12 @@ items:
     phase: 1
     owner: donvargax
     status: done
+    depends_on: []
+    kind: task
+  - id: T-69
+    title: The engine shards' 180-second step budget warns; only a 600-second hang guard fails
+    phase: 1
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task

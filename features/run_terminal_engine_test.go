@@ -23,6 +23,7 @@ type terminalEngine struct {
 	hold                bool
 	expect              int
 	killDelay           time.Duration
+	startDelay          time.Duration
 	release             chan struct{}
 	ready               chan struct{}
 	started             sync.Once
@@ -116,6 +117,16 @@ func (f *terminalEngine) serve(a *localOfflineAPI, out http.ResponseWriter, r *h
 			<-r.Context().Done()
 			a.mu.Lock()
 			return true
+		}
+		if f.startDelay > 0 {
+			// The output frame is already on its way; only the reply waits, so a
+			// controller under test stays inside launch for the whole delay.
+			a.mu.Unlock()
+			select {
+			case <-time.After(f.startDelay):
+			case <-r.Context().Done():
+			}
+			a.mu.Lock()
 		}
 		out.WriteHeader(204)
 		return true
