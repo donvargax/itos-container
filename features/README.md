@@ -393,7 +393,7 @@ text its last `suite.go` block, as `pretty` prints the same error only at its st
 `panic:` or `fatal error:` the run died on (title `go test`, which for a timeout holds the
 `running tests:` list naming the scenario in flight); the run's own test, when no scenario
 failed; or `Engine scenarios`, when the log holds no go-test failure line, as a kill, a
-caught signal, a capture failure or a passing run over the 180 s shard budget leave, or no log
+caught signal, a capture failure or a passing run over the 600 s hang guard leave, or no log
 at all because the binary never ran. Only the run's own lines steer it: an error that
 quotes `=== RUN`, `--- FAIL:` or `panic:` lines stays whole inside its scenario. That holds
 because an engine run executes one scenario at a time (LIFECYCLE-09's rows run inside the
@@ -447,13 +447,17 @@ waiting goroutine only when a garbage collection's marking finds it, and with th
 collection before began its mark termination (`runtime/mgcmark.go:275` copies `work.tstart`,
 which `gcMark`, `runtime/mgc.go:1976`, sets only after marking). So a 35-second wait seen by
 the process's second collection showed `1 minutes`, and a goroutine that waited 70 s with only
-the first collection behind it had no label at all. In a 4-minute engine run collections are
+the first collection behind it had no label at all. In a long engine run collections are
 frequent, so a long wait is labelled, give or take the time between two of them.
 The workflow measures the entire Engine scenarios step, starting before
 test compilation and ending after output capture and exit diagnostics. It separately
-prints compilation time and rejects a total above 180 seconds even if the binary and
-capture both succeed. The 180-second budget is T-45's, per shard, down from the 240 seconds
-T-33 set for the unsharded step; the job, step and Go test limits stay 10, 5 and 4 minutes. The shell reads monotonic Linux uptime at 10 ms resolution;
+prints compilation time. Above 180 seconds it prints a `::warning::` naming the shard and
+its time; above 600 seconds it also prints an `::error::` and fails a run that otherwise
+passed, even if the binary and capture both succeeded. The 180 seconds are T-45's target, per
+shard, down from the 240 seconds T-33 set for the unsharded step; T-69 made them soft. There
+is no watchdog: Go's `-test.timeout=10m` stops a real hang at about 606 seconds, a failed run
+that keeps its own status, so the 600-second guard fails only a passing run that ended past
+it. The Go test, step and job limits are 10, 11 and 15 minutes. The shell reads monotonic Linux uptime at 10 ms resolution;
 missing, invalid or backwards timing fails. Compilation, test, signal and capture
 failures keep their original exit status. Fixture preparation retains its separate
 budget, followed by the existing failure diagnostics and unconditional owned cleanup.
@@ -833,7 +837,7 @@ and add no retry. Ordinary `TestEngineFixtureWarmup`, `TestEngineFixtureWarmupPr
 ownership fixtures, and the same timing/timeout functions with harmless commands; they supply
 no runtime engine evidence. The coordinator retains each pushed shard's tested SHA, both
 warm-up durations, existing step/row timings, complete live selection and final cleanup verdict.
-The Engine scenarios step still has its 180-second gate. The T-57 decision below supersedes
+The Engine scenarios step warns above 180 seconds and fails a passing run only above 600. The T-57 decision below supersedes
 the earlier instruction to stop and choose limits when a first row still times out.
 No fixture budget, assertion, retry or skipped row changes as part of these warm-ups.
 
