@@ -73,6 +73,41 @@ fails collection. `TestApprovalKernelCoverage` runs both examples and requires
 successful conversion with executed private-directory initialization coverage.
 It preserves the same filtered, platform and engine selection boundaries.
 
+The socket-backend fixture lets a world choose what the kernel answers to the Landlock
+version query and which runtimes the fixture daemon reports, for the doctor, approve and run
+scenarios that pick the backend a host offers. The product asks the kernel itself, with
+`landlock_create_ruleset(NULL, 0, LANDLOCK_CREATE_RULESET_VERSION)`, so the harness answers at
+the system call, never through a product seam. A world that pins an answer
+(`pinKernelAnswer`: "ABI <n>" for n from 0 to 2147483647 written with no sign or leading zero,
+"ENOSYS", "EOPNOTSUPP" or "EPERM"; any other text is refused) starts each later invocation
+through a helper mode of this test binary, as the older-kernel approval fixture does for
+`fchmodat2`. The helper sets `no_new_privs`, installs a seccomp filter whose only action but
+allow is a user notification for `landlock_create_ruleset`, hands the listener to the harness
+and execs the program in the same process, with its pid, argv, environment, working directory,
+standard streams and descriptors unchanged. The harness answers the version query from the
+world's answer as it stands when the query arrives, and any other `landlock_create_ruleset`
+call with `EPERM`. It records each supervised invocation's calls in order (`landlockRecord`).
+A route applies the wrapper (`superviseLandlock`) to the `exec.Cmd` it builds before `Start`
+and ends it after `Wait`; `runEnv` does, so doctor and the fingerprint approval are covered.
+Routes that start the product themselves adopt it in the slice that first pins an answer for
+them. A process that outlives the started one then gets `ENOSYS` for a later query, as the
+kernel answers a filter whose listener is gone; such a route first extends supervision until
+the listener reports `POLLHUP`. Scenario cleanup ends any supervision still running. There is no
+default answer, so a world that pins nothing starts its program directly and sees the host's
+kernel. Where the approval location is set in a world that pins an answer, `runEnv` has the
+helper set umask `0000` just before its exec and starts no `/bin/sh`, so a program that cannot
+be executed is the helper's failure, never an exit status. The helper and the probe the
+fixture's own rows run are dispatched by `TestMain` before it makes its
+`itos-container-feature-binaries-*` directory, so neither leaves one.
+
+`doctorAPI`'s `/info` reports `DefaultRuntime` `runc` and, by default, the inventory "runc only".
+`chooseRuntimeInventory` names the fixture daemon's inventory ("runc only", "runc and runsc",
+"runsc permitting host sockets", "unidentified runsc" or "missing inventory"), which each later
+request reads afresh. `TestSocketBackendFixture` holds both. On Linux amd64 it never skips: a host
+whose processes already sit under a live seccomp listener, as in a sandbox that supervises by
+user notification, refuses the filter with `EBUSY`, so the test fails there. Elsewhere it skips,
+and the package still builds for the manual macOS and Windows jobs.
+
 ## Running them
 
 ```sh

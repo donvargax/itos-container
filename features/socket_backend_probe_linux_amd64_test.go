@@ -36,9 +36,15 @@ const landlockProbeMode = "itos-container-landlock-probe"
 // TestMain calls it first: neither the helper, which execs, nor a probe that
 // exits at once returns to remove the directory TestMain makes.
 func socketBackendChild() {
-	if len(os.Args) > 1 && os.Args[1] == landlockProbeMode {
+	if len(os.Args) < 2 {
+		return
+	}
+	switch os.Args[1] {
+	case landlockProbeMode:
 		landlockProbeMain(os.Args[2:])
 		os.Exit(0)
+	case landlockHelperMode:
+		landlockHelperMain(os.Args[2:])
 	}
 }
 
@@ -89,7 +95,7 @@ func landlockProbeMain(actions []string) {
 			ret, errno := landlockQuery(flags)
 			line.Ret = ret
 			if errno != 0 {
-				line.Errno = unix.ErrnoName(errno)
+				line.Errno = landlockErrnoName(errno)
 			}
 			emit(line)
 		case action == "stdin":
@@ -126,6 +132,15 @@ func landlockQuery(flags uintptr) (int, unix.Errno) {
 		return -1, errno
 	}
 	return int(int32(r)), 0
+}
+
+// landlockErrnoName names an errno as the pinned answers do: EOPNOTSUPP and
+// ENOTSUP are one number, which x/sys names the latter.
+func landlockErrnoName(errno unix.Errno) string {
+	if errno == unix.EOPNOTSUPP {
+		return "EOPNOTSUPP"
+	}
+	return unix.ErrnoName(errno)
 }
 
 func landlockReport(stdin []byte) landlockProbeLine {

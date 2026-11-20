@@ -170,7 +170,7 @@ func landlockUnpinned(t *testing.T) {
 	ret, errno := landlockQuery(unix.LANDLOCK_CREATE_RULESET_VERSION)
 	want := "version " + strconv.Itoa(ret)
 	if errno != 0 {
-		want += " " + unix.ErrnoName(errno)
+		want += " " + landlockErrnoName(errno)
 	}
 	requireLandlockReplies(t, lines, want)
 	status, err := landlockThreadStatus()

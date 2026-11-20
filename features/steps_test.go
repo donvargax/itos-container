@@ -50,6 +50,7 @@ type world struct {
 	session             *sessionWorld
 	offline             *offlineRuntime
 	sockets             *socketWorld
+	landlock            *landlockWorld // the kernel's pinned Landlock answer, once a step pins one
 	anchor              *anchorWorld
 	anchors             *anchorRecoveryWorld
 	anchorLocalRecovery *anchorRecoveryLocal
@@ -92,7 +93,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 		// Before the world is reset, whatever the row's outcome: a failing row is the
 		// one whose offsets matter, and godog skips the steps after a failure.
 		ctx = withSignalOffsets(ctx, w.lifecycle.signalOffsets())
-		sessionErr := errors.Join(w.closeHomeNative(), w.closeLifecycleNative(), w.closeOverlap(), w.closeRecoveryNative(), w.closeOfflineRuntime(), w.closeAnchor(), w.closeSockets(), w.closeSession(), w.closeEgressNative())
+		sessionErr := errors.Join(w.closeHomeNative(), w.closeLifecycleNative(), w.closeOverlap(), w.closeRecoveryNative(), w.closeOfflineRuntime(), w.closeAnchor(), w.closeSockets(), w.closeSession(), w.closeEgressNative(), w.closeLandlock())
 		w.closeCredentials()
 		w.closeDoctor()
 		w.closePolicy()
@@ -486,11 +487,19 @@ func (w *world) runEnv(dir string, env []string, program string, args ...string)
 		defer cancel()
 	}
 	cmd := exec.CommandContext(ctx, program, args...)
+	umask := landlockNoUmask
 	if w.approval != nil && w.approval.location != "" {
-		// This trusted test wrapper changes only the child umask. Positional arguments
-		// remain literal, and no checkout shell or helper participates.
-		words := append([]string{"-c", `umask 0000; exec "$@"`, "slice-4-umask", program}, args...)
-		cmd = exec.CommandContext(ctx, "/bin/sh", words...)
+		if w.landlock != nil {
+			// The Landlock wrapper's helper sets the umask just before its exec, so
+			// no shell runs between it and the program, and a program that cannot
+			// be executed is the helper's failure, never sh's exit 126 or 127.
+			umask = 0
+		} else {
+			// This trusted test wrapper changes only the child umask. Positional arguments
+			// remain literal, and no checkout shell or helper participates.
+			words := append([]string{"-c", `umask 0000; exec "$@"`, "slice-4-umask", program}, args...)
+			cmd = exec.CommandContext(ctx, "/bin/sh", words...)
+		}
 	}
 
 	cmd.Dir = dir
@@ -501,9 +510,22 @@ func (w *world) runEnv(dir string, env []string, program string, args ...string)
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	err := w.startLocalCommand(cmd)
-	if err == nil {
+	// A world that pins a Landlock answer starts the program through the helper
+	// and answers its query until the wrapper ends, after Wait.
+	supervision, err := w.superviseLandlock(cmd, umask)
+	if err != nil {
+		return err
+	}
+	err = w.startLocalCommand(cmd)
+	started := err == nil
+	if started {
 		err = cmd.Wait()
+	}
+	supervisionErr := supervision.end(started)
+	var helperFailure *landlockHelperError
+	if errors.As(supervisionErr, &helperFailure) {
+		// The program never ran: the helper's exit status is no product result.
+		return supervisionErr
 	}
 	unlock := w.lockLocalAPI()
 	defer unlock()
@@ -516,9 +538,9 @@ func (w *world) runEnv(dir string, env []string, program string, args ...string)
 	case errors.As(err, &exit):
 		w.exit = exit.ExitCode()
 	default:
-		return fmt.Errorf("running %s: %w", program, err)
+		return errors.Join(fmt.Errorf("running %s: %w", program, err), supervisionErr)
 	}
-	return nil
+	return supervisionErr
 }
 
 // A subprocess/HTTP exchange is not Go memory synchronization. Guard child
