@@ -73,7 +73,7 @@ journal regression. These results include the version-3 gate regression.
 
 Real-engine green, sampled changed-code proof and the other shard's measured time
 belong to CI at the pushed head. No local result establishes native isolation.
-If that shard reaches or approaches 180 seconds, move egress.feature whole to a
-fourth shard and update its inventory pins; do not raise the budget or split it.
+If that shard keeps warning above 180 seconds and the person judges it persistent, move
+egress.feature whole to a fourth shard and update its inventory pins; never split it.
 Slice-28 adds native log/failure/recovery proof. Runtime wiring does not waive
 T-40's failure closure or T-51's requirement to retain resources on log-copy failure.
