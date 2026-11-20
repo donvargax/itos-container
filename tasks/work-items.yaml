@@ -2504,3 +2504,76 @@ items:
     status: done
     depends_on: []
     kind: task
+  - id: p1-engine-budget-warn
+    title: The engine shards' 180-second step budget warns; only a 600-second hang guard fails
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The person's standing rule: caps are soft and warn; only a hang guard stops. Today the Engine
+      scenarios step in .github/workflows/ci.yml (engine_finish, the line `if (( elapsed > 180000 &&
+      result == 0 )); then result=1; fi`) fails an engine shard whose run otherwise passed when it
+      took more than 180 seconds. That budget is decision 0024 (T-45), restated in
+      docs/architecture/arc42.md (Engine tier), features/README.md (shard list, failure-report
+      notes, timing paragraph) and decision 0028's egress note. A slow runner thus turns a green run
+      red, and the fix has been to chase the clock, which the rule says not to do. This is
+      foundation CI work under docs/charter.md: no container behaviour, so no scenarios or step
+      definitions; its checks are tests of the wrapper itself. Settled by the chief for the person,
+      who may override on the pull request: 1. The line `engine step timing: duration_ms=<ms>
+      outcome=<passed|failed>` stays and prints on every run. 2. Above 180000 ms the wrapper prints
+      one GitHub annotation, `::warning::Engine shard <shard> took <ms> ms, over the 180000 ms soft
+      budget`, and does not fail. The shard name comes from a new step env
+      ITOS_CONTAINER_ENGINE_SHARD set to `${{ matrix.shard }}`. At 180000 ms or below nothing is
+      printed beyond the timing line. 3. Above 600000 ms a run that otherwise passed fails
+      (result=1) with `::error::Engine shard <shard> took <ms> ms, over the 600000 ms hang guard`;
+      this is the only time-based failure. Exactly 600000 ms warns and passes. A run that failed for
+      another reason keeps its own exit status and is never turned into a different one by timing;
+      it may print the warning. Missing, invalid or backwards uptime still fails a passing run, as
+      today. 4. The old limits would fire before 600 s (Go test -timeout 4m, step timeout-minutes 5,
+      job timeout-minutes 10), so raise them just enough that the 600 s guard is the one that fires:
+      `-test.timeout=10m`, the Engine scenarios step `timeout-minutes: 11`, the engine-shard job
+      `timeout-minutes: 15`. Fixture preparation (4 min), the preflight and the aggregate keep
+      theirs. The 600 s guard counts from the step's start, so the job's 15 minutes also cover
+      checkout, setup-go and preparation. 5. Record it as an amendment section in
+      docs/decisions/0024-engine-tier-shards.md (dated 2026-11-20, in the style of its "Slice-34
+      placement" section, saying what it supersedes: the 180-second failure and the 4/5/10 minute
+      limits; the title's "inside 180 seconds" becomes a target) and update every statement of 180 s
+      as a gate: ci.yml's comment above engine-shard (it says "so that no shard's step passes 180
+      seconds"), arc42.md, features/README.md (the shard list, the failure-report line that names a
+      passing run over the 180 s budget, the timing paragraph that "rejects a total above 180
+      seconds" and the 10/5/4 limits, the later sentence "still has its 180-second gate"), decision
+      0028's egress note ("reaches or approaches 180 seconds"; keep the advice to move
+      egress.feature whole only as a response to a warning the person judges persistent, and drop
+      "do not raise the budget"). Historical statements in 0024 and 0028 that describe what was
+      decided then stay as written. tools/bin/engine-failure-report: read it; if it treats a passing
+      over-budget run as a failure, make it treat only over 600 s that way. Spec for the tests. New
+      features/engine_budget_test.go, TestEngineStepBudget, Linux only like TestEngineDiagnostics.
+      It reads the Engine scenarios step's script from ../.github/workflows/ci.yml, takes the text
+      before the line `trap engine_finish EXIT`, and runs it under bash with a driver appended that
+      redefines `engine_now` (so uptime is scripted, not read), sets engine_started to 0 and calls
+      engine_finish after a scripted `engine_now` value, with ITOS_CONTAINER_ENGINE_SHARD=egress.
+      Rows, each asserting exit status and output lines: at_179s (17900 centiseconds): exit 0, the
+      timing line says duration_ms=179000 outcome=passed, no `::warning::` and no `::error::`.
+      at_180s: exit 0, no warning (not above). at_181s: exit 0, the timing line says
+      duration_ms=181000 outcome=passed, one `::warning::` naming `egress` and `181000`, no
+      `::error::`. at_600s: exit 0, warning, no error. at_601s: exit 1, timing line outcome=failed,
+      one `::error::` naming `egress` and `601000`. failed_run_at_181s: the driver exits 7 first,
+      the status stays 7, the line says outcome=failed. failed_run_at_601s: status stays 7, not 1.
+      unreadable_uptime: engine_now returns 1, the passing run exits 1, outcome=failed, no warning
+      or error on an unknown time. The same test also reads ci.yml's parsed workflow and requires
+      the step's `-test.timeout=10m`, the step timeout 11, the job timeout 15, and the
+      ITOS_CONTAINER_ENGINE_SHARD env. Existing tests change with the workflow, not weaker:
+      features/engine_diagnostics_test.go holds a copy of the wrapper (engineInvocation) and its
+      program fixture checks `-test.timeout=4m` in the argv, so both move to the new text;
+      features/engine_shards_test.go requires the pinned expression `elapsed > 180000 && result ==
+      0` (and its negative controls "the 240-second budget" and "no budget"): it pins the new
+      expressions instead (the 180000 warning and 600000 guard conditions), and the negative
+      controls become: guard removed, guard raised above 600000, warning made a failure, step or job
+      or Go limits not above the guard. Red first is a test commit holding engine_budget_test.go,
+      committed before the workflow change, whose rows at_181s, at_601s and the limits fail at their
+      assertions against today's wrapper (today 181 s exits 1, 601 s prints no ::error::, limits are
+      4m/5/10). Then the implementation commit changes ci.yml with the two updated tests; then a
+      docs commit for the decision amendment and docs. No local mutation run; CI judges changed
+      code. engine_finish's shell is not Go, so the sampled proof sees only the Go test changes.
