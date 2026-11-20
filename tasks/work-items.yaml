@@ -2508,6 +2508,6 @@ items:
     title: The engine shards' 180-second step budget warns; only a 600-second hang guard fails
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
