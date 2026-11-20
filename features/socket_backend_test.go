@@ -68,8 +68,14 @@ func parseLandlockAnswer(text string) (abi int, errno string, err error) {
 
 // pinKernelAnswer makes the kernel answer the Landlock version query with text
 // from now on. It is safe while invocations run: each query reads the answer as
-// it stands when it arrives.
+// it stands when it arrives. A host that cannot supervise refuses every pin: a
+// pinned world there would start its program unfiltered, so the product would
+// read the host kernel's answer as the pinned one, and runEnv would skip its
+// /bin/sh umask wrapper for want of a helper to set the umask.
 func (w *world) pinKernelAnswer(text string) error {
+	if !socketBackendSupported {
+		return errors.New("socket backend fixture: this host cannot pin a kernel answer, which is chosen at the system call of a Linux amd64 process")
+	}
 	if _, _, err := parseLandlockAnswer(text); err != nil {
 		return err
 	}

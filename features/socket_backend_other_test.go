@@ -35,7 +35,8 @@ func TestSocketBackendPinRefusedWhereUnsupported(t *testing.T) {
 	}
 }
 
-// landlockRun is the supervision of one invocation. Nothing supervises here.
+// landlockRun is the supervision of one invocation. Nothing supervises here, so
+// pinKernelAnswer refuses and no world reaches superviseLandlock pinned.
 type landlockRun struct{}
 
 func (w *world) superviseLandlock(cmd *exec.Cmd, umask int) (*landlockRun, error) {

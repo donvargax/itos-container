@@ -106,7 +106,10 @@ fixture's own rows run are dispatched by `TestMain` before it makes its
 request reads afresh. `TestSocketBackendFixture` holds both. On Linux amd64 it never skips: a host
 whose processes already sit under a live seccomp listener, as in a sandbox that supervises by
 user notification, refuses the filter with `EBUSY`, so the test fails there. Elsewhere it skips,
-and the package still builds for the manual macOS and Windows jobs.
+and the package still builds for the manual macOS and Windows jobs. There nothing can supervise a
+program, so `pinKernelAnswer` refuses every pin with an error naming the fixture: a step that pins
+fails, and a world never starts its program unfiltered or without the approval umask while
+counting as pinned. `TestSocketBackendPinRefusedWhereUnsupported` holds that refusal.
 
 ## Running them
 
