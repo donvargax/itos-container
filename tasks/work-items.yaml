@@ -81,6 +81,9 @@ items:
       the milestone's proof tooling.
 
       The person chose to do this foundation item now, 2026-11-20.
+
+      Checks run through itos ci run (a task check or a Go test it executes); no .github/workflows
+      edits.
   - id: T-8
     title: Record a fresh foundation mutation baseline with pinned itos-cc
     phase: 1
