@@ -8388,3 +8388,13 @@
     no scenario IDs, so it can land while minting is blocked and unblock all three slices.
   done_when:
     - run: go test -list '^TestSocketBackendFixture$' ./features | grep -qx TestSocketBackendFixture && go test -count=1 -v -run '^TestSocketBackendFixture$' ./features
+- id: T-67
+  type: ci
+  title: Cursor Bugbot satisfies the review gate
+  why: >
+    Codex is out of code-review usage, and itos push --ready waits on every login in review_by. The
+    person approved Cursor Bugbot as the second reviewer. Make review_by name cursor alone, keep
+    Codex in reviewers so it is still asked, and add cursor as a bugbot reviewer. Codex threads
+    still have to be resolved before merge.
+  done_when:
+    - run: itos config get push.pr.review_by | grep -qx "\[\"cursor\"\]" && itos config get push.pr.reviewers | grep -q "\"kind\":\"bugbot\""
