@@ -8551,43 +8551,95 @@
   why: >
     ID-RUNTTY-22 (features/run_terminal.feature, "A late hangup signal cannot kill the controller
     during owned teardown") fails now and then in CI with exit 75 where it expects exit 17. It
-    blocked slice-37 and T-64's coverage run and it also fails on other heads (runs 44476995073,
-    44554398342). It always passes alone in about four seconds, so it fails only under CI load.
-    Charter step 5 proof waits on it. Cause: the fixture is wrong; the product is right. The step
-    "the fixture closes the client master and delivers SIGHUP after owned teardown has begun"
+    blocked slice-37 and T-64's coverage run and has failed on other heads (runs 44476995073 and
+    44554398342). It passes alone in about four seconds, so it fails only under CI load. Charter
+    step 5 proof waits on it.
+
+    Cause: the fixture is wrong and the product is right. The step "the fixture closes the client
+    master and delivers SIGHUP after owned teardown has begun"
     (features/run_terminal_local_linux_test.go) closes the client master as soon as the fake
     engine's `ready` channel closes (features/run_terminal_engine_test.go). `ready` closes when the
-    fake writes its output frame, which runs beside the /start reply, so it is no sign that launch
-    is finished. Under load the master closes while the controller is still inside launch (Start,
-    anchor detection, the post-start record). A hangup before the workload's exit is observed cannot
-    yield 17: the controller reports the disconnect with exit 75 and "owned run could not be
-    completed" (run 44554398342), or fails its worker-inspect with run.execution-unavailable and
-    run.mount-refused (run 44476995073). Both are the right product answers for a disconnect during
-    launch (see the RUNTTY-14 row "unknown, 75"). The scenario means a disconnect during teardown,
-    after launch. Settled fix, harness only, no product change and no scenario text change: 1. The
-    fake engine gets a `startDelay` knob that holds the reply to POST /start (not the output frame)
-    for a fixed time, with the recorder lock released while it waits, as the "start accepted but its
-    reply times out" fault already does. The RUNTTY-22 step sets it to one second. This forces the
-    bad interleaving every time: output is ready while the controller is still in Start. 2. The step
-    closes the client master only after the recorder's journal shows a POST /containers/<id>/wait
-    from the controller's PID. Launch is complete when the controller waits, and that request exists
-    in the journal for every controller, so no extra product signal is needed. It must not close on
-    `ready` alone. 3. The gate is a small function over the journal, `launchObserved(requests
-    []doctorRequest, pid int) bool`, so a test can cover it without an engine. 4. The existing
-    second gate (SIGHUP only after the owned /kill request, with killDelay 2s) stays. The scenario
-    still has to report run.terminal-disconnected, exit 17, an attempted terminal restoration and
-    finished owned cleanup. Nothing may be loosened. Red first. Commit 1 (test, Item or Task
-    footer): the startDelay knob and its use in the step, and the test below, with the gate not yet
-    in place. At that commit the scenario fails deterministically at "terminal run reports
-    run.terminal-disconnected and returns the workload exit 17" with exit 75, run with `go test
-    ./features -run TestFeatures -scenarios='^@ID-RUNTTY-22$'`. The sandbox ran it once without the
-    knob and it passed (it only fails under load), so with the knob the failing run should be shown
-    locally if the sandbox runs RUNTTY-22 at all, else by CI (gh workflow run ci.yml -f
-    red_scenarios=...). Commit 2 adds the gate; the same run then passes. Local limits: the unit
-    test needs no engine and runs anywhere. The scenario runs in this sandbox (it passed in 4s on
-    2026-11-20 without the knob). CI alone proves it under load.
+    fake writes its output frame, which runs beside the /start reply, so it does not show that
+    launch is finished. Under load the master closes while the controller is still inside launch
+    (Start, anchor detection, the post-start record). A hangup before the workload's exit is
+    observed cannot give 17: the controller reports the disconnect with exit 75 and "owned run
+    could not be completed" (run 44554398342), or its worker-inspect fails and it reports
+    run.execution-unavailable and run.mount-refused (run 44476995073). Both are the right product
+    answers for a disconnect during launch (see the RUNTTY-14 row "unknown, 75"). The scenario
+    means a disconnect during teardown, after launch.
+
+    Settled fix: harness only, no product change and no scenario text change.
+    1. The fake engine gets a `startDelay` knob. It holds the reply to POST /start, not the output
+    frame, for the given time. The hold selects on time.After(startDelay) or the request's
+    r.Context().Done(), with the recorder lock released while it waits, as the existing "start
+    accepted but its reply times out" fault does. The RUNTTY-22 step sets it to one second. That
+    forces the bad interleaving every time: output is ready while the controller is still in
+    Start.
+    2. invoke's harness guard (features/run_terminal_linux_test.go, the 5 s `guard`) grows by
+    exactly the step's startDelay and by nothing else. This is settled and is not a loosening of
+    a gate: it is bookkeeping for a delay the fixture itself injects, and no product bound, no
+    scenario assertion and no other scenario's guard changes.
+    3. The step closes the client master only once `launchObserved(requests, pid, id)` is true. It
+    must not close on `ready` alone. The function takes the recorder's journal ([]doctorRequest),
+    the controller's PID and the container ID, and is true when some request has that PID, method
+    POST and a path that ends in "/containers/<id>/wait", matched as a suffix as the existing
+    /kill gate matches. A query string is not part of the path and does not matter; a version
+    prefix such as /v1.56 does not matter. The controller waits only after launch, and the journal
+    shows that request for any controller, so no new product signal is needed. The step reads the
+    worker's ID from the fake's record (the single key of a.started, read under a.mu), and fails
+    the step if there is not exactly one. It never matches a /wait for any other ID. The journal's
+    create request carries no id; a.started[id] is set at features/run_terminal_engine_test.go:73
+    before the hold.
+    4. The existing second gate (SIGHUP only after the owned /kill request, with killDelay 2s) is
+    unchanged.
+    The scenario must still report run.terminal-disconnected, exit 17, an attempted terminal
+    restoration and finished owned cleanup. Nothing may be loosened.
+
+    TestLaunchObserved (features/, no engine) has these rows, named by t.Run with underscores for
+    spaces, and the first check requires a pass event for each:
+    - accepts_wait_from_pid: POST /v1.56/containers/<id>/wait from the pid is accepted.
+    - rejects_wait_from_other_pid: the same request from another PID is rejected.
+    - rejects_other_method: GET, and any method but POST, on /wait is rejected.
+    - rejects_other_requests: a journal holding only /start, /json, /attach or /kill, from the
+    pid, is rejected.
+    - rejects_empty_journal: an empty journal is rejected.
+    - accepts_query_string: POST /containers/<id>/wait?condition=not-running from the pid is
+    accepted.
+    - rejects_other_container: a /wait for a different container ID from the pid is rejected.
+
+    Red first, two commits, both with --item T-68.
+    Commit 1 (test): the startDelay knob, its use and the guard extension in the step, a stub
+    `launchObserved` (its unused parameters named _ so revive passes) that compiles and returns false
+    for every input but is not called by the step,
+    and TestLaunchObserved with its rows. At this commit the step still closes on `ready`. The
+    implementer then runs and reports both red outputs. First, check 1: the accepts_ rows fail at
+    their assertions and the rejects_ rows pass against the constant false, so go test fails and the
+    check prints its report and exits 1. Second, the scenario check: RUNTTY-22 fails at "terminal
+    run reports run.terminal-disconnected and returns the workload exit 17" with exit 75, since
+    the master closes on `ready` while /start is held. The sandbox runs RUNTTY-22 (it passed in 4 s
+    on 2026-11-20 without the knob), so both are shown locally.
+    Commit 2 (test): implement `launchObserved` and wire it into the step in place of the `ready`
+    wait. Then both checks pass.
+
+    Check 2 is written in the form CI reads back as a selection (itos.yaml
+    tests.scenario.recognize, as: pattern), so CI runs it in its one run. Its pattern is single
+    quoted because it holds `$` and parentheses, which itos's reading accepts only in single quotes
+    (internal/tests/recognize.go in itos: a pattern word is double-quoted without `$`, single-quoted,
+    or bare without quotes, `$` or backslash). Today check 2 passes without the knob; the red
+    commit stands in for its red.
   done_when:
-    - run: "sh -c 'go test ./features -run \"^TestLaunchObserved$\" -v | grep -q -- \"--- PASS: TestLaunchObserved\"'"
-      timeout: 300
-    - run: go test ./features -run TestFeatures -scenarios='^@ID-RUNTTY-22$'
+    - run: |-
+        report=$(go test -count=1 -json -run '^TestLaunchObserved$' ./features) || {
+          printf '%s\n' "$report"
+          exit 1
+        }
+        printf '%s\n' "$report" | jq -es '
+          [.[] | select(.Action == "pass" and .Test != null) | .Test] as $passed
+          | ["", "/accepts_wait_from_pid", "/rejects_wait_from_other_pid",
+             "/rejects_other_method", "/rejects_other_requests", "/rejects_empty_journal",
+             "/accepts_query_string", "/rejects_other_container"]
+          | map("TestLaunchObserved" + .) - $passed
+          | if length == 0 then true else error("missing passing tests: " + join(", ")) end'
+      timeout: 600
+    - run: go test ./features -count=1 -timeout=20m -scenarios='^@(?:ID-RUNTTY-22)$'
       timeout: 600
