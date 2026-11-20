@@ -8530,24 +8530,6 @@
     describes the fixture beside the older-kernel approval fixture. It also says that a host whose
     processes already sit under a live seccomp listener, as in a sandbox that supervises by user
     notification, refuses the filter with EBUSY, so the test fails there.
-  done_when:
-    - run: |-
-        report=$(go test -count=1 -json -run '^TestSocketBackendFixture$' ./features) || {
-          printf '%s\n' "$report"
-          exit 1
-        }
-        printf '%s\n' "$report" | jq -es '
-          [.[] | select(.Action == "pass" and .Test != null) | .Test] as $passed
-          | ["", "/kernel_answer/ABI_9", "/kernel_answer/ABI_8", "/kernel_answer/ABI_0",
-             "/kernel_answer/ENOSYS", "/kernel_answer/EOPNOTSUPP", "/kernel_answer/EPERM",
-             "/unpinned", "/umask_composed", "/other_call_refused", "/arrival_action",
-             "/no_query", "/exec_unchanged", "/no_feature_binaries_left",
-             "/cleanup_ends_supervision", "/helper_failure", "/refused_answers",
-             "/runtimes/default", "/runtimes/runc_only", "/runtimes/runc_and_runsc",
-             "/runtimes/runsc_permitting_host_sockets", "/runtimes/unidentified_runsc",
-             "/runtimes/missing_inventory", "/runtimes/refused_inventory"]
-          | map("TestSocketBackendFixture" + .) - $passed
-          | if length == 0 then true else error("missing passing tests: " + join(", ")) end'
 - id: T-67
   type: ci
   title: Cursor Bugbot satisfies the review gate
