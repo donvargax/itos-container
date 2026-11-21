@@ -2644,14 +2644,15 @@ items:
       codex-auth, source, lock}` with its closed fields, and with the landed `home` field as the
       contracts task settles. Version 3 is still refused exactly as before, and other field defects
       give located diagnostics. Nothing is delivered at this stage. Broken down from slice-32.
-  - id: codex-share-inspection
+  - id: slice-49
     title: Doctor inspects the Codex directory and lock by metadata only, refusing unsafe entries, protected-tree crossings and aliases inside the credential set
     phase: 1
     owner: null
     status: todo
     depends_on: [slice-48]
-    kind: idea
+    kind: slice
     why: >
+      Was codex-share-inspection.
       This is the inspection stage: renumbered ID-CODEXAUTH-03 to 05. It adds the alias rule from
       round 1: a lock or token that names the auth inode or the directory is refused with a located
       diagnostic, and an independent-source control passes. The rule extends the existing
@@ -2663,7 +2664,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [codex-share-inspection]
+    depends_on: [slice-49]
     kind: idea
     why: >
       This is the approval stage: renumbered ID-CODEXAUTH-06 to 10 and 14. Review and publication
