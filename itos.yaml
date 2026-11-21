@@ -125,7 +125,7 @@ proof:
     check: "tools/bin/pinned itos-cc mutation run --count 10 --since {base} --seed {base} --fail-uncovered=lines --json cmd internal"
 
 # An item's work reaches main through one pull request, a draft until it is marked
-# ready, merged once its checks and Codex's review pass. Docs-only commits outside
+# ready, merged once its checks and Cursor Bugbot's review pass (Codex is still asked). Docs-only commits outside
 # features/ (a take, a close, a plan) go straight to main.
 push:
   mode: pr
@@ -133,9 +133,10 @@ push:
     draft: true
     update: merge
     review_stall: 900
-    review_by: [chatgpt-codex-connector]
+    review_by: [cursor]
     reviewers:
       - { login: chatgpt-codex-connector, kind: codex }
+      - { login: cursor, kind: bugbot }
     direct:
       types: [docs]
       except: ["features/**"]

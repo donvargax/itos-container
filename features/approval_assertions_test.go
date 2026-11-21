@@ -333,7 +333,7 @@ func (w *world) approvalRecordUnchanged() error {
 }
 func (w *world) approvalNoRecord() error {
 	if _, err := os.Lstat(w.approval.record); os.IsNotExist(err) {
-		return nil
+		return w.approvalNoFrozenInput()
 	} else if err != nil {
 		return err
 	}
@@ -341,6 +341,27 @@ func (w *world) approvalNoRecord() error {
 		return w.approvalSameTree()
 	}
 	return fmt.Errorf("unexpected approval record")
+}
+
+// approvalNoFrozenInput requires that no frozen snapshot of any generation
+// exists for the project. The snapshot directory sits beside the approvals
+// directory under the same state root. A missing or empty directory is absence.
+func (w *world) approvalNoFrozenInput() error {
+	dir := filepath.Join(filepath.Dir(filepath.Dir(filepath.Dir(w.approval.record))), "snapshots", w.approval.project)
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if len(entries) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	return fmt.Errorf("unexpected frozen input: %s", strings.Join(names, ", "))
 }
 
 func (w *world) approvalOnlyState() error {

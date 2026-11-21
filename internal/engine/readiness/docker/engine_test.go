@@ -109,6 +109,19 @@ func TestEngineContract(t *testing.T) {
 	})
 }
 
+func TestCatalogEngineContract(t *testing.T) {
+	porttest.CatalogEngineContract(t, func(data *porttest.Session) (port.CatalogEngine, string) {
+		return Engine{}, socketServer(t, fixtureHandler(t, data))
+	})
+}
+
+func TestCheckoutOpenStillRejectsEmptyRoot(t *testing.T) {
+	endpoint := socketServer(t, fixtureHandler(t, porttest.HealthySession()))
+	if s, f := (Engine{}).Open(endpoint, "", time.Second); s != nil || f != port.EngineSelection {
+		t.Fatal("ordinary open accepted a missing checkout", s, f)
+	}
+}
+
 func TestSelectionRefusesBeforeDial(t *testing.T) {
 	for _, tc := range []struct {
 		value string

@@ -159,6 +159,24 @@ and one `run.json-unsupported` problem containing `exit: 2`, a message and guida
 to remove both requests. The diagnostic also goes to stderr. Terminal and redirected
 streams receive the same refusal.
 
+`itos container run --tty -- <command> [arguments...]` explicitly attaches a
+terminal. Stdin and stdout must both be terminals; otherwise run exits 2 with
+`run.terminal-required`. Acquisition or invalid initial dimensions exits 3 with
+`run.terminal-unavailable`. These checks follow JSON and argv validation and
+precede preflight. Stdin supplies the initial size and later resizes. Distinct
+stdout gets its own saved-state lease without supplying dimensions. Control keys,
+including Ctrl-C and Ctrl-D, go to the workload as bytes; Docker's own default
+Ctrl-P Ctrl-Q detach sequence does too, because run pins one long escape
+sequence the daemon cannot refuse (ctrl-^,ctrl-_,ctrl-^,ctrl-_,ctrl-^,ctrl-_,
+ctrl-^,ctrl-_) and that exact sequence alone detaches. Both worker output
+streams share one raw stream on stdout; controller diagnostics stay on stderr.
+
+Terminal state is restored on every return. Losing either terminal stops the owned
+workload through the existing bounded cleanup path. Terminal disconnect,
+observation, resize and restoration failures have separate `run.terminal-*`
+diagnostics and return 75 unless an observed nonzero workload exit takes priority.
+Terminal mode changes no approved settings and inherits no host terminal environment.
+
 Usage and JSON refusals above precede policy, engine and approval inspection.
 A valid invocation checks local policy, manifest, host identity and approval before
 contacting the engine. Locally decidable refusals make no engine connection; daemon
@@ -173,7 +191,7 @@ unsafe or conflicting state refuses, and an uncertain write yields no startup in
 Every invocation revalidates prerequisites and approval, even if the snapshot exists.
 Successful publication now creates one owned unstarted worker from the frozen
 image config ID. Run durably records its inspected full ID, verifies the approved
-offline or allowlist boundary, attaches separate stdin/stdout/stderr, then starts
+offline or allowlist boundary, attaches streams (merged output for `--tty`), then starts
 the literal argv.
 There is no implicit shell, image acquisition, helper execution or approval prompt.
 An explicit shell executes inside the worker. HOME and TMPDIR use `/tmp` tmpfs;
@@ -421,6 +439,33 @@ and their mapping in the UI, never the domain. Help and tested behaviour must ag
 the codes they promise. Existing counting behaviour is unchanged.
 
 ## Compatibility and completion
+
+### Retained harness homes
+
+An approved `home: {storage: volume}` gives repeated runs of one checkout a
+private persistent home. Ordinary session cleanup and `stop <session-id>` retain
+it. `status --homes [--json]` reads the current user's protected catalog, including
+obsolete bindings and tombstones, even outside the original checkout. It neither
+scans the daemon for unrecorded volumes nor reads home contents. Select the
+original local daemon to inspect an entry from another engine.
+
+`stop --home <full-home-id> --reset` retires that generation and reserves one
+empty successor for the next approved run. `--delete` retires the generation and
+disables its scope until a separate consented reset. Both review permanent data
+loss and require terminal y/N consent; there is no `--yes`, force or bulk route.
+JSON results stay on stdout and terminal review goes to stderr. Agents must not
+use these operations on real retained homes.
+
+A session claim blocks home retirement until ordinary session stop confirms
+cleanup. Its diagnostic names the exact session and original state-root selection.
+An interrupted action retains its exact home ID and action as a retry, requiring
+fresh consent. Repeating a completed action cannot affect its successor. Missing
+storage is never recreated implicitly, and toggling policy does not undo deletion.
+
+Local contracts cover these decisions. Native isolation and initialization remain
+subject to the CI engine scenarios at the pushed head.
+
+### Compatibility rules
 
 Renamed commands/flags, changed exit codes and incompatible structured/file data are
 breaking changes. Group ready breaking changes and document migration; use a major

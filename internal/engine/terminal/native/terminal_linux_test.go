@@ -41,11 +41,56 @@ func TestNativeContract(t *testing.T) {
 	// replacing or changing the parent process's standard input.
 	p := openPair(t)
 	command.Stdin = p.slave
+	command.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
 	output, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("terminal child: %v\n%s", err, output)
 	}
 	t.Logf("%s", output)
+}
+
+func TestPairRejectsInvalidOutputBeforeChangingInput(t *testing.T) {
+	for _, fault := range []string{"missing", "zero file", "closed input", "closed output", "pipe"} {
+		t.Run(fault, func(t *testing.T) {
+			in, out := openPair(t), openPair(t)
+			before, err := term.GetState(int(in.slave.Fd()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := NewPair(in.slave, out.slave, "linux")
+			switch fault {
+			case "missing":
+				p.Output = nil
+			case "zero file":
+				p.Output = &os.File{}
+			case "closed input":
+				p.file, err = os.OpenFile(in.slave.Name(), os.O_RDWR, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				_ = p.file.Close()
+			case "closed output":
+				_ = p.Output.Close()
+			case "pipe":
+				r, w, err := os.Pipe()
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer func() { _ = r.Close() }()
+				defer func() { _ = w.Close() }()
+				p.Output = w
+			}
+			lease, err := p.Acquire(t.Context())
+			var failure *port.Failure
+			if lease != nil || !errors.As(err, &failure) || failure.Kind != port.InvalidTerminal {
+				t.Fatalf("invalid terminal accepted: %v %v", lease, err)
+			}
+			after, err := term.GetState(int(in.slave.Fd()))
+			if err != nil || !reflect.DeepEqual(before, after) {
+				t.Fatal("input changed during output refusal", err)
+			}
+		})
+	}
 }
 
 func TestTerminalChild(t *testing.T) {
@@ -55,6 +100,10 @@ func TestTerminalChild(t *testing.T) {
 	t.Setenv("COLUMNS", "500")
 	t.Setenv("LINES", "200")
 	t.Run("contract", func(t *testing.T) { porttest.Contract(t, terminalFixture) })
+	t.Run("controlling_aliases", controllingAliases)
+	for _, layout := range []string{"shared", "distinct input", "distinct output"} {
+		t.Run(layout, func(t *testing.T) { porttest.Contract(t, pairFixture(layout)) })
+	}
 	t.Run("invalid_files", invalidFiles)
 	t.Run("raw_control_bytes_and_handles", rawControlBytes)
 	t.Run("resource_cycles", resourceCycles)
@@ -65,6 +114,55 @@ func TestTerminalChild(t *testing.T) {
 	t.Run("poll_system_error", pollSystemError)
 	t.Run("cancel_before_raw", cancelBeforeRaw)
 	t.Run("interrupted_observation", interruptedObservation)
+	t.Run("interrupted_check", interruptedCheck)
+}
+
+func pairFixture(layout string) porttest.Factory {
+	return func(t *testing.T, invalid port.FailureKind) porttest.Fixture {
+		input := terminalFixture(t, invalid)
+		provider := input.Provider.(*Provider)
+		if layout == "shared" {
+			// A second descriptor for the same device must restore only once.
+			p := provider.file
+			if p != nil {
+				out, err := os.OpenFile(p.Name(), os.O_RDWR, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = out.Close() })
+				provider.Output = out
+			}
+			return input
+		}
+		p := openPair(t)
+		p.size(t, port.Dimensions{}) // output dimensions never gate acquisition
+		provider.Output = p.slave
+		beforeSnapshot, beforeChange, beforeRaw := input.Snapshot, input.ChangeState, input.Raw
+		input.Snapshot = func() any { return [2]any{beforeSnapshot(), p.snapshot(t)} }
+		input.ChangeState = func() { beforeChange(); p.changeState(t) }
+		input.Raw = func() bool {
+			state, err := unix.IoctlGetTermios(int(p.slave.Fd()), unix.TCGETS)
+			return err == nil && state.Oflag&unix.OPOST == 0 && beforeRaw()
+		}
+		if layout == "distinct output" {
+			input.Hangup = func(unread bool) {
+				if unread {
+					if _, err := p.master.Write([]byte{'x'}); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if err := p.master.Close(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			input.Break = func() {
+				if err := p.slave.Close(); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		return input
+	}
 }
 
 // Cancel at the second acquisition checkpoint, before MakeRaw, without a

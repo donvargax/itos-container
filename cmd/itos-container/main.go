@@ -55,6 +55,7 @@ import (
 	sessionentropy "github.com/donvargax/itos-container/internal/engine/session/entropy"
 	sessionport "github.com/donvargax/itos-container/internal/engine/session/port"
 	sessionpresentation "github.com/donvargax/itos-container/internal/engine/session/presentation"
+	terminalnative "github.com/donvargax/itos-container/internal/engine/terminal/native"
 	approve "github.com/donvargax/itos-container/internal/slices/approve/command"
 	"github.com/donvargax/itos-container/internal/slices/count/command"
 	countdisk "github.com/donvargax/itos-container/internal/slices/count/disk"
@@ -66,6 +67,7 @@ import (
 	"github.com/donvargax/itos-container/internal/slices/run/signals"
 	statuscommand "github.com/donvargax/itos-container/internal/slices/status/command"
 	stopcommand "github.com/donvargax/itos-container/internal/slices/stop/command"
+	stopterminal "github.com/donvargax/itos-container/internal/slices/stop/terminal"
 	"github.com/donvargax/itos-container/internal/version"
 )
 
@@ -175,12 +177,15 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 		c.Approve.Presentation = presentation
 		return c.Approve.Run(ui)
 	case "run":
+		input, _ := in.(*os.File)
+		output, _ := stdout.(*os.File)
+		c.Run.Terminal = terminalnative.NewPair(input, output, runtime.GOOS)
 		service, _ := approvalServices(command, in, stdout, stderr)
 		c.Run.Approval = approvaldomain.Preflight{Service: service, Local: service.Readiness.(approvalport.StagedReadiness), Canonical: approvalcanonical.JSON{}}
 		c.Run.Snapshots = approvaldisk.Snapshots{Store: service.Store.(approvaldisk.Store), Records: approvalcanonical.JSON{}}
 		runner, _ := sessionServices(service)
 		c.Run.Runner = runner
-		interrupts, release := signals.Capture(context.Background())
+		interrupts, release := signals.Capture(context.Background(), c.Run.TTY)
 		defer release()
 		c.Run.Context = interrupts
 		ui.Classify = runcommand.Classify
@@ -189,12 +194,17 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 	case "status":
 		service, _ := approvalServices(command, in, stdout, stderr)
 		_, c.Status.Service = sessionServices(service)
+		c.Status.HomeService = homeServices(service)
+		c.Status.HomePresentation = sessionpresentation.UI{Out: stdout, Err: stderr}
 		c.Status.Presentation = sessionpresentation.UI{Out: stdout, Err: stderr, Credentials: approvalpresentation.CredentialLines}
 		c.Status.JSON = recoveryJSON(args)
 		return c.Status.Run()
 	case "stop":
 		service, _ := approvalServices(command, in, stdout, stderr)
 		_, c.Stop.Service = sessionServices(service)
+		c.Stop.Homes = homeServices(service)
+		c.Stop.HomePresentation = sessionpresentation.UI{Out: stdout, Err: stderr}
+		c.Stop.Consent = stopterminal.Consent{In: in, Err: stderr}
 		c.Stop.Presentation = sessionpresentation.UI{Out: stdout, Err: stderr}
 		c.Stop.JSON = recoveryJSON(args)
 		return c.Stop.Run()
@@ -219,7 +229,21 @@ func sessionServices(service approvaldomain.Service) (sessiondomain.Runner, sess
 	proxyExecutable, _ = filepath.EvalSymlinks(proxyExecutable)
 	engine := sessiondocker.Engine{Readiness: docker.Engine{}, Selection: source.Input.Host, Executable: proxyExecutable}
 	refusals := sessiondisk.RefusalLog{Store: store, Storage: approvaldisk.Registry{Store: protected}}
-	return sessiondomain.Runner{Refusals: refusals, Store: store, Registry: registry, Engine: engine, Entropy: sessionentropy.Random{}, Workspace: &sessiondisk.Workspace{}}, sessiondomain.Recovery{Refusals: refusals, Registry: registry, Engine: engine}
+	homes := homeServices(service)
+	return sessiondomain.Runner{Homes: &homes, Refusals: refusals, Store: store, Registry: registry, Engine: engine, Entropy: sessionentropy.Random{}, Workspace: &sessiondisk.Workspace{}}, sessiondomain.Recovery{Homes: &homes, Refusals: refusals, Registry: registry, Engine: engine}
+}
+
+func homeServices(service approvaldomain.Service) sessiondomain.Homes {
+	protected := service.Store.(approvaldisk.Store)
+	source := service.Readiness.(inspection.Readiness)
+	root := protected.StateHome
+	if root == "" {
+		root = filepath.Join(protected.Home, ".local", "state")
+	}
+	codec := sessioncodec.JSON{Approval: approvalcanonical.JSON{}, Parser: jsonc.Parser{}}
+	store := sessiondisk.Homes{Storage: approvaldisk.Catalog{Account: accountLookup, Store: protected}, Codec: codec, Host: service.Host,
+		StateRoot: filepath.Join(root, "itos-container"), Locations: approvaldisk.Locations{Store: protected}}
+	return sessiondomain.Homes{Store: store, Engine: sessiondocker.Engine{Readiness: docker.Engine{}, Selection: source.Input.Host}, Entropy: sessionentropy.Random{}}
 }
 
 // recoveryJSON serves parsed commands and usage refusals alike. Only literal 1

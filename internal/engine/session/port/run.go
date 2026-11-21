@@ -2,19 +2,24 @@ package port
 
 import (
 	"context"
+	terminal "github.com/donvargax/itos-container/internal/engine/terminal/port"
 	"time"
 )
 
 const (
-	IsolationUnverified Outcome = "isolation-unverified"
-	IsolationInspection Outcome = "isolation-inspection"
-	ExecutionFailed     Outcome = "execution-unavailable"
-	EnvironmentMissing  Outcome = "engine-environment-missing"
-	CallTimeout         Outcome = "call-timeout"
-	StartupTimeout      Outcome = "startup-timeout"
-	TeardownTimeout     Outcome = "teardown-timeout"
-	StreamTimeout       Outcome = "stream-timeout"
-	EngineLost          Outcome = "engine-lost"
+	IsolationUnverified  Outcome = "isolation-unverified"
+	IsolationInspection  Outcome = "isolation-inspection"
+	ExecutionFailed      Outcome = "execution-unavailable"
+	EnvironmentMissing   Outcome = "engine-environment-missing"
+	CallTimeout          Outcome = "call-timeout"
+	StartupTimeout       Outcome = "startup-timeout"
+	TeardownTimeout      Outcome = "teardown-timeout"
+	StreamTimeout        Outcome = "stream-timeout"
+	EngineLost           Outcome = "engine-lost"
+	TerminalDisconnected Outcome = "terminal-disconnected"
+	TerminalUnavailable  Outcome = "terminal-unavailable"
+	TerminalResize       Outcome = "terminal-resize"
+	TerminalRestore      Outcome = "terminal-restore"
 	// StdinClosed is an attachment notification, not a final run outcome. An
 	// engine input write/half-close failed; the worker may already have exited.
 	StdinClosed Outcome = "stdin-closed"
@@ -24,11 +29,14 @@ const (
 type Reader interface{ Read([]byte) (int, error) }
 type Writer interface{ Write([]byte) (int, error) }
 type Streams struct {
+	Terminal terminal.Lease
 	In       Reader
 	Out, Err Writer
 }
 
 type RunResult struct {
+	HomeID          string
+	Restore         Outcome
 	MountDiagnostic MountDiagnostic
 	Stream          Outcome
 	// Teardown retains a cleanup deadline failure separately from the run cause.
@@ -41,6 +49,13 @@ type RunResult struct {
 	Started bool
 	// Deadline bounds diagnostic delivery as part of the original teardown.
 	Deadline time.Time
+}
+
+// TerminalConnection selects invocation-only PTY settings, never persisted grants.
+// Resize is issued only after fresh owned-running inspection by the domain.
+type TerminalConnection interface {
+	SetTerminal(terminal.Dimensions) Outcome
+	Resize(context.Context, string, terminal.Dimensions) Outcome
 }
 
 // Workspace pins the approved subdirectory and refuses later substitution.

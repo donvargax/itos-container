@@ -4,7 +4,7 @@ package native
 
 import "syscall"
 
-// Only the unavailable poll call lives here. Acquire refuses before any I/O.
+// Unavailable Linux terminal calls live here. Acquire refuses before any I/O.
 const (
 	supported    = false
 	windowSignal = syscall.Signal(28)
@@ -19,3 +19,5 @@ type pollDescriptor struct {
 }
 
 func poll([]pollDescriptor) (int, error) { return 0, syscall.ENOSYS }
+
+func terminalDevice(int) (int, error) { return 0, syscall.ENOSYS }

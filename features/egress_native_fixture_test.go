@@ -138,7 +138,7 @@ func (w *world) egressNativeCheckout(spellings, canonical []string) error {
 func egressBuild(root, source, output string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-o", output, "./"+filepath.ToSlash(source))
+	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-buildvcs=false", "-o", output, "./"+filepath.ToSlash(source))
 	cmd.Dir, cmd.Env = root, sessionChildEnvironment(os.Environ())
 	for key, value := range map[string]string{"CGO_ENABLED": "0", "GOOS": "linux", "GOARCH": "amd64", "GOFLAGS": "", "GOWORK": "off"} {
 		cmd.Env = setEnv(cmd.Env, key, value)

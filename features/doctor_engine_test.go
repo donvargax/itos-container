@@ -64,10 +64,17 @@ func newDoctorAPI(image string) *doctorAPI {
 	return &doctorAPI{
 		expectedImage: image,
 		version:       map[string]any{"Version": "29.5.0", "ApiVersion": "1.56", "MinAPIVersion": "1.44", "Os": "linux", "Arch": "amd64", "Platform": map[string]string{"Name": "Docker Engine - Community"}, "Components": []any{map[string]any{"Name": "Engine", "Version": "29.5.0"}}},
-		info:          map[string]any{"ID": "engine-A", "OSType": "linux", "Architecture": "x86_64", "OperatingSystem": "Debian GNU/Linux 12", "ServerVersion": "29.5.0", "Name": "fixture-host"},
+		info:          map[string]any{"ID": "engine-A", "OSType": "linux", "Architecture": "x86_64", "OperatingSystem": "Debian GNU/Linux 12", "ServerVersion": "29.5.0", "Name": "fixture-host", "DefaultRuntime": "runc", "Runtimes": defaultRuntimeInventory()},
 		image:         map[string]any{"Id": doctorImageID, "RepoDigests": []string{image}, "Os": "linux", "Architecture": "amd64", "Config": map[string]any{"User": "1000:1000", "Labels": map[string]string{}, "Volumes": map[string]any{}}},
 		reached:       make(chan struct{}), release: make(chan struct{}),
 	}
+}
+
+// defaultRuntimeInventory is what a fixture daemon reports until a world names
+// another: runc alone.
+func defaultRuntimeInventory() map[string]any {
+	runtimes, _ := runtimeInventory("runc only")
+	return runtimes
 }
 
 func (a *doctorAPI) config() map[string]any { return a.image["Config"].(map[string]any) }

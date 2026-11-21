@@ -41,6 +41,7 @@ type world struct {
 	stdin               string // the text the run reads from its standard input, "" for none
 	credentials         *credentialWorld
 	policy              *policyWorld
+	home                *homeWorld
 	manifest            *manifestWorld
 	doctor              *doctorWorld
 	approval            *approvalWorld
@@ -49,6 +50,7 @@ type world struct {
 	session             *sessionWorld
 	offline             *offlineRuntime
 	sockets             *socketWorld
+	landlock            *landlockWorld // the kernel's pinned Landlock answer, once a step pins one
 	anchor              *anchorWorld
 	anchors             *anchorRecoveryWorld
 	anchorLocalRecovery *anchorRecoveryLocal
@@ -91,7 +93,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 		// Before the world is reset, whatever the row's outcome: a failing row is the
 		// one whose offsets matter, and godog skips the steps after a failure.
 		ctx = withSignalOffsets(ctx, w.lifecycle.signalOffsets())
-		sessionErr := errors.Join(w.closeLifecycleNative(), w.closeOverlap(), w.closeRecoveryNative(), w.closeOfflineRuntime(), w.closeAnchor(), w.closeSockets(), w.closeSession(), w.closeEgressNative())
+		sessionErr := errors.Join(w.closeHomeNative(), w.closeLifecycleNative(), w.closeOverlap(), w.closeRecoveryNative(), w.closeOfflineRuntime(), w.closeAnchor(), w.closeSockets(), w.closeSession(), w.closeEgressNative(), w.closeLandlock())
 		w.closeCredentials()
 		w.closeDoctor()
 		w.closePolicy()
@@ -188,6 +190,7 @@ func initializeScenario(sc *godog.ScenarioContext, root, bin string) *world {
 	})
 	sc.Step(`^an empty folder "([^"]*)"$`, w.emptyFolder)
 	w.policySteps(sc)
+	w.homeSteps(sc)
 	w.credentialSteps(sc)
 	w.manifestSteps(sc)
 	w.doctorSteps(sc)
@@ -245,14 +248,16 @@ func moduleRoot() (string, error) {
 // hook's GIT_DIR, the caller's ITOS_CONTAINER_ settings, CI's), with no
 // global or system git config and a fixed identity, and the caller's PATH
 // without its claude, its itos, its itos extensions or a git that is an itos
-// (callerPath).
+// (callerPath). The caller's terminal width (COLUMNS) is left out too, so help
+// wraps as it does under CI; a scenario that names a width sets it itself.
 func (w *world) env() []string {
 	var env []string
 	for _, kv := range os.Environ() {
 		name, _, _ := strings.Cut(kv, "=")
 		if strings.HasPrefix(name, "GIT_") || strings.HasPrefix(name, "ITOS_") ||
 			strings.HasPrefix(name, "ITOS_CONTAINER_") || strings.HasPrefix(name, "GITHUB_") ||
-			strings.HasPrefix(name, "GH_") || name == "CI" || strings.EqualFold(name, "PATH") {
+			strings.HasPrefix(name, "GH_") || name == "CI" || strings.EqualFold(name, "PATH") ||
+			strings.EqualFold(name, "COLUMNS") {
 			continue
 		}
 		env = append(env, kv)
@@ -482,11 +487,19 @@ func (w *world) runEnv(dir string, env []string, program string, args ...string)
 		defer cancel()
 	}
 	cmd := exec.CommandContext(ctx, program, args...)
+	umask := landlockNoUmask
 	if w.approval != nil && w.approval.location != "" {
-		// This trusted test wrapper changes only the child umask. Positional arguments
-		// remain literal, and no checkout shell or helper participates.
-		words := append([]string{"-c", `umask 0000; exec "$@"`, "slice-4-umask", program}, args...)
-		cmd = exec.CommandContext(ctx, "/bin/sh", words...)
+		if w.landlock != nil {
+			// The Landlock wrapper's helper sets the umask just before its exec, so
+			// no shell runs between it and the program, and a program that cannot
+			// be executed is the helper's failure, never sh's exit 126 or 127.
+			umask = 0
+		} else {
+			// This trusted test wrapper changes only the child umask. Positional arguments
+			// remain literal, and no checkout shell or helper participates.
+			words := append([]string{"-c", `umask 0000; exec "$@"`, "slice-4-umask", program}, args...)
+			cmd = exec.CommandContext(ctx, "/bin/sh", words...)
+		}
 	}
 
 	cmd.Dir = dir
@@ -497,9 +510,22 @@ func (w *world) runEnv(dir string, env []string, program string, args ...string)
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	err := w.startLocalCommand(cmd)
-	if err == nil {
+	// A world that pins a Landlock answer starts the program through the helper
+	// and answers its query until the wrapper ends, after Wait.
+	supervision, err := w.superviseLandlock(cmd, umask)
+	if err != nil {
+		return err
+	}
+	err = w.startLocalCommand(cmd)
+	started := err == nil
+	if started {
 		err = cmd.Wait()
+	}
+	supervisionErr := supervision.end(started)
+	var helperFailure *landlockHelperError
+	if errors.As(supervisionErr, &helperFailure) {
+		// The program never ran: the helper's exit status is no product result.
+		return supervisionErr
 	}
 	unlock := w.lockLocalAPI()
 	defer unlock()
@@ -512,9 +538,9 @@ func (w *world) runEnv(dir string, env []string, program string, args ...string)
 	case errors.As(err, &exit):
 		w.exit = exit.ExitCode()
 	default:
-		return fmt.Errorf("running %s: %w", program, err)
+		return errors.Join(fmt.Errorf("running %s: %w", program, err), supervisionErr)
 	}
-	return nil
+	return supervisionErr
 }
 
 // A subprocess/HTTP exchange is not Go memory synchronization. Guard child

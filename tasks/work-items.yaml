@@ -1,7 +1,14 @@
 # Project-local work starts without inherited owners or completion claims.
 phases:
   1: null
-queue: []
+queue:
+  - slice-28
+  - slice-32
+  - slice-35
+  - slice-40
+  - slice-41
+  - slice-31
+  - slice-36
 items:
   - id: T-1
     title: Establish the generated seed as the commit tracking boundary
@@ -59,19 +66,13 @@ items:
     status: dropped
     depends_on: []
     kind: idea
-  - id: p1-track-shell-pinned-tools
+  - id: T-70
     title: Track shell-pinned tools in update automation
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
-    kind: idea
-    why: >
-      Keep the offline owned-run milestone's proof tooling maintained by extending existing update
-      automation to tools/bin/pinned, preserving verified checksums alongside version updates.
-
-      Already covers updating launcher versions together with verified archive checksums to maintain
-      the milestone's proof tooling.
+    kind: task
   - id: T-8
     title: Record a fresh foundation mutation baseline with pinned itos-cc
     phase: 1
@@ -149,41 +150,9 @@ items:
     title: Refresh remaining template guidance
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      The offline owned-run milestone needs accurate scenario, configuration and release guidance
-      that preserves existing gates, provenance and limits on support claims.
-
-      Already covered. Include features/README.md and comments in itos.yaml and
-      .github/workflows/release.yml, preserving existing gates, provenance and limits on
-      container-support claims.
-
-      Include README hook registration and verification instructions in the existing guidance
-      refresh so contributors enable local lint and vulnerability checks. This foundation follow-up
-      can wait unless it blocks the charter’s configuration, doctor and approval step.
-
-      Include docs/ORCHESTRATING.md in the existing guidance cleanup after T-12 lands: replace
-      unrestricted-push and automatic three-platform claims with the implemented CI policy. T-9's
-      completed refresh predates this change. Defer unless it blocks the charter's configuration,
-      doctor and approval step.
-
-      Already covers hook registration and verification instructions. Include the reported unset
-      core.hooksPath and missing pre-commit/commit-msg hooks in that verification, confirming how
-      subsequent commits enforce configured gates.
-
-      Belongs inside p1-refresh-remaining-template-guidance, which already takes in
-      features/README.md; this is a foundation docs leftover that blocks no charter step, so it
-      waits with that item. Note for it: features/README.md is 79,818 bytes on main and 83,280 on
-      the slice-27 branch, with no entry in tools/bin/doc-caps, which today caps only AGENTS.md and
-      docs/ORCHESTRATING.md, and every implementer is told to read it. Measured by section on main:
-      'The CI engine tier' 30.8 KB, 'Manual red-first evidence' 15.2 KB, 'Cached fixture protocol'
-      11.1 KB. Per-slice evidence paragraphs sit under '## Tags' ahead of the tag table: slice-17's
-      anchor note on main, and slice-27 adds another 3.4 KB there. When refreshing the file, move
-      per-slice red-evidence and history notes out of it (the commits and run numbers already record
-      them), keep only the standing harness rules, and add a doc-caps entry with headroom over the
-      shortened size so later slices cannot grow it back.
   - id: T-10
     title: The depguard rules hold every slice to internal/count's layout, not only count
     phase: 1
@@ -588,6 +557,17 @@ items:
       is the worker's and the anchor's today and is not T-40's to change. But T-40 adds two network
       creates per egress run, so slice-27 makes the stuck session reachable and nested checkouts
       then stay blocked. The item is p3; its phase is worth revisiting once slice-27 is queued.
+
+      Include a controller killed after publishing the stage intent and claim but before issuing
+      VolumeCreate. This item already covers safe retirement when durable evidence proves a create
+      was never issued. A name-only lookup that finds no volume cannot rule out a late allocation.
+      Any broader reclaim rule needs the person’s decision.
+
+      This recovery item already covers uncertain creates that leave a session stuck. Add the case
+      where VolumeCreate was dispatched, its reply was lost, and later lookups continue to find no
+      volume. HOME-10 covers a volume that eventually appears. The person must settle what evidence
+      permits releasing the claim while a delayed allocation is still possible. Elapsed time and
+      repeated name-only misses do not establish that the create has finished.
   - id: slice-16
     title: Run refuses overlapping worker checkouts
     phase: 1
@@ -670,33 +650,9 @@ items:
     title: Host Unix sockets created during a run are unreachable from the worker
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      Deferred from slice-19 by the person (q-30, 2026-11-07): CI showed the worker connects to host
-      Unix sockets in the bind-mounted checkout (runs 42312676619, 42323471709), and the milestone
-      only refuses sockets present at startup. Closing it needs kernel enforcement: Landlock's
-      pathname-socket rule (ABI 9+) through a product init, which needs a new kernel on every host
-      and a CI runner that has it, or the gVisor runtime, which hosted runners can prove but which
-      adds a runtime. Research in docs/plans/checkout-socket-enforcement.md; scenarios ID-SOCKETS-02
-      and 03 wait for it. A milestone-2 choice.
-
-      Already tracks continuous enforcement against host sockets created or replaced after startup,
-      retaining Landlock/gVisor research and runtime scenarios ID-SOCKETS-02/03. Preserve the
-      person's q-30 deferral to milestone 2.
-
-      The person's design, 2026-11-07, for milestone 2: Landlock by default (ABI 9+,
-      LANDLOCK_ACCESS_FS_RESOLVE_UNIX), applied by a small read-only init binary itos-container
-      mounts and runs as the worker's entrypoint before exec'ing the literal argv, as Docker has no
-      Landlock option and the controller cannot restrict a worker the daemon spawns; gVisor (runsc)
-      as the fallback when the kernel lacks ABI 9; on a host with neither, run is allowed only with
-      an explicit approval that records 'late host sockets reachable', shown at approve time and in
-      status. Doctor reports which backend a run would use, and the approval binds it. Proof: the
-      Landlock path is proven locally on the person's machine (Landlock ABI 10 on Linux 7.2) for
-      now, with hosted CI proving the gVisor path; a weakened gate until a new-kernel CI runner
-      exists (record it in weakened-gates.md when built). Amends the spec's no-helper and
-      no-extra-mount rules for the init binary.
   - id: T-31
     title: Native stop confined to one of two equal-basename projects passes reliably
     phase: 1
@@ -746,19 +702,13 @@ items:
     status: done
     depends_on: []
     kind: task
-  - id: p3-release-notes-skip-merges
+  - id: T-61
     title: Release notes leave out merges of main into an item branch
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
-    kind: idea
-    why: >
-      v0.1.0's generated notes (2026-11-09) list 'Merge main into slice-13', 'slice-14' and
-      'slice-11' under Features: release-notes counts a merge commit whose subject carries a feat
-      type, or classifies merges by their first parent's type. A merge of main into an item branch
-      changes nothing a user sees; leave such merges out, and keep the merge that lands an item (its
-      own subject names the item).
+    kind: task
   - id: p2-profile-non-engine-feature-suite
     title: Profile the non-engine feature suite and cut its roughly 300 s wall time
     phase: 1
@@ -1026,36 +976,13 @@ items:
     status: done
     depends_on: []
     kind: task
-  - id: p2-approval-no-record-step-checks-frozen-input
+  - id: T-63
     title: The step 'no approval record or frozen input is produced' also checks that no frozen input exists
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
-    kind: idea
-    why: >
-      approvalNoRecord (features/approval_assertions_test.go:331, registered at
-      features/approval_steps_test.go:156) returns success as soon as the approval record path is
-      absent. It never looks for frozen input, so a build that left a frozen file behind would still
-      pass. Seven live scenarios use this text at the approval boundary: six in approval.feature
-      (lines 303, 419, 449, 468, 514, 655) and one in hardlinks.feature (line 215). It is also
-      reused as the 'replacement target is unchanged' fallback. The step name promises a check the
-      code does not make, and slice-26 will add refusal scenarios in the same area. Make the step
-      assert both that the record is absent and that no frozen input was published, for example by
-      comparing the whole state tree as ID-POLICY-61's tree check does. Then run all seven
-      scenarios; any that now fail show a real leak to fix in the product, never a reason to loosen
-      the step. This is a test-support change with no new behavior and needs a ledger task and its
-      checks. Phase 2: it hardens existing proof and does not block charter step 1.
-
-      The same task covers this gap: a step name promises more than its code checks, in the same
-      approval assertion files. I checked it. approvalProblem
-      (features/approval_assertions_test.go:85, registered for 'it reports prerequisite problem …
-      before requesting consent' at features/approval_steps_test.go:138) checks the exit code and
-      the rule, and never that no consent prompt appeared. The step is used at approval.feature:654
-      and hardlinks.feature:193. Add a check that no consent prompt was shown, or rename the step to
-      what it checks, to that item's test-support change. Run the same scenarios afterwards: one
-      that fails then shows a real product leak, and the step is not loosened. Slice-26 adds
-      refusals here, so the check matters more then.
+    kind: task
   - id: p2-pin-ledger-check-shell
     title: Pin the shell itos runs ledger and CI checks with, so a check passes locally only if it passes in CI
     phase: 1
@@ -1448,30 +1375,13 @@ items:
     status: done
     depends_on: []
     kind: task
-  - id: p2-harness-env-clears-columns
+  - id: T-60
     title: The feature harness environment clears COLUMNS, so help scenarios do not depend on the caller's terminal width
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
-    kind: idea
-    why: >
-      No item covers this. world.env() (features/steps_test.go:223) copies the caller's environment
-      and drops only GIT_, ITOS_, ITOS_CONTAINER_, GITHUB_, GH_, CI and PATH, so an inherited
-      COLUMNS reaches the product and Kong wraps help to it. Measured under COLUMNS=30:
-      ID-APPROVAL-29 fails a correct build at its step 'its standard output says "an agent on the
-      host can approve"', because the wrap splits the phrase. Only ID-APPROVAL-56 names its own
-      width (COLUMNS=200). Six other help scenarios are exposed: completion --help, count --help,
-      doctor --help in manifest.feature and policy.feature, and the product status/stop help in
-      recovery.feature. A suite that fails a correct build on a caller's terminal setting breaks the
-      charter's rule that suite and proof reliability fixes stay inside the first milestone. Fix:
-      have env() drop COLUMNS, or set a fixed wide value, and add a harness regression committed red
-      that runs a help scenario under a narrow inherited COLUMNS and fails before the fix. Check
-      that fixtures building their environment from os.Environ() directly, such as
-      sessionChildEnvironment, do not reintroduce it. Keep every scenario and assertion unchanged
-      and leave ID-APPROVAL-56's explicit width alone. Phase p2: nothing blocks the current step,
-      and CI normally exports no COLUMNS. The harness came from go-template-itos, so once this lands
-      the coordinator files it there as a backport issue.
+    kind: task
   - id: p2-approve-allowlist-added-removed-names
     title: Approve's review shows an allowlist change as the names added and removed
     phase: 1
@@ -1551,6 +1461,11 @@ items:
       static steps; weigh it against p2-ci-go-build-cache-rolling-key, because each GOOS adds its
       own build-cache entries. Claims no support for macOS or Windows: it is a gate on code that
       already ships.
+
+      This item already proposes Windows and Darwin static checks in the Linux PR job.
+      Cross-compilation and standard go vet would have accepted the overlap test because both path
+      APIs are valid. The assertion failed only when Windows produced a drive-letter path. Commit
+      91d84d5 fixed the fixture to use the Linux paths the test models.
   - id: p3-workspace-copy-mode
     title: A run can work on a copy of the checkout instead of a live mount, and hand its result back as commits
     phase: 1
@@ -1663,6 +1578,17 @@ items:
       failure. The reading confirms or refutes the hypothesis on the next cold run. The remedy is
       not this item's: it belongs to p2-first-engine-row-slow-create, added by the same triage, and
       the warm cache to p2-ci-go-build-cache-rolling-key.
+
+      This item already publishes timing notices on green and failed engine runs. Include
+      registration duration and elapsed time from registration completion to create submission for
+      passing controls, so a failed control can be compared with a passing row from the same run.
+      Use the same phase boundaries and units for both outcomes.
+
+      This item already covers registration timing and the launch details visible in CI annotations.
+      When registration times out, include the last observed step (reservation, storage
+      registration, or admission publication) and its elapsed time on the launch line. That gives
+      the reader evidence the five-call engine journal cannot supply and fits q-65’s instrumentation
+      decision.
   - id: T-46
     title: Pull requests stop waiting for Codex reviews, which ended on 2026-11-09
     phase: 1
@@ -1695,14 +1621,14 @@ items:
     title: The session engine port delivers a per-command secret or single-file mount to a worker without it entering the create configuration
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [T-47, slice-29]
     kind: task
   - id: slice-31
     title: run hands the approved Claude token to the workload; it appears nowhere in docker inspect, the checkout, status or logs
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-30, T-48]
     kind: slice
     why: >
@@ -1719,7 +1645,7 @@ items:
   - id: slice-32
     title: run bind-mounts the approved Codex auth.json, and its lock file when present, read-write as single files
     phase: 1
-    owner: null
+    owner: donvargax
     status: todo
     depends_on: [slice-30, T-48]
     kind: slice
@@ -1818,6 +1744,11 @@ items:
       later stop's copy would differ, and which rename lands last would matter. Whoever drafts this
       item must revisit that argument, either by scrubbing identically from every controller or by
       running the copy's Commit through the session's gate.
+
+      This item already owns AC-36’s hostname-marker probe. Because q-56 preserves refused hostnames
+      verbatim, verify that a synthetic credential marker embedded in a valid refused hostname is
+      absent from retained proxy stdout, Docker’s proxy log, and the protected egress-refusals.jsonl
+      copy.
   - id: T-53
     title: A session contract subprocess exits 2 under the code proof's coverage run, failing a scenario that passes in Tests
     phase: 1
@@ -1995,6 +1926,30 @@ items:
       scenario first committed without the tag is the case left. The red selector is this project's
       own (T-21), on top of the template's harness, so if this lands it goes to go-template-itos
       with the rest of the item.
+
+      Extend this item's scenario check to cover command-assembly probes. Commit 5b8bc5d on slice-38
+      supplied TestPublicExecCommand after nine exec scenarios reported a missing result without
+      reaching the parser. Add a regression with a selector that matches zero Go tests. The harness
+      should report the affected scenario ID and missing probe before evaluating the product
+      assertion.
+
+      That item already names TestDoctorStepDefinitions (features/doctor_harness_test.go:177) as one
+      of the six per-slice step checks. It also leaves to its spec whether those checks fold into
+      one check that fails only for the scenarios a selector names and only reports the other @wip
+      scenarios. That is the fix asked for here. The new information is the cost today. Because the
+      doctor check needs exactly one definition for every pickle in doctor.feature, @wip included, a
+      drafter's spec-only commit to doctor.feature turns go test ./features red. No doctor spec can
+      be drafted until this is fixed, and that includes slice-42's. Whichever way the spec goes
+      (fold the check in, or have it select IDs or skip @wip the way the harness-home and offline
+      checks do), it should unblock slice-42's draft first.
+
+      That item's last paragraph already records this. TestDoctorStepDefinitions needs exactly one
+      definition for every pickle in doctor.feature, @wip included, so a spec-only commit to
+      doctor.feature turns `go test ./features` red, and the spec should unblock slice-42's draft
+      first. New cost since then: slice-42's doctor scenarios went into sockets.feature to get
+      around the check, and slice-43 to slice-45 will hit the same limit. When this item is
+      specified, decide whether those scenarios move back to doctor.feature once the check skips or
+      selects @wip pickles.
   - id: p2-code-proof-draw-stable-across-main-merges
     title: The code proof's draw stays put when main is merged into an item's branch, so a repair is judged on the sites that failed
     phase: 1
@@ -2019,6 +1974,14 @@ items:
       as T-21 did for @wip scenarios; or both. Neither is a redraw to escape a failure. The same
       item settles one sentence in AGENTS.md: whether `itos-cc mutation list`, which runs no test,
       may be used locally to see the sites, given that local mutation runs are forbidden.
+
+      AGENTS.md already prohibits local mutation runs. Correct the conflicting 09:23 instruction in
+      the slice-37 repair brief. The existing item covers redraws and the narrower open question of
+      whether agents may list mutation sites locally.
+
+      This item already identifies the conflicting slice-37 repair brief. Align the brief with
+      AGENTS.md, which assigns mutation proof to CI and prohibits local mutation runs. The narrower
+      open question is whether implementers may list mutation sites locally without running tests.
   - id: T-54
     title: Each engine shard warms the engine with one create and remove before its first engine row
     phase: 1
@@ -2052,18 +2015,9 @@ items:
     title: Run provides an isolated, writable harness home
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: slice
-    why: >
-      Was p1-harness-owned-home.
-      Specify the storage lifetime first: the registry recommends a per-checkout volume, but volume
-      versus tmpfs remains unsettled. Cover approved settings, non-root access, project isolation,
-      ownership, bounded creation and cleanup/recovery consistent with the chosen lifetime. Never
-      mount the host home or place harness state in the checkout. Keep shared storage behavior under
-      an engine package and command integration in existing slices. Record the architecture change.
-      Add black-box scenarios, including executable /tmp proof; its current configuration already
-      omits noexec. Real-engine red/green evidence runs only in CI. Broken down from null.
   - id: slice-35
     title: Codex starts with isolated state and unwanted startup services disabled
     phase: 1
@@ -2112,17 +2066,9 @@ items:
     title: Run an owned foreground workload with a TTY
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [T-56]
     kind: slice
-    why: >
-      Was p1-run-interactive-terminal.
-      Extend the run slice and shared session engine with terminal attachment, initial dimensions,
-      resizes and Ctrl-C as input. Specify terminal selection and JSON refusal before
-      implementation. Restore the terminal and stop the workload after client disconnect using
-      slice-12's bounded cancellation and ownership rules; preserve noninteractive behavior and exit
-      precedence. Require black-box red/green scenarios, with real-engine evidence only in CI.
-      Broken down from p1-interactive-tty.
   - id: slice-38
     title: Execute literal argv within a running owned session
     phase: 1
@@ -2176,6 +2122,16 @@ items:
       of the failed jobs passed. The other shard took 144 s of its 180 s gate in that run, with
       slice-27's egress rows now live, so a timing dependence under a fuller shard is the first
       thing to check. One occurrence; record the next with its run before repairing anything.
+
+      The existing item tracks intermittent failures in ID-OVERLAP-06. Run 44286115510 failed the
+      activity check, which 369b58b changed to retry. The cleanup check still samples the daemon
+      once to confirm a 404 for the original worker ID. No cleanup failure has been observed. If one
+      occurs, record the CI run on this item.
+
+      T-59 run 44286115510 and T-64 on November 19 hit the same ID-OVERLAP-06 activity assertion on
+      different example rows. Have the assertion report which observation failed: worker ID, engine
+      inspection, running state, mount anchor, intent record, mount boundary, or heartbeat. That
+      evidence can guide the repair while preserving the scenario’s checks.
   - id: p2-repair-platform-ci-fixtures
     title: Repair shell and Windows assumptions in portability fixtures
     phase: 1
@@ -2189,6 +2145,71 @@ items:
       foundation maintenance: no supplied evidence shows it blocks the charter's current
       harness-home step. Require focused regressions and platform CI evidence without weakening
       assertions or claiming additional container-host support.
+
+      Commit aaf919c makes runFixtureWarmupShell pass --binary to jq on every platform to handle
+      Windows line endings. The existing item covers this fixture. Check the wrapper on macos-latest
+      before attributing a dispatch failure to it.
+
+      Include the shared Linux machine in the fixture repair. Start with one approval disk-contract
+      test that returns state.unsafe locally and passes on Ubuntu CI. Use it to identify the
+      filesystem assumption, then check the admission-leftover tests and affected feature rows while
+      preserving the production ownership checks.
+
+      This item already covers local state.unsafe failures on the shared Linux machine and the
+      affected feature scenarios. Both / and /tmp are owned by UID 65534 in the agent sandbox. Use
+      ID-EGRESS-09 to verify and document where implementers can run the fixture and reach its
+      behavior assertion with production ownership checks intact.
+
+      This item already records UID 65534 on `/` and `/tmp` and names ID-EGRESS-09 as a verification
+      case. Include the disk home fixtures in its scope. Name the first untrusted ancestor and its
+      UID in the fixture diagnostic, or document the ancestor-ownership prerequisite in
+      `features/README.md`. Keep the production ownership check and fixture assertions intact.
+
+      This item already records UID 65534 on / and /tmp and tracks the affected approval, home and
+      feature fixtures. Include the three reported cmd RealStore contract failures when verifying a
+      fixture environment that satisfies both ancestor ownership and the non-root manifest identity
+      requirement.
+
+      This item already tracks UID 65534 on `/` and `/tmp` and the resulting `approval.state.unsafe`
+      failures in disk tests and feature scenarios. Before judging a worker’s local evidence, use
+      the existing ID-EGRESS-09 fixture to confirm it reaches its behavior assertion with production
+      ownership checks intact. If an ancestor check stops it first, record the path and UID as an
+      environment blocker.
+
+      This item already records that `/` and `/tmp` appear as UID 65534 in the shared Linux sandbox
+      and that approval disk contracts fail the ancestor-ownership check. It also calls for
+      documenting the fixture prerequisite in `features/README.md` and using ID-EGRESS-09 to verify
+      that a suitable environment reaches the behavior assertion with production ownership checks
+      intact.
+
+      This item already tracks approval fixtures failing when `/` and `/tmp` appear as UID 65534. At
+      dispatch, check the fixture’s ancestor ownership and report the first rejected path and UID.
+      Use ID-EGRESS-09 to confirm the selected worker can reach its behavior assertion before
+      assigning it local red/green evidence.
+
+      This item already tracks UID 65534 on state-root ancestors and uses ID-EGRESS-09 to verify
+      that a local fixture reaches its assertion with production ownership checks intact. Three
+      consecutive sessions hit the same blocker, leaving the RUNTTY-20 and RUNTTY-22 assertions
+      unchecked until CI.
+
+      This item already tracks the approval failures caused by UID 65534 on `/` and `/tmp` in the
+      shared sandbox. It calls for documenting the ancestor-ownership requirement and using
+      ID-EGRESS-09 to verify that a disposable fixture reaches its behavior assertion with
+      production checks intact.
+
+      This item already records that `/` and `/tmp` appear as UID 65534 in the loop sandbox,
+      blocking approval-backed tests before they reach their assertions. It names ID-EGRESS-09 as
+      the check that a worker can produce local red/green evidence with the production ownership
+      checks intact.
+
+      This item already tracks UID 65534 on `/` and `/tmp` in the shared runner. Recovery fixtures
+      hit the same ancestor-ownership check as approval fixtures. Use ID-EGRESS-09 to verify that
+      the chosen fixture environment reaches its behavior assertion with production ownership checks
+      intact.
+
+      This item already tracks approval and recovery fixtures failing because the local runner
+      reports UID 65534 for `/` and `/tmp`. It names ID-EGRESS-09 as the check that a suitably
+      mapped runner reaches the behavior assertion with production ownership checks intact.
   - id: p2-lifecycle-09-startup-timeout
     title: ID-LIFECYCLE-09 ended in run.startup-timeout once on main, past the first engine row
     phase: 1
@@ -2205,10 +2226,344 @@ items:
       passed, so this is not the first-row failure T-54, T-55 and T-57 dealt with. The journal
       printed with the failure omits entries 2 to 18, which hold the launch itself. One occurrence;
       with the next, read the full journal for which call took the time before choosing anything.
+
+      Include the ID-LIFECYCLE-12 healthy control in the existing startup-timeout investigation. In
+      run 43981890039 at c84b238, create was submitted 2.6 s into the 3 s budget and the engine
+      answered in 49 ms. Measure elapsed time from registration completion to create submission
+      alongside registration itself. That will let the two failures be compared before choosing a
+      remedy. T-50 is merged, and q-65 scoped its instrumentation to registration.
+
+      This investigation already tracks run 43981890039. Its healthy control submitted create 2.6 s
+      into the 3 s startup budget, and the engine answered in 49 ms. Include the separate 1 s
+      registration timeout when comparing where startup time went. The coordinator can use those
+      measurements to judge budget headroom. q-70 authorized reruns only for the slow first create.
   - id: T-58
     title: The whole feature suite's command names its own timeout, with headroom over what the suite takes in CI
     phase: 1
     owner: donvargax
     status: done
+    depends_on: []
+    kind: task
+  - id: T-59
+    title: egress.feature moves to an engine shard of its own, as the other shard's step has passed 180 seconds
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: slice-40
+    title: Deliver an approved OpenCode login to one container run
+    phase: 1
+    owner: donvargax
+    status: doing
+    depends_on: [T-48, slice-34, slice-30]
+    kind: slice
+    why: >
+      Specify the OpenCode counterpart to slice-32. The source is auth.json under
+      ~/.local/share/opencode and may include the OpenCode Go provider key alongside other provider
+      entries. Specify what one grant authorizes, how unrelated entries stay outside it, what
+      approval shows, how updates or refreshes and cleanup work, and how the staged login stays out
+      of the checkout, engine configuration and logs. Use synthetic markers and fake endpoints for
+      the scenarios. Name any unresolved account decision explicitly. Specification first;
+      implementation follows the Codex and Claude slices. Real credential use is subject to decision
+      0025 question 5.
+  - id: slice-41
+    title: Start OpenCode headless with isolated home and configuration
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-34]
+    kind: slice
+    why: >
+      Specify the OpenCode counterpart to slice-35 in the approved worker. Run opencode --standalone
+      run --format json against its isolated home and configuration, with the authorized provider
+      and model. Cover separation from host configuration and services, bounded startup, final
+      output and failure, approved egress and cleanup. Scenarios use synthetic credentials and a
+      fake provider. Specify only for now; implementation follows the Codex and Claude slices.
+  - id: T-62
+    title: Clarify how branch syncs contribute to release version counts
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: p3-release-notes-first-parent-fixture
+    title: Cover a nested item merge whose first parent is on main
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      PR 69's second local review identified a topology missing from the regression: a nested merge
+      can start an item branch at main's tip. It should remain listed when only its first parent is
+      on main's line. See PR 69 discussion in comment 6988903923.
+  - id: p2-approval-prerequisite-step-checks-no-consent-prompt
+    title: Check that approval prerequisite failures do not request consent
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The approvalProblem scenario step checks the prerequisite diagnostic and exit code but can
+      pass even when the command asks for consent. Add a focused regression and make the step detect
+      an unexpected consent prompt in the approval and hardlink refusal cases.
+
+      The existing item covers this exact gap. The approvalProblem step should fail if an approval
+      or hardlink prerequisite refusal prompts for consent, even when the diagnostic and exit code
+      are correct.
+  - id: T-64
+    title: Detect the available checkout socket backend
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-65
+    title: Build the trusted Landlock worker init
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: slice-42
+    title: Report the checkout socket backend in doctor
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-64]
+    kind: slice
+    why: >
+      Was p1-doctor-checkout-socket-backend.
+      Let the person see which backend a run would use before approving it. Cover Landlock, gVisor
+      and a host with neither backend through doctor’s read-only inspection. Broken down from
+      p1-checkout-socket-kernel-enforcement.
+  - id: slice-43
+    title: Bind the checkout socket backend to approval
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-64]
+    kind: slice
+    why: >
+      Was p1-approve-checkout-socket-backend.
+      Show the selected backend during review and record it in the approval. When neither backend is
+      available, require explicit consent to “late host sockets reachable”. Cover reapproval after
+      the selection changes. Broken down from p1-checkout-socket-kernel-enforcement.
+  - id: slice-44
+    title: Require matching socket approval before worker creation
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-43]
+    kind: slice
+    why: >
+      Was p1-run-checkout-socket-admission.
+      Compare the host’s current selection with the approval before creating a worker and freeze the
+      choice in the session record. Prove that startup-scan-only operation requires explicit
+      weaker-mode consent, including when an older approval exists. Broken down from
+      p1-checkout-socket-kernel-enforcement.
+  - id: slice-45
+    title: Show the session’s approved socket protection in status
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-44]
+    kind: slice
+    why: >
+      Was p1-status-checkout-socket-backend.
+      Read the frozen session record so status still reports “late host sockets reachable” for a
+      weaker-mode session after a controller restart or a change in host capabilities. Broken down
+      from p1-checkout-socket-kernel-enforcement.
+  - id: slice-46
+    title: Enforce Landlock for foreground and attached workloads
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-65, slice-44, slice-38]
+    kind: slice
+    why: >
+      Was p1-run-landlock-checkout-sockets.
+      Mount the trusted init read-only and apply it before both foreground and independently
+      attached exec commands. Prove ID-SOCKETS-02 and ID-SOCKETS-03 on the person’s ABI 9+ host,
+      including worker-private IPC and checkout edits. Record the temporary hosted-CI exception in
+      weakened-gates.md. Broken down from p1-checkout-socket-kernel-enforcement.
+  - id: slice-47
+    title: Enforce checkout socket denial with the approved gVisor fallback
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-44]
+    kind: slice
+    why: >
+      Was p1-run-gvisor-checkout-sockets.
+      Launch and verify the worker under runsc when Landlock ABI 9 is unavailable. Prove
+      ID-SOCKETS-02 and ID-SOCKETS-03 in hosted CI with their positive controls, and verify that a
+      runsc failure stops startup. Broken down from p1-checkout-socket-kernel-enforcement.
+  - id: T-68
+    title: ID-RUNTTY-22 closes the client terminal only after launch is complete
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: p2-kernel-helper-leaves-no-feature-temp-dir
+    title: A kernel-helper child of the feature tests leaves no itos-container-feature-binaries directory in /tmp
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      features/engine_diagnostics_test.go:20 TestMain creates /tmp/itos-container-feature-binaries-*
+      before m.Run and removes it only after m.Run returns. A kernel-helper child re-runs the
+      features test binary with one -test.run selector, and TestApprovalKernelHelper
+      (features/approval_kernel_linux_test.go:16) then calls unix.Exec into the product. So the
+      child's TestMain never reaches RemoveAll, and every helper invocation leaks one empty
+      directory. 1391 of them sit in /tmp on the loop machine today. The Landlock helper slice-42 to
+      slice-46 bring would leak one per supervised doctor, approve or run invocation, which makes it
+      worse quickly on a machine several workers share. Wanted: helper mode is detected before the
+      setup (from its selector or its helper argument), or the directory is created only when a test
+      first needs a standalone probe, so a helper child makes nothing it cannot remove. This is
+      harness work, so a ledger task, checked by a regression that runs the approval kernel helper
+      and finds no new feature-binaries directory in a private TMPDIR. Phase p2: it blocks no
+      charter step, but it should land before the Landlock helper multiplies the leak. The harness's
+      TestMain is this project's own, not the template's, so no backport.
+
+      T-66's spec already covers the new helper: its no_feature_binaries_left row requires that a
+      Landlock-helper invocation leaves no feature-binaries directory. The spec says outright that
+      the slice-4 fchmodat2 helper's leak stays with this idea, so folding the idea into T-66 would
+      undo a decision already made. Once T-66 lands, check how it avoids the directory. If it spots
+      helper mode before TestMain's setup for every helper selector, TestApprovalKernelHelper is
+      fixed too, and this idea shrinks to its own regression: run the approval kernel helper with a
+      private TMPDIR and find no new directory. Then remove the 1391 leaked directories in the loop
+      host's /tmp by hand.
+
+      This item already tracks the slice-4 fchmodat2 helper's leak. Its own text says to check how
+      T-66 avoids the directory once T-66 lands. T-66 now has the answer: TestMain dispatches helper
+      mode before it makes the directory (socketBackendChild in features/engine_diagnostics_test.go
+      on the T-66 branch). So the item's fix is to route TestApprovalKernelHelper's selector through
+      that same pre-setup dispatch, plus its planned regression: run the approval kernel helper with
+      a private TMPDIR and find no new itos-container-feature-binaries directory. After that, remove
+      the leaked directories in the loop host's /tmp by hand. No new design is needed.
+  - id: T-66
+    title: A feature-harness fixture chooses the kernel's Landlock answer and the daemon's runtime list for socket-backend scenarios
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-67
+    title: Cursor Bugbot satisfies the review gate
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-69
+    title: The engine shards' 180-second step budget warns; only a 600-second hang guard fails
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: p2-engine-log-loses-timing-line
+    title: The Engine scenarios log keeps its last lines, the step timing line included
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      In run 44721305064 (T-69, d797fbc) and main run 44715951391, the downloaded log of the Engine
+      scenarios step ends in a burst of "features TestMain received signal 23 (urgent I/O
+      condition)" lines (160 in one run). In the other shard the log stops at 10:41:39 while the
+      step ran until 10:44:10. So the go test result lines and the "engine step timing:
+      duration_ms=... outcome=..." line that T-69 prints on every run never reach the log; only the
+      API step times and the warning annotations show a shard s time. TestMain s signal logging
+      floods the output; find why SIGURG is logged and why the tail is lost, and keep the step s
+      last lines, the timing line above all, in the log.
+  - id: p2-split-engine-fixture-test
+    title: features/engine_fixture_test.go is split below the 600-line lint limit instead of squeezed under it
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      T-69 (ec00492) put validFixtureEnvironment on one line so features/engine_fixture_test.go
+      stays under revive s 600-line file limit. Squeezing lines to pass a linter games the gate.
+      Split the file along its own seams (fixture environment, workflow pins, preparation) into
+      sibling test files, restore the function to normal formatting, and keep every test and
+      assertion unchanged.
+  - id: p2-credential-brokering
+    title: "Decide how a sandboxed agent gets credentials it cannot keep after the run: pass in, broker or mint per credential."
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Today the worker reads real long-lived credentials, so a hostile agent can copy one out and
+      use it after the run; the shared read-write Codex login also lets it replace the host's login.
+      The design compares passing in, TLS-intercepting brokers, base-URL brokers and short-lived
+      minted tokens, and recommends API keys passed in for model logins plus per-run GitHub App
+      tokens, with no interception. It waits on the person's decision and on slice-31 and slice-33
+      landing; the design is at docs/plans/credential-brokering.md.
+
+      The person corrected the Codex part of q-90 on 2026-11-20: Codex defaults to a sandbox-only
+      ChatGPT login in the harness home (device login, never the host auth.json), with an API key
+      only as the fallback when a weekly limit is reached. The design is amended to match.
+    deferred: >
+      Deferred until remote sandboxes (microVMs on cloud providers) exist, by the person's direction
+      of 2026-11-20 (q-90). Locally run sandboxes share the host's own logins, so the local case
+      needs no brokering; this item's broker design applies only to remote sandboxes, and the person
+      decides it when those start.
+  - id: p1-repository-map
+    title: Keep a short MAP.md that names each slice and engine package, its fake and its test command
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The person decided on 2026-11-20 that each repository keeps a short MAP.md and that briefs
+      name the start files, the fake and the test command, to cut what every session relearns
+      (charter, Settled by the person). This repository has no MAP.md yet. Measure the effect again
+      after about ten tasks.
+  - id: T-71
+    title: Trim features/README.md to its standing harness rules and hold it under a doc-caps cap
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-72
+    title: features/README.md requires engine source or native CI evidence for claims about exact mount option strings
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: [T-71]
+    kind: task
+  - id: T-73
+    title: README explains how to register and verify the local commit hooks
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-74
+    title: itos.yaml and release.yml comments describe this project, not a project made from the template
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
+  - id: T-75
+    title: docs/ORCHESTRATING.md states the implemented CI and push policy
+    phase: 1
+    owner: null
+    status: todo
     depends_on: []
     kind: task

@@ -6239,19 +6239,214 @@
     them. It fails today at ls, because no record exists. The second fails today on its first anchor,
     ### Credential run.
 - id: T-48
-  type: feat
-  title: The session engine port delivers a per-command secret or single-file mount to a worker without it entering the create configuration
+  type: chore
+  title: Prepare session token staging, exact file mounts and owned recovery
   why: >
-    The shared seam every credential slice needs, built before them, as T-40 is for the proxy. A
-    port method, a stateful fake in porttest and a docker adapter hand secret bytes or a
-    bind-mounted host file to one worker for one command, by the mechanism the decision record
-    chose. The port's shared contract runs against the fake and the adapter. It asserts that the
-    created container's configuration, mounts list, labels and recovery records hold no secret
-    value, that the secret is gone with the session, and that a failed delivery stops the workload
-    before it starts. Real-engine proof runs in CI only, on a synthetic marker, and the agent never
-    receives the Docker socket. The fake does no I/O. Broken down from p1-credentials-passed-in.
-  done_when:
-    - run: go test ./internal/engine/session/...
+    Charter milestone two, step 2 needs the shared session seam before slice-31 and slice-33 can
+    deliver tokens. This is internal foundation work, with task checks and no new command
+    behaviour or scenarios. It does not lift any policy, approval or run refusal. Read
+    docs/decisions/0025-credentials-passed-in.md in full, arc42's Credential run and credential
+    building blocks, docs/architecture.md's Slices, decision 0017 and LIFECYCLE-03/07. The design
+    remains ADR 0025's proposal, not a charter amendment, runtime evidence or permission to use
+    real credentials. Its question 1 defers Codex and the original task's direct single-file
+    source-mount half; implement neither a Codex kind nor a replacement login mechanism here.
+    Question 5 bars real credentials. Question 6 bars an integrated refusal-log absence claim;
+    this task neither fixes the logging contract nor declares AC-36 satisfied.
+
+    The coordinator's q-67 decision of 2026-11-15 21:15 UTC confirms the slice-29 prerequisite
+    is met: slice-29 merged at ae2e666 and closed at 07a596e on 2026-11-14, and q-54 applies.
+    Implement T-48 as specified without another prerequisite question. Consume slice-29's
+    bounded, concurrency-safe state-side descendant-exclusion handoff, including refusal of a
+    state-descendant alias while admitting a distinct source during another project's
+    publications and removals and with more than 100,000 unrelated retained entries. Older
+    unresolved-state wording in ADR 0025 or arc42 predates that merge; do not rewrite it in
+    this task. Do not implement the withdrawn host-wide state scan, a current-project-only
+    substitute, or a fallback. The source capability below consumes that handoff; it does not
+    invent its exclusion algorithm.
+
+    Extend internal/engine/session's domain, port, port/porttest, disk, docker, codec and entropy
+    responsibilities, preserving the existing slice/engine arrows. Keep OS, filesystem and SDK
+    operations behind ports, and the stateful fake entirely in memory. Only cmd may assemble
+    concrete adapters; public assembly and grant admission belong to the consuming slices.
+    Reuse the session intent, registry, per-session operation lock, finite-call wrappers and
+    shared Recovery path, not a second worker lifecycle. No-grant runs keep their existing
+    configuration, record meaning, hardening and lifecycle. Preserve T-40's resource ownership
+    and cleanup when its changes land; credential cleanup cannot declare a session complete
+    while an anchor, worker or other owned resource remains. Reuse the pinned Moby client
+    v0.6.2/API v1.56.1, golang.org/x/sys v0.48.0 and Go 1.27 standard library; they already supply
+    engine mounts, descriptor operations, tmpfs observation and entropy. No new library, host
+    shell, HTTP bridge, network service, init wrapper or dependency upgrade is needed.
+
+    Accept only the two token kinds from ADR 0025, at most one of each. Their immutable targets
+    are /run/itos-container/credentials/claude-token and
+    /run/itos-container/credentials/github-token. Represent checked source access separately
+    from persisted metadata: the source capability retains the descriptor and identity validated
+    by readiness, and reading reopens that descriptor through /proc/self/fd, never the supplied
+    pathname. Consume slice-29's revalidation, including exclusion, for the complete source set
+    before reading or staging; refusal means no staging or create. Read each checked source once
+    per command, 1 through 65536 bytes, without trimming. A short read, changed observed size or
+    failed read refuses.
+    Keep bytes in the copying adapter, not Binding, Record or a Docker request. Use one bounded
+    read/write buffer and overwrite it after use on success and failure; this is hygiene, not
+    guaranteed Go-memory zeroization. Never read, hash or compare contents to decide approval.
+
+    Publish durable staging intent under the existing protected session authority before mkdir
+    or any token copy. Allocate an independent 128-bit random staging name, /dev/shm/itos-container-
+    followed by 32 lowercase hexadecimal digits, through the entropy adapter; do not shorten
+    existing session or intent IDs or change HexID. Verify /dev/shm is tmpfs with statfs. Create
+    a new host-UID-owned directory with mode 0700 and validate it by descriptor after mkdir;
+    collision refuses instead of reusing it. Create exactly the selected kind-named regular
+    files with O_CREAT, O_EXCL and O_NOFOLLOW, mode 0400, owned by the host UID, and copy the
+    checked bytes. A partial failure keeps enough original intent for owned cleanup. Never
+    write copies under the checkout, protected state, a disk-backed volume or an image; never
+    bind the original source or the staging directory. No grant means no staging allocation.
+
+    Supply only staged paths and fixed targets to the Docker adapter. CreateRun adds one
+    read-only HostConfig.Mounts bind per token, alongside the existing checkout anchor volume
+    and /tmp tmpfs. Retain private IPC, a separate worker /dev/shm, the read-only root, non-root
+    UID/GID, literal workload argv as PID 1, no restart and every existing hardening check.
+    Create-time paths may be visible in inspect; token values may not. Extend VerifyRun's
+    safeHost and safeMounts to require exactly the intended sources, targets, types and read-only
+    flags, refusing missing, extra, duplicate, writable, directory or original-source mounts.
+    Do not weaken the existing Docker variation that may omit /tmp from materialized Mounts.
+    Inspect's recovery ownership currently recognizes only one HostConfig mount: extend that
+    observation and its consumers too, so a legitimate credential bind neither hides an anchor
+    mismatch nor prevents owned recovery. Assertions must inspect raw requests and independent
+    fixture observations, not call safeHost or safeMounts as the oracle for their own correctness.
+
+    Stage before worker create and keep copies until the start wait returns and the applicable
+    existing checkout-mount detector has run. On every path after that point, including failed
+    acknowledgement or detector failure, attempt to unlink every staged file and remove the
+    directory. On failures before any start attempt, clean partial staging and any owned
+    unstarted resources without starting work. Preserve the primary failure if cleanup fails.
+    Source inspection, reading, staging, publication, create and verification failures before
+    start therefore prevent launch; this does not say a failed start acknowledgement prevents
+    launch. Do not add start retries, a new workload lifetime, or a restart after unlink.
+
+    Model staged pathname presence and runtime-acquired references independently. A runtime
+    may acquire a credential mount, lose its start acknowledgement, and finish starting after
+    the controller unlinks the files. The acquired copy can still be read until that worker's
+    mounts are torn down. Preserve the original protected full worker ID; reconcile it within
+    the existing operation and teardown budgets and attempt owned termination/removal. Retain
+    an unobserved workload outcome as unknown. Missing staged paths, a failed start, or restart
+    policy no cannot prove that no workload ran or that credential cleanup completed. Completion
+    requires confirmed worker removal AND confirmed staging-path removal, plus the other owned
+    resources. A known workload exit keeps its existing precedence over controller failures.
+
+    Retain only kind, paths, original session authority and necessary staging identity/progress
+    in recovery evidence, never token bytes or their hashes. Evolve the strict record encoding
+    explicitly without repurposing existing schema-1/2 records or accepting unknown fields; keep
+    original identities immutable and completion terminal. Coordinate any newer schema number
+    with T-40's landed encoding instead of silently colliding with it. Recovery must reconstruct
+    its staging authority from protected records without reopening original sources, current
+    policy or approval. It verifies directory ownership/mode, identity and the expected file
+    names before removal, follows no symlink and never recursively deletes unexpected entries.
+    Unexpected or substituted contents refuse cleanup and retain evidence. Missing staging
+    after a reboot confirms only path absence, never an earlier workload result. Return staging
+    presence as present, absent or unknown through the recovery port for the consuming slices'
+    status presentation. Incomplete cleanup keeps the public session ID and exact
+    itos container stop <session-id> retry; only observed absence permits the durable completion
+    transition. Status is read-only and repeated stop after confirmed completion is idempotent.
+
+    All new finite operations share min(10 seconds, remaining phase time), the original
+    120-second startup and separate 30-second teardown totals; status retains 10 seconds and
+    stop 30 seconds. A staging syscall can return after cancellation. Keep its descriptor and
+    serialization authority until it returns, dispose of late acquired handles, forbid later
+    launch and retain uncertain effects for fresh recovery. No late reply can overwrite a
+    completed record, resume launch or replace the reported cause. Reuse the existing budget
+    engine and controlled-time/barrier tests rather than sleeping for production deadlines.
+
+    Commit executable contracts and unit tests first with compilable, refusing stubs for the
+    missing seam, then implement it. New positive controls must fail at their copy, exact-mount,
+    ordering or recovery assertion, not at compilation, missing setup or a skipped test. Keep
+    the existing passing lifecycle controls as regressions and report them honestly. Use these
+    named tests so the ledger cannot pass merely because go test matches no new tests:
+
+    In disk, TestCredentialStagingContract runs the same port/porttest contract as subtests
+    memory and disk. Cover each kind and both together, exact byte preservation including a
+    final newline, sizes 1 and 65536, independent commands and unchanged original sources.
+    Cover intent-before-effects, no-grant no-op, non-tmpfs refusal, occupied directory/file,
+    symlinks, wrong ownership/modes, short reads/writes, read or metadata revalidation failure,
+    partial staging, failed unlink and safe repeated cleanup. A recording test reporter must
+    show the shared oracle rejects a faulty fake, including one that trims the final newline.
+    Test-only temporary roots and filesystem observations let disk tests exercise the adapter
+    without Docker, privilege or a real state folder; they are not production flags and prove
+    no kernel mount behaviour. Unsupported OS is an input value, not a runtime.GOOS branch in
+    logic; any build-tagged shim contains only the unavailable call, not decisions.
+
+    In docker, TestCredentialMountContract runs one shared contract as memory and sdk subtests
+    against the I/O-free engine fake and the existing local Engine API fixture. Assert exact
+    create/inspect mounts, unchanged hardening and literal argv, both token kinds and no-grant
+    compatibility. Change each inspected source, target, type, read-only flag and ownership
+    independently with a healthy control, requiring refusal before any start. Observe every
+    API request and response, including errors, rather than just the final create body.
+    TestCredentialUncertainStartContract, also memory and sdk, scripts mount acquisition before
+    a lost acknowledgement and delayed start completion after unlink. It must observe the
+    retained bytes through the simulated acquired reference, one create/start only, original-ID
+    reconciliation, observed exit or explicit uncertainty, and both successful and failed
+    cleanup. A fake that deletes its acquired reference on pathname unlink must fail. The SDK
+    fixture models this lifecycle; it is not real-engine evidence.
+
+    In domain, TestCredentialLifecycle drives the registered Runner and shared Recovery through
+    all preparation/start/detector/cleanup boundaries using the stateful fake. Include stop
+    winning the operation lock before start, controller loss before unlink, partial publication,
+    unavailable observations, foreign/substituted staging, independent sessions, and every
+    combination of worker present/absent and staging present/absent/unknown. Assert mutation
+    order, no launch after a pre-start refusal, exact retry and no invented workload success.
+    TestCredentialBudgets uses controlled time and barriers for cancelled/late staging reads,
+    writes, unlink, intent saves and start replies, proving the original limits and retained
+    handle lifetimes without long sleeps. Existing finite-launch, registered-run, anchor,
+    recovery and cancellation tests remain live.
+
+    In port, TestCredentialProgress holds immutable ownership and terminal completion through
+    every credential progress transition. In codec, TestCredentialRecords round-trips the new
+    metadata, refuses missing/unknown/mistyped fields, invalid kinds/paths, changed authority and
+    impossible completion, and preserves existing records. In disk,
+    TestCredentialRecoveryStore exercises durable publication, interrupted updates and reopening
+    against the same store contract on memory and disk. No serialization may include the read
+    buffer, source capability or content-derived approval value.
+
+    TestCredentialProvisioningAbsence in docker searches raw synthetic markers and their base64
+    encodings at all three offsets in recorded Engine API traffic, configuration, labels and
+    adapter failures. The staging, recovery-store and codec tests search their own real output
+    surfaces, including fixture state and checkout files; domain tests check controller results
+    and fake-recorded configuration/recovery metadata. Use fresh synthetic markers in private
+    temporary fixtures and seed
+    positive controls for every detector so empty searches cannot pass. Tests never import a
+    sibling adapter to assemble this evidence; only cmd assembles adapters, including in the
+    consuming slices' integrated tests. The marker must remain in its source and legitimately
+    acquired worker reference until removal, but no staged pathname may remain after acknowledged
+    startup cleanup or confirmed teardown. Assertions report the surface, never the marker or
+    complete record contents. This is provisioning-path evidence only; the integrated searches
+    over all approval/snapshot/recovery records, command diagnostics and checkout files remain
+    required of slice-31/33. Arbitrary workload output is unredacted, and their ADR hostname-marker
+    refusal-log probe still waits on question 6.
+
+    Real Docker staged-bind acceptance, worker read-only access, cross-project isolation,
+    hash-only proof of bytes after mount acquisition/lost acknowledgement, and disappearance
+    after confirmed teardown remain required CI-only evidence with slice-31/33's black-box
+    scenarios. Do not run a daemon here, add an unguarded engine test to the unit suite, or
+    substitute this fake/SDK evidence for that handoff. A rejected bind or a staged copy that
+    outlives its worker reopens ADR 0025's mechanism; no fallback is authorized. This task adds
+    no scenario IDs and does not activate credential delivery in run, status or stop.
+
+    The check below uses only Go and portable shell/awk already present in task CI. It runs the
+    session unit suite once without the race detector and requires passing reports for every
+    new test and both shared-contract backends; missing or skipped tests fail. Before this
+    spec, go test -count=1 ./internal/engine/session/... passes in all eight packages, so that
+    command alone is only a regression check. The strengthened check fails on the missing
+    credential test reports, not on a credential assertion. The implementer must supply the
+    assertion-level red described above, then passing evidence; the drafting failure is not a
+    substitute. No feature-suite run, engine run, local mutation run or generated proof belongs
+    to this documentation change. Hooks and CI retain their existing wider gates and CI alone
+    judges fresh changed-code proof.
+
+    Use test then chore commits for the internal seam, each with Task T-48 so its ledger check
+    is selected when the implementer owns the item; an Item-only footer does not select task
+    checks. Public behaviour belongs in the consuming slices' scenario-driven commits. Record
+    implemented-versus-proposed status in ADR 0025 and arc42 with that implementation, retaining
+    their unresolved questions and native-evidence limits. This draft commits only T-48's ledger
+    entry as docs with Item T-48 and leaves every sibling entry untouched.
 - id: T-49
   type: test
   title: "The lifecycle engine shard flakes on main: two barrier scenarios failed on commits that changed none of their code"
@@ -7898,3 +8093,1214 @@
     T-58 commit, preserving published history. Preserve sibling ledger entries and work
     ownership/status. Agents commit and stop; the loop owns push, CI watching
     and closure after the actual pushed head passes its required checks.
+- id: T-59
+  type: ci
+  title: egress.feature moves to an engine shard of its own, as the other shard's step has passed 180 seconds
+  why: >
+    On main at 83e4bc1, run 43837945423 passed all 40 scenarios in Engine shard (other).
+    The suite took 171.2 s. The step printed "engine step timing: duration_ms=180840 outcome=failed".
+    Earlier that day the step took 143.9 s at a36768a, the first run with slice-27's eight
+    egress rows live, and 111 s and 90 s before them. Under T-45's measured
+    180-second step rule and decision 0028, the coordinator settled the move on 2026-11-16 at
+    09:44 UTC. Run 43837968367 at 2897e10 separately reported an ID-EGRESS-14 connection-count
+    failure. This task addresses the measured step overrun.
+
+    In one ci commit with --task T-59, add a fourth include named egress to the existing
+    engine-shard matrix in .github/workflows/ci.yml. Move the whole features/egress.feature
+    from other to egress using the basename egress.feature as its only file on this tree.
+    Keep offline.feature in offline and lifecycle.feature in lifecycle. The other shard keeps
+    anchors.feature, checkout-overlap.feature, doctor.feature, hardlinks.feature, recovery.feature,
+    session.feature and sockets.feature. At this baseline the resulting live row counts are 24
+    offline, 19 lifecycle, 32 other and 8 egress. Update the current shard lists and measurement
+    example in features/README.md and the inventory under Future behaviour evidence in
+    docs/architecture/arc42.md to match the matrix.
+
+    All four includes run the same job on separate native ubuntu-latest runners with fail-fast
+    false. Each gets the checkout at the tested SHA, Go setup, read-only preflight, fixture
+    preparation and its outputs, and the step-local feature and manual red selectors. Preparation
+    emits the existing "engine warm-up timing:" and "engine product warm-up timing:" lines.
+    TestFeatures emits "engine suite warm-up timing:" before its first selected row. Preserve the
+    failure diagnostics and unconditional fixture cleanup. The step fails above 180000 ms including
+    compilation. Keep the 10-minute job, 5-minute step, 4-minute test and all fixture limits.
+    Use the existing scenarios and assertions intact.
+
+    The engine job named Engine scenarios (Linux amd64) needs only engine-shard. Its Require
+    every engine shard step reads ${{ needs.engine-shard.result }} into SHARD_RESULT and accepts
+    only success. The fourth include feeds this same matrix result. Preserve the aggregate's
+    always() and event guard, the ci gate and the release dependency.
+
+    In features/engine_shards_test.go update TestEngineShards' exact name set, the in-memory
+    shardBaseline and the controls for extra or renamed shards. Pin the egress shard's complete
+    set of parsed basenames regardless of list order or whitespace. Reject a swap with a file
+    in other even if all four shards are nonempty and every file appears once. Also reject
+    an unrelated file in egress, the old three-shard layout and a fifth shard. Pin the
+    offline, lifecycle and other shards' complete sets the same way, and reject a file moved
+    whole from other into offline or lifecycle, where every file still appears exactly once,
+    so the placement rule behind the 180-second budget holds. Keep the real
+    partition check against the unsharded selection. It covers every effective @engine file
+    (live or @wip) exactly once, live row counts and IDs, and the nested ID-LIFECYCLE-09 and
+    ID-LIFECYCLE-13 schedule. Preserve the selector and aggregate negative controls.
+
+    In testShardPartition log strings.Join(files, " ") using the files already parsed with
+    strings.Fields(entry.Features), so each shard lists all its files on one line.
+    Add a "multiline egress report" subtest to TestEngineShards.
+    Parse an in-memory egress entry whose features value is a YAML literal block with
+    egress_lifecycle.feature on the first line and egress.feature on the second. Use the same
+    report formatter as the real partition and assert that its single line ends with
+    " in egress_lifecycle.feature egress.feature". The control can run before slice-28 lands.
+
+    When slice-28 merges main, it places its whole features/egress_lifecycle.feature alongside
+    egress.feature in egress and updates its inventory pins. This supersedes its earlier other
+    assignment. When slice-37 merges main, it places its whole features/run_terminal.feature
+    in other, where the seven remaining files previously ran in 111 s and 90 s. Each slice adds
+    its file on its own branch. Only files present on this tree belong in T-59's matrix. Use the
+    per-shard step timings on the pushed heads to judge those placements and any later whole-file
+    move. Each shard must pass within the same 180-second gate.
+
+    At a399bbf TestEngineShards passes and reports egress.feature among other's 40 rows. In a
+    scratch partition with slice-28's file, both spellings of the two-file list selected the same
+    27 rows. The placement assertion passed on the space-separated list and missed egress.feature
+    on the literal block's continuation line. The check below preserves go test's exit status,
+    checks placement only in the real partition, and requires the multiline control to pass.
+    It rejects unrelated files and allows slice-28's file once the inventory includes it.
+    Before implementation it exits 1 for the absent egress shard and the missing control.
+    Run it before changing the matrix and again with the new pins.
+
+    TestEngineSuiteWarmup creates its synthetic approval under the literal /tmp even when TMPDIR
+    is set. On the review runner, /tmp had UID 65534 and mode 1777. The product returned
+    run.approval-invalid before the recorder saw a create. On runners with an untrusted /tmp,
+    run the features self-tests below in a private mount namespace with a mode-0700 /tmp owned
+    by the test user. For example, set `cache=$(go env GOCACHE)` and prefix the features command with
+    `bwrap --ro-bind / / --dev /dev --bind "$cache" "$cache" --perms 0700 --tmpfs /tmp --`.
+
+    In the same implementation attempt run the workflow's engine-free self-tests locally with
+    go test ./features -count=1 -run
+    '^(TestEngine|TestFeatureSignalDiagnostics|TestLifecycleSignalWindow|TestPlatformSelection)'
+    and go test ./tools/release -count=1 -run '^TestReleaseWorkflow$'. All mutation proof runs
+    in CI alone, as the root AGENTS.md evidence workflow holds: an agent makes no local
+    mutation run and commits no generated mutation or coverage evidence before reporting
+    done, and a changed function's proof waits for the pinned itos-cc run at the pushed
+    head. The loop checks the four native timings, aggregate and required proof in CI at the
+    pushed head.
+- id: T-60
+  type: fix
+  title: The feature harness environment clears COLUMNS, so help scenarios do not depend on the caller's terminal width
+  why: >
+    The harness passes the caller's COLUMNS into help scenarios. At COLUMNS=30 Kong wraps a phrase
+    checked by ID-APPROVAL-29, making a correct build fail. Drop inherited terminal width in the
+    scenario environment and preserve a scenario's explicit width, including ID-APPROVAL-56. Keep
+    the existing scenarios and assertions. A focused regression must fail on the old harness and
+    pass after the fix. With an inherited COLUMNS=30, world.env must omit the key
+    regardless of case and ID-APPROVAL-29 must still pass against the built CLI.
+    world.withEnv("COLUMNS=200") must supply exactly one width with that value.
+    The focused test runs the help scenario in an unfiltered suite. Filtered runs execute only
+    their selected scenarios.
+- id: T-61
+  type: ci
+  title: Release notes leave out merges of main into an item branch
+  why: >
+    v0.1.0's generated notes (2026-11-09) list 'Merge main into slice-13', 'slice-14' and 'slice-11'
+    under Features: release-notes counts a merge commit whose subject carries a feat type, or
+    classifies merges by their first parent's type. A merge of main into an item branch changes
+    nothing a user sees; leave such merges out, and keep the merge that lands an item (its own
+    subject names the item). Use Git parentage to distinguish a branch sync from an item landing.
+    For both a first release and a tagged release, omit the sync entry and its contribution to
+    the commit and feature counts. Keep each item landing under its own subject. The regression
+    exercises both a sync with a feature subject and a sync whose first parent is a feature.
+- id: T-62
+  type: ci
+  title: Clarify how branch syncs contribute to release version counts
+  why: >
+    The release-notes tool already identifies merges of main into an item branch by Git parentage,
+    so this wording change has no prerequisites. The opening counts and What changed exclude those
+    syncs. The release-version tool reads the full range. Today the notes put that range's totals
+    after "includes branch syncs" whenever a sync is present. Five listed feats and one sync feat can
+    read as six feats from syncs. An untyped, nonbreaking sync repeats the listed totals and
+    qualifies the Upgrading text even when the whole range has no breaking changes.
+    [PR 69, comment 6988903923](https://github.com/donvargax/itos-container/pull/69#issuecomment-6988903923).
+
+    In notes.render, count the omitted syncs' own feats, fixes and breaking changes. For both first
+    and tagged releases, name their nonzero contributions and all three totals for the full range
+    in the opening paragraph. For the mixed history, write "Omitted branch syncs add 1 feat,
+    bringing the totals for the version calculation to 6 feats, 0 fixes and 0 breaking changes."
+    Omit this sentence when all three contributions are zero. In Upgrading, say "No listed change
+    is breaking." only when an omitted sync is breaking and no listed change is.
+    If no commit is breaking, the assurance covers every commit since the start of the range.
+
+    Assert the rendered Markdown in both TestSyncMergesLeftOut histories. The first release lists
+    nine commits and the release after v0.1.0 lists eight. In each, require five listed feats,
+    the sentence attributing one of the six feats to syncs, and the assurance that no commit since
+    the first commit or tag is breaking. Add an "untyped sync" case after v0.1.0 with one listed
+    feat and a single untyped, nonbreaking sync. Require the listed counts just once, no sync
+    sentence, and "No commit since v0.1.0 is a breaking change." Assert the contribution of a fix
+    sync and of a breaking-only sync in separate cases. With no listed break, only the latter
+    qualifies the Upgrading text. In checkSyncMergeVersionExplanation, assert the new sentence for
+    zero listed feats and one sync feat. The feat still explains the minor release when a module moves.
+
+    Run the package check with the new assertions first. The mixed and untyped cases must each
+    fail on the current wording and pass with the same assertions after the renderer changes.
+- id: T-63
+  type: test
+  title: The step 'no approval record or frozen input is produced' also checks that no frozen input exists
+  why: >
+    The live step "no approval record or frozen input is produced" calls approvalNoRecord in
+    features/approval_assertions_test.go. Under the fixture's itos-container state directory,
+    approvals/<project>/current.json and snapshots/<project>/<generation>.json are separate
+    files. The helper returns nil as soon as current.json is absent, so a refused command can
+    leave frozen input behind and still pass the step.
+
+    Add TestApprovalNoRecordRejectsFrozenInput in the features package. Call approvalNoRecord
+    directly on a private temporary state fixture. Leave current.json absent and create an empty
+    snapshot directory for the project. Require the helper to succeed. Write a synthetic frozen
+    snapshot to 1.json in that directory as the only change and require the helper to return an
+    error. Run the test before changing the helper. The empty control must pass and the snapshot
+    assertion must fail because it receives nil. Then make the missing-record branch reject frozen
+    input from any generation. A missing or empty snapshot directory counts as absence. Rerun the
+    same test and require both assertions to pass.
+
+    Preserve the existing-record checks. A record with a captured baseline still requires
+    approvalSameTree. An unexpected record without a baseline still fails, and other lookup errors
+    still propagate. Keep the replacement target comparison and its approvalNoRecord fallback when
+    there is no replacement. Rerun the live scenarios with their existing steps and examples in
+    approval.feature (ID-APPROVAL-05, ID-APPROVAL-13, ID-APPROVAL-15, ID-APPROVAL-16,
+    ID-APPROVAL-19, ID-APPROVAL-27, ID-APPROVAL-47, ID-APPROVAL-48 and ID-APPROVAL-55) and
+    hardlinks.feature (ID-HARDLINK-05). The prerequisite step's check for an unexpected consent
+    prompt belongs to p2-approval-prerequisite-step-checks-no-consent-prompt.
+
+    The ledger check requires a successful Go run and a PASS for the named test. Go exits zero
+    when the test is missing, so its exit status alone would accept a run with no assertions.
+    This task has no dependencies and stays unowned during specification and review. Only the
+    contributor takes the task after spec approval.
+    The implementer may commit freely in its workspace. The host makes the landing commits.
+- id: T-64
+  type: chore
+  title: Detect the available checkout socket backend
+  why: >
+    T-64 supplies detection for p1-checkout-socket-kernel-enforcement. Milestone two, step 5 of
+    docs/charter.md requires doctor, approve and run to agree on which backend the host offers.
+    Only confirmed absence of both permits asking for consent to "late host sockets reachable".
+    Give these callers one read-only detector under internal/engine/checkoutsockets. Its domain
+    selects from observations behind ports. Its port owns the typed outcomes Landlock, gVisor
+    and neither available. A typed inspection failure carries no selection. The zero value cannot
+    certify absence. Observe afresh within each caller's inspection deadline so a change since
+    approval is visible to run. An already cancelled call fails before either probe.
+
+    On the supported Linux amd64 host, the native adapter asks the running kernel for its
+    highest Landlock ABI with landlock_create_ruleset(NULL, 0, LANDLOCK_CREATE_RULESET_VERSION).
+    Use the syscall number and version flag from the pinned golang.org/x/sys v0.48.0. ABI 9
+    introduced LANDLOCK_ACCESS_FS_RESOLVE_UNIX. Select Landlock at ABI 9 or higher and finish
+    without consulting the runtime list. A positive ABI below 9, ENOSYS (unimplemented) or
+    EOPNOTSUPP (disabled) permits the fallback lookup. Any other error, or a successful reply
+    with a nonpositive ABI, stops detection. Take the platform as input and return failure
+    before I/O for unsupported platforms. Keep the build-specific code to the syscall wrapper.
+    [Kernel ABI query](https://docs.kernel.org/userspace-api/landlock.html#landlock-abi-versions).
+
+    For the fallback, give the docker adapter a read-only Info capability for the caller's
+    selected, validated native Docker daemon. The pinned Moby client v0.6.2 and API v1.56.1
+    already read GET /info and decode its Runtimes map. The current readiness adapter retains
+    only identity and platform fields from this response. At the revision supplying API v1.56.1,
+    Moby copies path and runtimeArgs from each configured runtime into /info and omits runtimeType.
+    Configuring runsc with only runtimeType io.containerd.runsc.v1 therefore leaves the runsc
+    entry without an executable or shim identity.
+    [Moby's /info implementation](https://github.com/moby/moby/blob/14ebc602124e280ef4ae3e1a8e688dac1255baa6/daemon/info_unix.go#L52-L60).
+
+    Select gVisor only for a path-based registration under the exact name runsc, regardless of
+    the default runtime. The operator can assign that name to any executable. The reported path
+    must be runsc or an absolute Linux path with final component runsc. Compare names
+    case-sensitively. A missing, empty or unrecognized path, or a nonempty runtimeType on the
+    runsc entry, yields a typed inspection failure with no selection. A reported map without
+    the runsc key, including an explicit empty map, confirms neither backend.
+    A missing or null map, a decode or request error, or cancellation yields inspection failure.
+    The ABI query and daemon inspection are the detector's only I/O.
+    [Docker runtime configuration](https://docs.docker.com/reference/cli/dockerd/#configure-runtimes-using-daemonjson).
+
+    Before selecting gVisor, inspect the complete runtimeArgs list on the matching runsc entry.
+    An empty list, including an omitted field, uses runsc's default host-uds policy of none.
+    Also accept the exact one-element list ["--host-uds=none"]. For every other list, return
+    a typed inspection failure with no selection. This covers arguments that permit host socket
+    access and arguments whose effect on that policy the detector cannot establish.
+    [gVisor's host socket policy](https://github.com/google/gvisor/blob/a05ab5909d2518dd541a1eb4396057e9292f4178/runsc/config/flags.go#L158).
+
+    Put the in-memory fakes and shared observation contracts in port/porttest. Run each contract
+    against its fake and its concrete adapter. In native's TestLandlockABIProbe, supply controlled
+    syscall results and check the version-query arguments, both absence errnos, EPERM and an
+    invalid ABI.
+
+    In docker's TestRunscRegistration, send /info fixtures through the pinned SDK decoder.
+    Keep runc registered and set DefaultRuntime to runc while varying the Runtimes.runsc entry.
+    In path_registration, {"path":"runsc"} and {"path":"/usr/local/bin/runsc"} each confirm
+    gVisor. Repeat the absolute-path control with runtimeArgs [] and ["--host-uds=none"].
+    Change only runtimeArgs on that control for two refusal cases. In socket_permitting_args,
+    use ["--host-uds=open"]. In unknown_args, try ["--unknown-fixture-flag"] alone and then
+    with "--host-uds=none" prepended. Each must return a typed inspection failure with no selection.
+    In shim_only_registration, send {} for the runsc entry, as Moby does for the shim-only
+    registration with no reported status. In contradictory_path, send {"path":"/usr/bin/runc"}.
+    Require the same typed failure with no selection for both registrations.
+    Also require that failure for synthetic entries reporting runtimeType io.containerd.runsc.v1
+    or io.containerd.runc.v2 alone, or a runsc path paired with the foreign shim. A lookalike
+    key carrying a valid runsc path and an empty inventory each report absence. Cover omitted
+    and null inventories, invalid response data and a cancelled read.
+    Have the fixture reject unexpected requests. These tests run independently of the machine's
+    ABI and runtimes.
+
+    In the domain's TestBackendSelection, assert the result and which probes ran. Cover ABI 8,
+    ABI 9 and a newer ABI, both backends present, each alone, and neither. An ABI probe failure
+    stops selection even with runsc registered. A failed runtime lookup also leaves no selection.
+    Include an unsupported platform and a pre-cancelled call with neither probe touched. Change
+    the observations between calls and require the new result even after an earlier success.
+
+    The check runs every checkoutsockets package once and requires Go to report a pass for
+    each named test and all five named Docker subtests in their own packages. It currently
+    exits 1 because internal/engine/checkoutsockets does not exist. A buildable package with
+    no tests produces no matching pass events. First commit the tests and minimal compiling
+    stubs with test --item T-64. Record the failing selection and syscall assertions. A Docker
+    stub that accepts the runsc name alone must fail the typed-failure assertions in both
+    shim_only_registration and contradictory_path. Selecting gVisor from its path alone must
+    pass path_registration and fail the typed-failure assertions in
+    socket_permitting_args and unknown_args. Implement with chore --task T-64 and run the
+    same tests to green.
+    Slice-42 owns doctor reporting, slice-43 approval and slice-44 run admission.
+    Slice-45 reports the frozen selection. ID-SOCKETS-01 covers the startup scan.
+    T-65 owns the worker init. Runtime proof for ID-SOCKETS-02/03 belongs to slice-46 on the
+    person's Landlock host and slice-47 under gVisor in hosted CI.
+- id: T-65
+  type: chore
+  title: Build the trusted Landlock worker init
+  why: >
+    The init must apply the pathname-socket restriction before executing the literal workload argv.
+    Test argument preservation and verify that a failed restriction prevents workload execution.
+    Broken down from p1-checkout-socket-kernel-enforcement.
+
+    Charter milestone two, step 5 asks for Landlock ABI 9 or later, applied by a small read-only
+    init binary that itos-container mounts as the worker's entrypoint and that runs before the
+    literal argv. The controller cannot restrict a worker the daemon spawns
+    (docs/plans/checkout-socket-enforcement.md), so a trusted process inside the worker must
+    restrict itself before any workload instruction runs. This task builds that binary and its
+    slice, and nothing that uses them. Mounting it, making it the entrypoint, getting it onto the
+    host or into a release, attaching exec, and the ID-SOCKETS-02 and 03 evidence with its
+    weakened-gates record belong to slice-46. Backend detection, doctor, approval, admission and
+    status belong to T-64 and slice-42 to slice-45. The init imports nothing from T-64's
+    checkoutsockets engine. It makes its own fail-closed check at the moment of enforcement and
+    trusts no host-side detection, so T-65 keeps its empty depends_on. No public behaviour changes
+    until slice-46 wires the init, so this is a task with checks and no Gherkin scenario or ID.
+
+    Layout follows docs/architecture.md, "Slices". cmd/itos-container-init/main.go calls
+    runtime.LockOSThread first, binds the two adapters, passes os.Args[1:] and os.Stderr to the
+    handler and exits with the code it returns. It does nothing else. The slice is
+    internal/slices/workerinit, with command, domain, port, port/porttest, landlock (adapter) and
+    process (adapter). It is not called init because arc42 keeps internal/slices/init for the
+    deferred example-generation command. It uses no kong, no internal/cli, no flag, help or version
+    output. The existing classifier already covers a second main under cmd and a new slice, so
+    neither .golangci.yml nor tools/architecture changes.
+
+    The init is invoked as `itos-container-init -- <argv...>`. The first argument must be exactly
+    `--` and at least one more must follow. Anything else is a usage refusal before any port is
+    called: no argument, `--` alone, any argument before `--`, `-h`, `--help` or `--version`.
+    Everything after that first `--` is the workload argv and is never interpreted, a later `--`
+    included. The domain then does these steps in order, each at most once and never retried.
+    First it reads the ABI with landlock_create_ruleset(NULL, 0, LANDLOCK_CREATE_RULESET_VERSION).
+    ENOSYS, EOPNOTSUPP or an ABI below 9 is landlock-unavailable, and any other error is
+    landlock-failed. Next it creates a ruleset whose handled_access_fs is exactly
+    LANDLOCK_ACCESS_FS_RESOLVE_UNIX, with handled_access_net and scoped zero and no rule added.
+    So the workload cannot connect, or sendmsg with an explicit address, to a pathname socket
+    created outside its domain, wherever that socket lies. Sockets the workload or its descendants
+    create stay reachable, which keeps worker-private IPC, and file access is unchanged. Then it
+    calls prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0), calls landlock_restrict_self(fd, 0) and closes
+    the ruleset descriptor. The prctl call never receives the descriptor; only restrict and close
+    do. The landlock adapter's Restrict does exactly this sequence, each raw call once:
+    create, set no_new_privs, restrict, close. A create failure stops with no further call. A
+    no_new_privs or restrict failure closes the descriptor and stops, and a close error during
+    that cleanup does not replace the first failure: Restrict returns the no_new_privs or
+    restrict error, not the close error. A close failure after a successful restrict is also a
+    failure, and Restrict returns that close error. Every failure is landlock-failed. The sequence and its cleanup live in an
+    untagged adapter file over an unexported set of raw-call functions, and the `_linux.go` file
+    only supplies the real ones. There is no best-effort mode: a
+    kernel below ABI 9 never gets a weaker ruleset. Scopes (abstract sockets, signals) and other
+    file rights are left out on purpose. They are protections the charter has not decided, and a
+    handled file right without rules would block checkout edits. Last come lookup and exec, two
+    process-port operations. Lookup ends before any execve. An argv[0] that contains a slash is
+    returned unchanged without touching the filesystem. Otherwise it is looked up in the inherited
+    PATH as os/exec.LookPath does. The resolved path must be absolute. A relative result is not
+    found, whether or not LookPath reports exec.ErrDot, since GODEBUG=execerrdot=0 suppresses that
+    error. Lookup returns the path or port.ErrNotFound. Exec is one execve of that path. ENOENT
+    from execve returns port.ErrNotFound, and any other error returns as itself.
+    execve gets the resolved path, the argv exactly as received with argv[0]
+    still literal, and the environment exactly as received. The init never forks: it replaces
+    itself, so the workload keeps its PID (PID 1 in the worker), signals, wait and exit status,
+    which slice-10 to slice-17 rely on. Apart from PATH for the lookup, the init reads no file,
+    variable or configuration. No flag, variable or file can skip or weaken the restriction, and on
+    success it prints nothing.
+
+    Each refusal writes exactly one line to stderr, `itos-container-init: <code>`, with nothing
+    from argv, the environment or errno text. Usage, landlock-unavailable and landlock-failed exit
+    125, not-found exits 127 and exec-failed exits 126, following Docker's own codes for its
+    errors, a command it cannot invoke and a command not found. Any Lookup error is not-found, and
+    so is an Exec that returns port.ErrNotFound. An Exec that returns any other error, or returns
+    nil, is exec-failed. So a missing bare name and a missing slash path exit 127, and a
+    non-executable explicit path exits 126. A workload can exit with the same codes, and telling
+    an init refusal from a workload exit is slice-46's concern.
+
+    A Landlock domain and no_new_privs belong to one thread, and only the thread that calls execve
+    hands its credentials to the workload. So the handler reads the ABI, restricts, looks up and execs
+    synchronously on main's locked thread, and starts no goroutine. AllThreadsSyscall is rejected:
+    it returns ENOTSUP when cgo is enabled, as go test may build. golang.org/x/sys moves from
+    v0.48.0 to v0.49.0, the first release with unix.LANDLOCK_ACCESS_FS_RESOLVE_UNIX (0x10000, the
+    kernel header's 1ULL << 16 for ABI 9). That module already supplies LandlockRulesetAttr,
+    SYS_LANDLOCK_* and Prctl, and has no Landlock helpers, so the three calls are ours and no
+    constant is copied. v0.49.0 is in the local module cache with h1:XbzkgYJHdqh/8m2Uu0W/dQv8nktxx4BFHp1M0gROTXA=,
+    so `go get golang.org/x/sys@v0.49.0` resolves with GOPROXY=off and adds no module. go.mod and
+    go.sum are enforcement inputs, so that commit runs the compile-first fixtures.
+    github.com/landlock-lsm/go-landlock is rejected. It is not in the module cache, this
+    workspace's allowed hosts cannot fetch it, its ABI 9 support is unverified, and it restricts
+    through AllThreadsSyscall. No other dependency is added.
+
+    The init runs only on Linux. The command and slice still build for every inherited target
+    (linux, darwin, windows), and there the init refuses with landlock-unavailable. x/sys/unix and
+    the raw calls live only in thin `_linux.go` files with no mutation site. In `_other.go` files
+    every method of both adapters (ABI, Restrict, Lookup and Exec) returns port.ErrUnavailable,
+    since Go's syscall.Exec cannot replace a process on Windows. Ordering and errno
+    classification stay in untagged files, using syscall errno values, and nothing branches on runtime.GOOS. Built with CGO_ENABLED=0, the init
+    is a static ELF, so slice-46 can mount it in any approved image. Lines that need gosec
+    exceptions (unsafe pointers for the raw calls, and exec) take a targeted //nolint:gosec with
+    the reason, on those lines alone.
+
+    These named tests must run and pass, with none skipped. TestStartRestrictsBeforeExec (domain,
+    porttest fakes) covers the order ABI, restrict, lookup, exec on success and each failure row.
+    Its rows are unavailable, ABI 8, an ABI read error and a restrict error, none of which calls
+    Lookup or Exec. A Lookup error gives not-found and no Exec. Exec returning port.ErrNotFound
+    gives not-found, and Exec returning another error or nil gives exec-failed. Exec receives the
+    path Lookup returned, argv equal to the input and as an independent copy, and each port method
+    is called at most once. TestCommandRefusals (command)
+    checks that each usage case calls no port, that each failure gives its one line and exit code,
+    that a nil Exec return is exec-failed, and that stderr holds nothing from argv.
+    TestLandlockContract runs the shared contract against the fake and against the real adapter.
+    It also drives the adapter's Restrict over recording raw-call fakes, on every OS. The success
+    row sees create, set no_new_privs, restrict and close in that order, once each. Create gets
+    an attribute with handled_access_fs exactly RESOLVE_UNIX and net and scoped zero, with flags
+    zero. Set gets option PR_SET_NO_NEW_PRIVS with arguments exactly 1, 0, 0, 0. Restrict gets
+    the created descriptor and flags zero, and close gets the created descriptor. Each failing
+    raw call in the fake returns its own distinct sentinel error. The failure rows are create (no
+    later call), no_new_privs (then close), restrict (then close), no_new_privs and restrict each
+    with a cleanup close that also fails, and close after a successful restrict. Each makes no
+    call beyond those named. errors.Is shows what Restrict returns: the create, no_new_privs or
+    restrict sentinel in its rows, that same first sentinel and not the close sentinel when
+    cleanup also fails, and the close sentinel when only the close after a successful restrict
+    fails.
+    The real adapter runs only in a child re-exec of the test binary, which forwards
+    -test.gocoverdir as internal/engine/terminal/native/terminal_linux_test.go does and returns
+    normally. The test process itself is never restricted. The child's test goroutine calls
+    runtime.LockOSThread before its first Landlock call and never unlocks. It does its ABI
+    measurement, Restrict and every socket probe on that goroutine and starts no other for them,
+    since a Landlock domain belongs to one thread. The child compares the adapter's ABI
+    with its own independent measurement. On ABI 9 or later, after Restrict, a stream connect and a
+    datagram sendto to sockets the child made before Restrict fail with EACCES, while a stream
+    socket made after Restrict accepts a connection into its listen backlog. Also after Restrict,
+    and before any exec, no entry in /proc/self/fd links to anon_inode:[landlock-ruleset], the
+    exact readlink target Linux gives a ruleset descriptor. Before relying on that absence, the
+    same probe function must report a ruleset descriptor the child deliberately opened with its
+    own raw create and still holds, and the child closes that descriptor before calling Restrict.
+    On ABI 1
+    to 8 Restrict returns an error.
+    Where Landlock is unavailable both calls return ErrUnavailable.
+
+    TestExecPreservesArgvAndEnv makes its replacement and byte-preservation assertions on Linux.
+    There it runs the real process adapter in a child re-exec. Its target is
+    the test binary in a helper mode that reports os.Args and os.Environ. The argv rows are an
+    empty element, spaces, a tab, a newline, a leading `-`, a second `--`, `--help`, a non-UTF-8
+    byte, a bare argv[0] found through PATH and seen literally, and a path with a slash. The
+    environment must come through exactly, including a value holding `=` and an empty value. The
+    failures return in the child, since a failed execve replaces nothing. A bare name not on PATH
+    gives Lookup port.ErrNotFound. A bare name present only in a relative PATH entry gives Lookup
+    port.ErrNotFound both by default and in a child started with GODEBUG=execerrdot=0. A missing
+    slash path is returned unchanged by Lookup, and Exec then gives port.ErrNotFound. A
+    non-executable explicit path makes Exec return an error other than port.ErrNotFound. Off Linux
+    the same test asserts that Lookup and Exec both return port.ErrUnavailable, with no child.
+
+    TestInitBinary (cmd) builds the init with CGO_ENABLED=0 and -trimpath, adding -cover and
+    GOCOVERDIR when -test.gocoverdir is set so refusal runs keep main's counters. For a Linux
+    build, debug/elf must find no PT_INTERP and no DT_NEEDED. The test measures the ABI with its
+    own raw call in a test-only tagged file. It logs `workerinit kernel branch: landlock ABI <n>,
+    enforcement` or `..., refusal`, where n is 0 when Landlock is unavailable. On every host,
+    usage invocations exit 125 with the usage line and leave the workload's marker absent. In the
+    refusal branch (ABI below 9, unavailable, or not Linux) a valid invocation exits 125 with
+    landlock-unavailable and leaves the marker absent. The enforcement branch checks these points.
+    Argv and environment come through end to end, bare argv[0] included. The workload, and a child
+    it starts, get EACCES on a stream connect and a datagram sendto to sockets the test process
+    made, while the workload's own socket works. /proc/self/status shows NoNewPrivs 1, and no
+    descriptor links to anon_inode:[landlock-ruleset]. That probe takes the same positive control
+    as TestLandlockContract's: the workload first opens a ruleset descriptor with its own raw
+    create, sees the probe report it, and closes it before the absence check. The
+    layer-exhaustion row launches the init
+    from a helper mode of the test binary. The helper calls runtime.LockOSThread first and holds
+    it through exec. It sets no_new_privs and restricts itself again and again with the init's own
+    ruleset until landlock_restrict_self reports E2BIG, the kernel's layer limit. That fills
+    whatever slots remain, so layers the helper inherited do not matter. Any other error, or 17
+    calls without E2BIG, fails setup. Then the helper execs the init from the same thread, and the
+    init's restriction fails: exit 125, landlock-failed, marker absent. A missing bare name exits
+    127 not-found. So does a bare name present only in a relative PATH entry, by default and with
+    GODEBUG=execerrdot=0 in the init's environment. A missing slash path exits 127 not-found, and
+    a non-executable explicit path exits 126 exec-failed.
+
+    The tests need no engine, network, model, account or credential. They use private temporary
+    directories and bounded waits. The branch follows the measured kernel, never a runner label.
+    In CI the runner's ABI picks the branch. The person's ABI 9+ host and this workspace take the
+    enforcement branch (the drafter measured ABI 10 here on 2026-11-19). The implementer reports
+    which branch ran where. The ledger check accepts the refusal branch so that ordinary hosted
+    CI below ABI 9 stays green, and a refusal-only run proves no enforcement. So T-65 is accepted
+    only with one run of this ledger command on the person's ABI 9+ host. That run must log
+    `workerinit kernel branch: landlock ABI <n>, enforcement` with n at least 9 and pass
+    TestLandlockContract and TestInitBinary. The implementer makes that run in its workspace on
+    that host and reports those three lines. It needs neither Docker nor slice-46's scenarios.
+    Before the work the check fails at package discovery, which is
+    evidence of absence, not a failing assertion. The implementer therefore first makes a test
+    commit with the tests and minimal compiling stubs, records each named test's assertion
+    failure, then implements until the same tests pass.
+
+    Commits, each decided before editing: a chore moving x/sys (go.mod, go.sum); the test commit;
+    the chore implementation under cmd/itos-container-init and internal/slices/workerinit; and a
+    docs commit adding one arc42 building-block row for both, "T-65; bound to run by slice-46".
+    The implementer may commit freely in its workspace, and the host makes the landing commits.
+    Leave sibling ledger entries, the registry, features/, workflows and other slices unchanged.
+    Make no local mutation run and commit no coverage or mutation output; CI judges the
+    changed-code proof.
+- id: T-66
+  type: test
+  title: A feature-harness fixture chooses the kernel's Landlock answer and the daemon's runtime list for socket-backend scenarios
+  why: >
+    Charter milestone two, step 5 (late host sockets unreachable) needs doctor, approve and run
+    scenarios (slice-42, slice-43, slice-44) that choose the backend the host offers. The product
+    asks the kernel itself: T-64's native probe issues landlock_create_ruleset(NULL, 0,
+    LANDLOCK_CREATE_RULESET_VERSION) through golang.org/x/sys. cmd's probe assembly gets no
+    Landlock seam or default, so nothing can shadow slice-46's real-kernel proof on the person's
+    host (triage on slice-42, 2026-11-19). The harness therefore answers at the system call. That
+    fixture exists today only in the slices' uncommitted drafts, which already differ, and
+    whichever slice landed first would build it. This task builds it once under features/. It
+    needs no scenario and no scenario ID, so it can land while minting is blocked. Nothing under
+    cmd/ or internal/ changes.
+
+    A world that pins an answer starts each later product invocation, on every route that applies
+    the wrapper described below, through a helper mode of the features test binary, as
+    TestApprovalKernelHelper does for fchmodat2. The helper locks its thread, sets no_new_privs and
+    installs a seccomp filter with SECCOMP_FILTER_FLAG_NEW_LISTENER. The filter's only action other
+    than allow is SECCOMP_RET_USER_NOTIF for landlock_create_ruleset under AUDIT_ARCH_X86_64. The
+    helper hands the listener to the harness over a descriptor of its own and execs the program in
+    the same process. The program keeps the pid the route started, its path, argv (argv[0]
+    included), environment, working directory, standard streams, umask unless the route asks for
+    one, blocked and ignored signals, resource limits and the route's own extra descriptors at their
+    numbers. Exec from a Go program resets an inherited ignored signal that Go handles, such as
+    SIGPIPE, to its default. go test starts the harness with no such signal ignored, and the harness
+    ignores none, so a helper keeps the same sets. Go's syscall.Exec, which unix.Exec calls,
+    restores the soft RLIMIT_NOFILE that Go raises at start. No row compares limits, since a Go
+    probe sees only the raised one. None of the helper's descriptors reaches the program. It runs
+    with no_new_privs, which an unprivileged filter requires. The helper never runs the program
+    unfiltered. A filter the kernel refuses, or a program the helper cannot execute, is the
+    invocation step's error, never an exit status that a product assertion reads. The helper reports
+    either failure on its own descriptor, which closes when its exec succeeds.
+
+    The harness supervises an invocation until its route ends the wrapper after Wait, never on a
+    timer. Ending it closes the listener once each call already received is answered and recorded,
+    so a record read after the route returns is complete. A process that outlives the started one,
+    such as a descendant, then gets ENOSYS for a later query, as the kernel answers a filter whose
+    listener is gone, and the product would read that as Landlock absent. Doctor and approve leave
+    no such process. Before a route that can leave one adopts the wrapper, its slice extends
+    supervision until the listener reports POLLHUP, which the kernel sends once every process under
+    the filter has exited and been reaped. The harness answers the version query, whose arguments
+    are NULL, 0 and LANDLOCK_CREATE_RULESET_VERSION, from the world's answer as it stands when the
+    query arrives. "ABI <n>" returns n, a decimal from 0 to 2147483647 written with no sign or
+    leading zeros, since the kernel's reply is a C int. "ENOSYS", "EOPNOTSUPP" or "EPERM" fails with
+    that errno. Any other landlock_create_ruleset call fails with EPERM, and pinning any other text
+    is refused. Pinning is safe while invocations run. A step may arrange one action to run when the
+    next version query arrives, before its answer is read, as slice-43's drafted daemon takeover
+    needs. An action's error fails the invocation's step, and the query still gets the world's
+    answer as it then stands. The harness records each supervised invocation's calls in order. Each
+    call records whether it was the version query and the answer delivered, so a step can tell
+    exactly one version query from none and from other calls. A call counts once its answer is
+    delivered. If SECCOMP_IOCTL_NOTIF_SEND fails with ENOENT, either a signal interrupted the call,
+    which Go's restarting handlers turn into a new notification, or the program ended. Any other
+    notification or failed answer is a fixture error that fails the step. x/sys v0.48.0 has the
+    constants and ioctl numbers but not the seccomp_notif and seccomp_notif_resp types, so the
+    harness declares those layouts. No library is added: libseccomp-golang needs cgo and
+    libseccomp's headers, and the filter is a few BPF instructions.
+
+    One wrapper serves every route: a route applies it to the exec.Cmd it builds before Start and
+    ends it after Wait. The wrapper takes an optional umask, which the helper sets after its filter
+    and just before its exec, as TestApprovalKernelHelper does, so no other program runs between the
+    helper and the program. This task applies the wrapper in runEnv, so that it covers runDoctor,
+    which doctor and the fingerprint approval use. Where the approval location is set in a world
+    that pins an answer, runEnv passes umask 0000 to the wrapper and starts no /bin/sh. A program
+    that cannot be executed is then the helper's failure, never sh's exit 126 or 127. Approve's
+    terminal processes, run's preflight process and the other routes that start the product
+    themselves adopt the wrapper in the slice that first pins an answer for them. A world that pins
+    nothing starts its product directly, as today, through runEnv's /bin/sh umask wrapper where the
+    approval location is set. The harness has no default answer, so every existing scenario and
+    slice-46's proof see the host's kernel. Scenario cleanup ends any supervision still running,
+    closing its listener as a route's end does. A helper or probe invocation leaves no
+    itos-container-feature-binaries-* directory. TestMain makes one before m.Run, and neither an
+    exec'ing helper nor a probe that exits at once returns to remove it, so TestMain recognizes both
+    modes from their arguments and runs them before it makes the directory. The slice-4 helper's own
+    leak stays with p2-kernel-helper-leaves-no-feature-temp-dir.
+
+    newDoctorAPI's /info gains DefaultRuntime runc and, by default, the inventory "runc only".
+    Once doctor detects, every ordinary doctor world on CI, below ABI 9, then confirms none rather
+    than failing its fallback. A world names the selected fixture daemon's inventory, which each
+    later request reads afresh. "runc only" is Runtimes {"runc":{"path":"runc"}}. "runc and runsc"
+    adds "runsc":{"path":"/usr/local/bin/runsc"}. "runsc permitting host sockets" gives that runsc
+    "runtimeArgs":["--host-uds=open"]. "unidentified runsc" adds "runsc":{}, as Moby reports a shim
+    registration. "missing inventory" omits Runtimes. Each keeps DefaultRuntime runc, and an
+    unknown name is refused. These are the shapes T-64's docker tests judge. No command reads
+    Runtimes yet, so the default changes no live scenario.
+
+    Product output is not this task's. The checkout_sockets member, the plain backend line and the
+    doctor.sockets.* rules with their exits are slice-42's scenarios to specify, and slice-43 and
+    slice-44 reuse them. The fixture asserts none of them; doctorProblem already requires the flat
+    field subject such a rule carries. The step texts stay with the slices, as do the ITOS_ROOT and
+    working-directory arrangement, a second socket for one daemon and the approval worlds' own
+    default inventory. The slices' steps pass the answers and inventory names above through
+    unchanged.
+
+    TestSocketBackendFixture holds the fixture. On Linux amd64 it never skips, so a host that
+    refuses the filter fails it. Elsewhere it skips, and the package still builds for the manual
+    macOS and Windows jobs. Its programs are a probe the features binary carries, which makes the
+    calls a row asks for. The probe reports each reply, its argv, working directory, environment,
+    standard input, pid, descriptors and umask. It also reports the SigBlk, SigIgn, NoNewPrivs and
+    Seccomp_filters lines of /proc/thread-self/status, read on a locked thread, since a blocked set
+    is per thread. Each row that runs a program in a pinned world also requires the harness's record
+    of that invocation, so none passes against an unsupervised start. Go reports a space in a row's
+    name as an underscore.
+
+    kernel_answer/<answer> runs for ABI 9, ABI 8, ABI 0, ENOSYS, EOPNOTSUPP and EPERM. Through
+    runEnv, one version query receives exactly that reply, n with no errno or -1 with the errno, and
+    the invocation's record holds that one call. The rows share one world and re-pin before each
+    invocation, so each record holds only its own call. In unpinned, a world that pins nothing runs
+    the probe through runEnv. Its version query gets the same reply as one the test process makes
+    itself, its NoNewPrivs and Seccomp_filters equal the test process's own, and the harness holds
+    no record of the invocation. In umask_composed, a world whose approval location is set, as the
+    child state location step sets it, pins ABI 8. Through runEnv the probe reports umask 0000, its
+    version query receives 8, and the record holds that call. A program that cannot be executed
+    fails its step in that world too. In other_call_refused, a call with flags 0 gets EPERM and is
+    recorded as not the version query. A version query in the same invocation still gets the pinned
+    answer. In arrival_action, ABI 8 is pinned, and an action arranged for the next arrival re-pins
+    ABI 9. Both version queries of one invocation receive 9, and the action runs once. In a second
+    invocation, an arranged action that returns an error fails the step with that error, and its
+    query still receives 9. In no_query, a program exits 7 at once without a call. The step reports
+    exit 7 and a supervised invocation with no call, and it returns within two seconds. In
+    exec_unchanged, one program with one extra descriptor at 3 is started wrapped and unwrapped.
+    Both report the same argv, working directory, environment, standard input, umask, SigBlk,
+    SigIgn, and descriptor numbers and kinds. Each reports the pid of its started process, and both
+    pass their standard output and error through. Only the wrapped query reaches the harness. In
+    no_feature_binaries_left, TMPDIR names a private empty directory. A supervised version query
+    gets its answer, a supervised probe exits 7 at once, and that directory then holds no
+    itos-container-feature-binaries-* entry. In cleanup_ends_supervision, the row starts a wrapped
+    probe, as a route would, and never ends the wrapper. The probe reports the pinned answer to its
+    first version query, then waits for its standard input to close. Scenario cleanup runs, and the
+    record then holds that call alone. Released, the probe's second query fails with ENOSYS within
+    two seconds, as the kernel answers a filter whose listener is gone, and the record is unchanged.
+    In helper_failure, a helper whose filter the kernel refuses fails its step, naming the fixture,
+    and its program never runs. Starting the helper inside another supervised invocation causes
+    that, because the kernel refuses a second listener with EBUSY. A program that cannot be executed
+    fails the step too. In refused_answers, pinning ABI -1, ABI +9, ABI 09, ABI 2147483648, ABI x,
+    abi 9, ABI 9 with a trailing space, EINVAL or empty text fails. On one fixture daemon that
+    newDoctorAPI makes, runtimes/default reads GET /v1.56/info before any choice. Then
+    runtimes/runc_only, runc_and_runsc, runsc_permitting_host_sockets, unidentified_runsc and
+    missing_inventory each choose that inventory and read again. Each read decodes to exactly the
+    Runtimes above, or none, and DefaultRuntime runc. runtimes/refused_inventory refuses an unknown
+    name.
+
+    The check runs that test once with -json and requires a pass event for it and for each of its
+    twenty-three named rows, so a skipped, renamed or missing row fails it. Today it exits 5, since
+    go test finds no test to run and jq names all twenty-four missing passes. First commit the
+    regression in a test commit with --task T-66, beside stubs that compile, start every program
+    unsupervised, record nothing and accept every choice. Each row that runs a program in a pinned
+    world then fails at its record, the refusal rows at their refusals and the runtimes rows at
+    their /info reads. Only unpinned passes against the stubs, as it must, since they keep the
+    property it guards: a direct start that sees the host's kernel. It is there because nothing in
+    the product asks the kernel yet, so the ordinary suite would not notice a fixture that wraps or
+    answers when nothing is pinned. Build the fixture in a second test commit and run the same check
+    green. Since runEnv and newDoctorAPI change for every world, also run the ordinary feature suite
+    once, without -race. Use -race only on this test, selected with -run. features/README.md
+    describes the fixture beside the older-kernel approval fixture. It also says that a host whose
+    processes already sit under a live seccomp listener, as in a sandbox that supervises by user
+    notification, refuses the filter with EBUSY, so the test fails there.
+- id: T-67
+  type: ci
+  title: Cursor Bugbot satisfies the review gate
+  why: >
+    Codex is out of code-review usage (about 2026-11-23), and itos push --ready waits on every
+    login in push.pr.review_by. The person approved Cursor Bugbot as the second reviewer.
+    Settled decisions: review_by is [cursor] alone, because itos waits on every login listed and a
+    list with Codex would still block on Codex. The login is cursor, not cursor[bot]: itos drops a
+    [bot] suffix on both sides and GraphQL names the bot without it (PR 75's review came from
+    cursor[bot]). Codex stays in push.pr.reviewers as kind codex, so it is still asked, and cursor
+    is added there as kind bugbot. Codex's review threads must still be resolved before merge.
+    itos reads the itos.yaml of the checkout it runs from, so this item's own pull request is
+    judged by the new rule. The change is to itos.yaml alone, committed as ci with Task T-67, and
+    it also updates the comment above push.pr to name Bugbot. The check reads the effective config
+    and fails today because review_by is [chatgpt-codex-connector] and no reviewer has kind bugbot.
+- id: T-68
+  type: test
+  title: ID-RUNTTY-22 closes the client terminal only after launch is complete
+  why: >
+    ID-RUNTTY-22 (features/run_terminal.feature, "A late hangup signal cannot kill the controller
+    during owned teardown") fails now and then in CI with exit 75 where it expects exit 17. It
+    blocked slice-37 and T-64's coverage run and has failed on other heads (runs 44476995073 and
+    44554398342). It passes alone in about four seconds, so it fails only under CI load. Charter
+    step 5 proof waits on it.
+
+    Cause: the fixture is wrong and the product is right. The step "the fixture closes the client
+    master and delivers SIGHUP after owned teardown has begun"
+    (features/run_terminal_local_linux_test.go) closes the client master as soon as the fake
+    engine's `ready` channel closes (features/run_terminal_engine_test.go). `ready` closes when the
+    fake writes its output frame, which runs beside the /start reply, so it does not show that
+    launch is finished. Under load the master closes while the controller is still inside launch
+    (Start, anchor detection, the post-start record). A hangup before the workload's exit is
+    observed cannot give 17: the controller reports the disconnect with exit 75 and "owned run
+    could not be completed" (run 44554398342), or its worker-inspect fails and it reports
+    run.execution-unavailable and run.mount-refused (run 44476995073). Both are the right product
+    answers for a disconnect during launch (see the RUNTTY-14 row "unknown, 75"). The scenario
+    means a disconnect during teardown, after launch.
+
+    Settled fix: harness only, no product change and no scenario text change.
+    1. The fake engine gets a `startDelay` knob. It holds the reply to POST /start, not the output
+    frame, for the given time. The hold selects on time.After(startDelay) or the request's
+    r.Context().Done(), with the recorder lock released while it waits, as the existing "start
+    accepted but its reply times out" fault does. The RUNTTY-22 step sets it to one second. That
+    forces the bad interleaving every time: output is ready while the controller is still in
+    Start.
+    2. invoke's harness guard (features/run_terminal_linux_test.go, the 5 s `guard`) grows by
+    exactly the step's startDelay and by nothing else. This is settled and is not a loosening of
+    a gate: it is bookkeeping for a delay the fixture itself injects, and no product bound, no
+    scenario assertion and no other scenario's guard changes.
+    3. The step closes the client master only once `launchObserved(requests, pid, id)` is true. It
+    must not close on `ready` alone. The function takes the recorder's journal ([]doctorRequest),
+    the controller's PID and the container ID, and is true when some request has that PID, method
+    POST and a path that ends in "/containers/<id>/wait", matched as a suffix as the existing
+    /kill gate matches. A query string is not part of the path and does not matter; a version
+    prefix such as /v1.56 does not matter. The controller waits only after launch, and the journal
+    shows that request for any controller, so no new product signal is needed. The step reads the
+    worker's ID from the fake's record (the single key of a.started, read under a.mu), and fails
+    the step if there is not exactly one. It never matches a /wait for any other ID. The journal's
+    create request carries no id; a.started[id] is set at features/run_terminal_engine_test.go:73
+    before the hold.
+    4. The existing second gate (SIGHUP only after the owned /kill request, with killDelay 2s) is
+    unchanged.
+    The scenario must still report run.terminal-disconnected, exit 17, an attempted terminal
+    restoration and finished owned cleanup. Nothing may be loosened.
+
+    TestLaunchObserved (features/, no engine) has these rows, named by t.Run with underscores for
+    spaces, and the first check requires a pass event for each:
+    - accepts_wait_from_pid: POST /v1.56/containers/<id>/wait from the pid is accepted.
+    - rejects_wait_from_other_pid: the same request from another PID is rejected.
+    - rejects_other_method: GET, and any method but POST, on /wait is rejected.
+    - rejects_other_requests: a journal holding only /start, /json, /attach or /kill, from the
+    pid, is rejected.
+    - rejects_empty_journal: an empty journal is rejected.
+    - accepts_query_string: POST /containers/<id>/wait?condition=not-running from the pid is
+    accepted.
+    - rejects_other_container: a /wait for a different container ID from the pid is rejected.
+
+    Red first, two commits, both with --item T-68.
+    Commit 1 (test): the startDelay knob, its use and the guard extension in the step, a stub
+    `launchObserved` (its unused parameters named _ so revive passes) that compiles and returns false
+    for every input but is not called by the step,
+    and TestLaunchObserved with its rows. At this commit the step still closes on `ready`. The
+    implementer then runs and reports both red outputs. First, check 1: the accepts_ rows fail at
+    their assertions and the rejects_ rows pass against the constant false, so go test fails and the
+    check prints its report and exits 1. Second, the scenario check: RUNTTY-22 fails at "terminal
+    run reports run.terminal-disconnected and returns the workload exit 17" with exit 75, since
+    the master closes on `ready` while /start is held. The sandbox runs RUNTTY-22 (it passed in 4 s
+    on 2026-11-20 without the knob), so both are shown locally.
+    Commit 2 (test): implement `launchObserved` and wire it into the step in place of the `ready`
+    wait. Then both checks pass.
+
+    Check 2 is written in the form CI reads back as a selection (itos.yaml
+    tests.scenario.recognize, as: pattern), so CI runs it in its one run. Its pattern is single
+    quoted because it holds `$` and parentheses, which itos's reading accepts only in single quotes
+    (internal/tests/recognize.go in itos: a pattern word is double-quoted without `$`, single-quoted,
+    or bare without quotes, `$` or backslash). Today check 2 passes without the knob; the red
+    commit stands in for its red.
+- id: T-69
+  type: ci
+  title: The engine shards' 180-second step budget warns; only a 600-second hang guard fails
+  why: >
+    The person's standing rule: caps are soft and warn; only a hang guard stops. Today the Engine
+    scenarios step in .github/workflows/ci.yml (engine_finish, the line `if (( elapsed > 180000 &&
+    result == 0 )); then result=1; fi`) fails an engine shard whose run otherwise passed when it took
+    more than 180 seconds. That budget is decision 0024 (T-45), restated in docs/architecture/arc42.md,
+    features/README.md and decision 0028's egress note. A slow runner turns a green run red, and the
+    answer has been to chase the clock, which the rule says not to do. This is foundation CI work
+    under docs/charter.md: no container behaviour, so no scenarios or step definitions. Its checks
+    are tests of the wrapper and greps of the docs.
+
+
+    Settled by the chief for the person, who may override on the pull request.
+    1. The line `engine step timing: duration_ms=<ms> outcome=<passed|failed>` stays and prints on
+    every run.
+    2. Annotations depend only on elapsed time and print for any outcome, a failed run and a run at
+    601 s included. Above 180000 ms (`(( elapsed > 180000 ))`) the wrapper prints
+    `::warning::Engine shard <shard> took <ms> ms, over the 180000 ms soft budget`. Above 600000 ms
+    (`(( elapsed > 600000 ))`) it also prints `::error::Engine shard <shard> took <ms> ms, over the
+    600000 ms hang guard`; so a run at 601 s prints both. At 180000 ms or below nothing but the
+    timing line is printed. With unreadable timing (elapsed=unknown) no annotation is printed.
+    3. Only the status change depends on the result: a run that otherwise passed and took more than
+    600000 ms fails, with `(( elapsed > 600000 && result == 0 )); then result=1`. Exactly 600000 ms
+    passes. A run that failed for another reason keeps its own exit status, never replaced by timing.
+    A passing run above 180000 ms and up to 600000 ms exits 0. Missing, invalid or backwards uptime
+    still fails a passing run, as today. This is the only time-based failure.
+    4. The shard name is read as `${ITOS_CONTAINER_ENGINE_SHARD:-unknown}`, so `set -u` never trips on
+    it and the existing harnesses (TestEngineDiagnostics, TestEngineSuiteBudget) need not set it. The
+    step gains the env `ITOS_CONTAINER_ENGINE_SHARD: ${{ matrix.shard }}`.
+    5. No watchdog. The guard runs only when the step ends (the EXIT trap), so it is not a timer. A
+    real hang is stopped by Go's `-test.timeout=10m`, counted from the test program's start, at about
+    606 s with the compile time added; that run fails with Go's `running tests:` panic and keeps its
+    own status, and the 600 s guard does not fire for it. The guard therefore fails only a passing run
+    that ended past 600 s, in practice (600, 606] s. The amendment and features/README.md say exactly
+    that, and never say that the 600 s guard is what fires on a hang.
+    6. Limits move so the Go timeout stays the outer stop for a hang: `-test.timeout=10m`, the Engine
+    scenarios step `timeout-minutes: 11`, the engine-shard job `timeout-minutes: 15`. Fixture
+    preparation (4 min), the preflight, the diagnostics and the aggregate keep theirs. The 15 minutes
+    are enough in practice (a hang ends near 10.1 minutes), not a sum of every cap; the amendment must
+    not claim 15 covers every cap at its limit.
+    7. Docs. Record it as an amendment section of docs/decisions/0024-engine-tier-shards.md headed
+    exactly `### Soft budget, 2026-11-20` (the style of its "Slice-34 placement" section). It says it
+    supersedes the 180-second failure and the 4, 5 and 10 minute limits, and states items 2, 3 and 5.
+    Change line 1's title so it no longer says "each inside 180 seconds" (180 s becomes a target). The
+    history in 0024 (lines 52, 86, 94) and features/README.md:610 stays as written. Update every
+    statement of 180 s as a gate: the ci.yml comment above engine-shard ("so that no shard's step
+    passes 180 seconds"), arc42.md ("with a 180-second step budget"), features/README.md (the failure
+    report line naming "a passing run over the 180 s shard budget", the timing paragraph "rejects a
+    total above 180 seconds" and "stay 10, 5 and 4 minutes", "In a 4-minute engine run", and "still
+    has its 180-second gate"), and decision 0028's egress note ("reaches or approaches 180 seconds":
+    keep the advice to move egress.feature whole as an answer to a warning the person judges
+    persistent, and drop "do not raise the budget"). features/README.md:736, the fixture preparation
+    bound of 180 seconds, is a different bound and stays. tools/bin/engine-failure-report has no
+    timing logic and needs no change.
+
+
+    Tests. The existing features/engine_budget_test.go holds TestEngineSuiteBudget; add
+    TestEngineStepBudget to that file beside it and do not replace or weaken it. Write it as
+    `testEngineStepBudget(t, runtime.GOOS)` with `TestEngineStepBudget` calling it, skipping off
+    Linux, like TestEngineDiagnostics. It parses ../.github/workflows/ci.yml with go.yaml.in/yaml/v3
+    as the existing tests do (no yq), takes the Engine scenarios step's `.run`, and requires
+    `trap engine_finish EXIT` to be exactly one whole line of it (fail the test otherwise, no
+    fallback to the whole script). The script before that line is the prefix. Each row runs
+    `bash --noprofile --norc -eo pipefail -c` over the prefix plus this driver:
+    `engine_now() { printf '%s\n' <cs>; }; engine_started=0; trap engine_finish EXIT; exit <0|7>`
+    with ITOS_CONTAINER_ENGINE_SHARD=egress set over any inherited value; the unreadable row uses
+    `engine_now() { return 1; }` and exit 0. Rows, by name, with centiseconds in brackets: at_179s
+    (17900): exit 0, `duration_ms=179000 outcome=passed`, no `::warning::`, no `::error::`.
+    at_180s (18000): exit 0, no warning. at_180_01s (18001): exit 0, one warning naming `egress` and
+    `180010`. at_181s (18100): exit 0, one warning naming `egress` and `181000`, no error. at_600s
+    (60000): exit 0, warning, no error. at_600_01s (60001): exit 1, `outcome=failed`, an error naming
+    `egress` and `600010`. at_601s (60100): exit 1, `outcome=failed`, one warning and one error,
+    both naming 601000. failed_run_at_181s (exit 7): status 7, `outcome=failed`, one warning.
+    failed_run_at_601s (exit 7): status 7, warning and error. unreadable_uptime: exit 1,
+    `duration_ms=unknown outcome=failed`, no annotation. limits: from the parsed workflow, step
+    `timeout-minutes` 11, job `timeout-minutes` 15, the run line holds `-test.timeout=10m `, and the
+    step env holds ITOS_CONTAINER_ENGINE_SHARD equal to `${{ matrix.shard }}`.
+
+    The tests that already pin the old budget move with the workflow, without getting weaker.
+    TestEngineSuiteBudget: its "restored budgets" check pins 15, 11 and `-test.timeout=10m `. Its
+    rows become exactly: "successful but over budget" at 280.01 wants 0 plus the warning; a new
+    "over budget passes" at 281.00 wants 0 plus the warning; "capture time counts" at 700.01 wants
+    1; "compilation time counts" with compile 699.00 and final 701.00 wants 1 plus the error; a new
+    "exact guard" at 700.00 wants 0; "over budget preserves test failure" at 701.00 wants 7. Its
+    missing, invalid and backwards timing,
+    compile failure, capture failure and signal rows stay. engine_workflow_test.go (TestEngineWorkflow
+    line 313, `engine.Timeout`, and line 325, `run.Timeout` and validFixtureEnvironment) and
+    engine_fixture_test.go (`fixtureEnvironment` at lines 22-34 is an exact map and gains
+    `"ITOS_CONTAINER_ENGINE_SHARD": "${{ matrix.shard }}"`; its `Timeout: 5` at lines 55 and 224)
+    move to 15 and 11. engine_diagnostics_test.go moves its copy of the wrapper (engineInvocation)
+    and its program fixture's `-test.timeout=4m` argv to the new text. engine_shards_test.go's own
+    pins become exact pins of 15 and 11, not looser bounds (`shard.Timeout == 10` at line 130, the
+    step `Timeout == 5` at line 193, and the shardBaseline text at lines 432, 443 and 448), and it pins the
+    three new expressions (`(( elapsed > 180000 ))`, `(( elapsed > 600000 ))`, `(( elapsed > 600000
+    && result == 0 ))`) in place of `elapsed > 180000 && result == 0`, and its negative controls
+    become: guard removed, guard raised above 600000, warning made a failure, step, job or Go limits
+    not above the guard.
+
+    Red first. A test commit holds TestEngineStepBudget alone, before any workflow change. Against
+    today's wrapper these rows fail at their assertions: at_180_01s, at_181s, at_600s (exit 1, want
+    0), at_600_01s and at_601s (no error), the failed rows (no warning) and limits (4m, 5, 10, no
+    shard env). These pass already, as behaviour that does not change: at_179s, at_180s and
+    unreadable_uptime. The re-based TestEngineSuiteBudget rows and the new negative controls land
+    with the implementation and have no red of their own; the old-wrapper controls rebuild today's
+    wrapper in memory and stand in. Then the implementation commit changes ci.yml with the updated
+    tests, then a docs commit. No local mutation run; CI judges changed code, and the shell gets no
+    mutation proof, so the rows above are its guard.
+- id: T-70
+  type: build
+  title: Track shell-pinned tools in update automation
+  why: >
+    Keep the offline owned-run milestone's proof tooling maintained by extending existing update
+    automation to tools/bin/pinned, preserving verified checksums alongside version updates. Already
+    covers updating launcher versions together with verified archive checksums to maintain the
+    milestone's proof tooling. The person chose to do this foundation item now, 2026-11-20. Checks
+    run through itos ci run (a task check or a Go test it executes); no .github/workflows edits.
+
+    The problem. tools/bin/pinned pins four release tools (golangci-lint 2.14.0, goreleaser 2.18.2,
+    git-cliff 2.14.2, itos-cc 0.47.2), each with a SHA-256 and a GitHub asset ID per platform.
+    .github/renovate.json5 enables only gomod, github-actions and renovate-config, so nothing
+    notices a new release of these tools. itos-template left custom.regex out on purpose, because
+    a version-only update would leave the hashes beside the version stale. That danger is real
+    here, and worse than a failed check. The launcher downloads by asset ID first. A moved version
+    with old IDs and old sums would download the old archive and pass its old checksum. It would
+    then cache that archive under the new version's directory: a silently wrong tool. Renovate's
+    github-releases datasource gives versions only. No built-in Renovate datasource gives a
+    release asset's numeric ID, so the update automation cannot write the asset IDs. The rule below therefore
+    lets Renovate track and propose each version. It makes the launcher and this check refuse any
+    version whose per-platform SHA-256 and asset ID were not recorded for that version. An update
+    lands only after its pins are refreshed and verified on the update's branch, and never with
+    stale ones.
+
+    The rule, in three files. The task touches only tools/bin/pinned, .github/renovate.json5 and
+    a new tools/pinned/update_managers_test.go. It adds no module (go.mod and go.sum stay unchanged)
+    and makes no .github/workflows edit.
+
+    1. tools/bin/pinned. In each tool's case arm, the line directly above its `version=` line is
+    exactly `# renovate: depName=<owner>/<repo>`, a tab-indented comment. The four comments are
+    golangci/golangci-lint, goreleaser/goreleaser, orhun/git-cliff and donvargax/itos-cc. Each is
+    the repository the arm's url= and download_url= already name. Every platform line also sets
+    `for_version=<version>`, the release its sum= and asset_id= were taken from. Today that is the
+    arm's own version, so every value the launcher resolves stays as it is now. After the tool
+    case's closing esac, and before the `dir=$root/.tools/$tool-$version` line, one line refuses
+    a mismatch: `[ "$for_version" = "$version" ] || die "$tool $version has no verified pin for
+    $platform: its SHA-256 and asset ID are for $for_version"`. die exits 2. The refusal comes
+    before the cache lookup and any download, so a version moved alone never fetches or caches
+    anything. The header comment gains a few lines on the refresh. When a version moves, every
+    platform line's sum= is taken from the release's published checksums and its asset_id= from
+    the release API, and the two must agree with the release API's asset digest. for_version is
+    set only after that, as T-4 and T-25 verified theirs. A move of itos-cc also records its
+    migration in docs/upgrading.md, as T-4 did. Every other line keeps today's text: the platform
+    sets, archive and member names, URLs, retries, the 403 fallback, checksum-before-extraction,
+    the cache and --path. Existing comments stay too. Where goreleaser and git-cliff have a note
+    above version=, the new comment goes between that note and the version= line.
+
+    2. .github/renovate.json5. The file keeps its name and stays JSON5, which itos.yaml's file
+    check requires. It is written in the HuJSON subset of JSON5: every key double-quoted, comments
+    and trailing commas allowed. The test then parses it with github.com/tailscale/hujson
+    v0.0.0-20260727124030-b80ff77dac4f. That library is already pinned in go.mod (the manifest
+    parser uses it) and maintained by Tailscale. Go's JSON5 libraries are unmaintained forks, so
+    none is added. enabledManagers gains "custom.regex" after the existing three. A customManagers
+    array gains exactly one entry, with these values. customType is "regex". managerFilePatterns
+    is ["/^tools/bin/pinned$/"], the current option name; fileMatch is not used. matchStrings is
+    one pattern, written in the file as the JSON string
+    "# renovate: depName=(?<depName>\\S+)\\n\\t+version=(?<currentValue>\\S+)\\n".
+    datasourceTemplate is "github-releases". extractVersionTemplate is "^v(?<version>.+)$", since
+    every tool's tags are v plus the version. Each match is the comment plus its version line, so
+    Renovate rewrites only that version and never a for_version stamp. commitTrailers changes from
+    ["Task: T-2"] to ["Task: T-70"]. T-2 is a done gofmt fix that guards nothing Renovate moves.
+    itos ci run runs the checks of the tasks a range's footers name (itos internal/plan TasksIn).
+    So every Renovate commit, this tool update's included, runs this check in CI, as T-14's checks
+    do for itos-template. A version moved alone therefore turns its branch red, and branch
+    automerge never lands it. A comment says this in the file's own style. Every other key keeps
+    today's value: $schema, extends, ignoreDeps, automergeType, automergeSchedule, semanticCommits,
+    commitBody and packageRules. No preset manager gains a match: no `# renovate:` comment exists
+    outside tools/bin/pinned.
+
+    3. TestPinnedUpdateManagers, in tools/pinned/update_managers_test.go. It goes in a file of its
+    own because pinned_test.go would pass revive's 600-line limit. It reads ../bin/pinned and
+    ../../.github/renovate.json5 from the tree. It fetches nothing and runs no Renovate, and it
+    has these subtests.
+    config: hujson.Standardize and encoding/json decode the file into a map. The top-level key set
+    is exactly today's ten plus customManagers. enabledManagers is exactly gomod, github-actions,
+    renovate-config, custom.regex. commitTrailers is exactly ["Task: T-70"]. The eight preserved
+    keys equal, as decoded JSON, the values written in the test. customManagers holds exactly the
+    entry above, with no other key.
+    tracked: the tools are the launcher's `case "$tool" in` arms other than `*)`, read from the
+    script, so a fifth tool with no comment fails. The test compiles the config's match string
+    with Go's regexp, which accepts (?<name>…) groups. Over the launcher it yields exactly one
+    match per arm, inside that arm, and no other match. For each match, depName is the repository
+    in the arm's api.github.com url=. currentValue equals the version the arm resolves.
+    download_url holds /download/v<currentValue>/.
+    verified/<tool>/<platform>: the script is cut before `\ndir=$root/.tools/$tool-$version`, as
+    TestGitCliffPin cuts it. The uname expression is replaced by an environment value, and
+    `printf '%s\n' "$version" "$for_version" "$sum" "$asset_id"` is appended. It runs under
+    `sh -s -- <tool>` for Linux-x86_64, Linux-aarch64, Darwin-x86_64, Darwin-arm64,
+    MINGW64_NT-10.0-x86_64 and MINGW64_NT-10.0-aarch64. The supported sets stay exactly today's.
+    golangci-lint has all six. goreleaser and git-cliff have the four Linux and Darwin ones.
+    itos-cc has those four plus windows-amd64. A supported platform exits 0, with for_version
+    equal to version and a 64-hex sum and a numeric asset_id. An unsupported one exits 2, saying
+    `no pinned <tool> for <platform>`.
+    stale/<tool>/<platform>: the test does in memory what Renovate's update does. It replaces only
+    the currentValue span of that tool's match with 999.0.0 and runs the same cut script on every
+    supported platform. Each run exits 2 with empty stdout, and stderr holds `pinned: <tool>
+    999.0.0 has no verified pin for <platform>: its SHA-256 and asset ID are for <old version>`.
+    TestGitCliffPin, TestPinnedDownload, TestPinnedAssetRedirect and
+    TestPinnedForbiddenAssetFallback stay unchanged and keep passing. fixtureLauncher replaces the
+    whole region holding the new refusal line.
+
+    How the check fails today, and what it guards. The check passes only on the parent test's own
+    line. go test -v prints that line unindented as `--- PASS: TestPinnedUpdateManagers (<n>s)`
+    and each subtest's line indented, so grep -x on the whole unindented line matches no subtest,
+    and the pipeline's status, which is grep's, is 0 only when the whole parent test passed. Today
+    the package has no TestPinnedUpdateManagers. go test prints "no tests to run" and PASS, grep
+    finds no such line and exits 1, so the check exits 1. The test written against today's tree
+    fails as a whole, so its parent line reads --- FAIL and the check still exits 1. config fails
+    because hujson refuses the unquoted `$schema` key at line 3, and enabledManagers lacks
+    custom.regex. tracked finds no match. Each supported platform's verified row fails because sh
+    refuses the unset for_version. stale has no match to move. Five verified rows already pass
+    today and keep passing, because that behaviour does not change: goreleaser and git-cliff on
+    MINGW64_NT-10.0-x86_64 and MINGW64_NT-10.0-aarch64, and itos-cc on MINGW64_NT-10.0-aarch64.
+    Each hits its arm's `*) die "no pinned $tool for $platform"` and exits 2 before the appended
+    printf reads for_version. Their passing subtest lines do not satisfy the anchored check, so a
+    test-only commit, or a partial implementation such as one without the refusal line, still
+    fails it. Even with comments alone, a moved version exits 0 and prints the old sum and asset
+    ID: the silent case above, which the stale rows fail. With the work, every row passes, and so
+    does the parent. Later, a Renovate commit
+    that moves a version alone is the stale row made real. Its verified rows fail, and the
+    launcher itself refuses in CI's golangci-lint step and in the release's goreleaser and
+    git-cliff steps.
+
+    Commits and proof. One build commit carries the three files; a test commit of the new test
+    first is allowed but not required. The implementer may commit freely in its workspace. The
+    host makes the landing commits and runs itos, submission, publication and review. Neither
+    .github/renovate.json5 nor tools/ is a proof.code path, so this has no mutation proof, and the
+    rows above are the shell's and the config's guard. tools/bin/pinned is an enforcement input,
+    so the hook runs the architecture fixture matrix on that commit, which is expected. No step
+    needs the network: Renovate's lookups run centrally, outside this task. Whether Renovate's
+    own run accepts the config is outside what an offline check can prove, so this claims no more
+    than the test shows.
+- id: T-71
+  type: chore
+  title: Trim features/README.md to its standing harness rules and hold it under a doc-caps cap
+  why: >
+    Every implementer is told to read features/README.md, and it keeps growing because each slice
+    adds its own evidence notes. At 5e9a173 it is 113,103 bytes, not the 79,818 the promoted entry
+    measured. Most of that is in 'The CI engine tier' (33.2 KB), 'Manual red-first evidence'
+    (28.0 KB), 'Cached fixture protocol' (19.5 KB), the slice-17 and slice-27 paragraphs under
+    '## Tags' (6.5 KB) and 'Black-box boundary' (7.3 KB). Much of the bulk is history: 27 commit
+    SHAs, 18 Actions run IDs, dated measurements, investigation write-ups such as the overlay
+    failure, the goroutine-label analysis and the 2026-11-15 CI excerpts, and per-slice notes on
+    which checkpoint supplied which red and how many rows passed. Commits, run pages, ledger
+    entries, decision records and the registry already hold all of it. T-71 trims the file to its
+    standing harness rules and adds a doc-caps cap so later slices cannot grow it back. T-72
+    depends on it and adds one rule inside the cap's headroom.
+
+    What stays. A standing rule is something a person writing scenarios, step definitions, fixtures
+    or workflow steps, or running or judging the tiers, has to follow or rely on today. Keep each
+    one once, in short form, in these areas:
+    the black-box boundary and clean environment;
+    running and selection, including the no-race rule for the whole suite;
+    the product coverage routing table and its per-ID rules;
+    the engine tier: what @engine means, the switch and its CI-only context, that agents get no
+    socket and do not spoof CI, the shards and the rule for moving a whole feature only on
+    measured times, ITOS_CONTAINER_ENGINE_FEATURES, the aggregate check name and its gate, the
+    preflight bounds, the step command, the 180 s warning, the 600 s guard and the 10, 11 and
+    15 minute limits, the 1/3/1 fixture budgets against production's 10/120/10 with no product
+    input able to enable them, that the session contract assembly keeps production limits, what
+    the failure report and timing records are for, and that proof runs stay engine-disabled;
+    the LIFECYCLE-09 signal-window limits and the known gap of the first repeat's restart;
+    the cached fixture protocol: CI-only helper modes, pinned references and provenance, recipe
+    constraints, preparation and warm-up bounds, the fixture-input table, the duties of future
+    engine Given steps, cleanup rules, and that no evidence is committed;
+    the manual red-first input, where it is read, its selection rules, the four-step procedure
+    and what is not red proof;
+    the settled operating rules: under q-63 a slow first create gets a re-run, and no limit,
+    assertion or retry changes for it; a registration timeout goes to the coordinator; suite
+    timeouts are not raised to pass;
+    the tags table, IDs, commit rules, smoke set, scenario-writing rules and steps table.
+    "Fixture sources and notices" stays word for word. So do the limits on support claims: local
+    and harness checks are not native evidence, and no support is claimed without CI runtime
+    evidence.
+    Where a paragraph only describes what a harness test already holds, replace it with that
+    test's name and the rule an author relies on.
+
+    What goes. Commit SHAs, run IDs and URLs, dated observations and measurements, per-slice
+    accounts of red and green evidence, row counts, and explanations of past failures. Delete them
+    and do not create a new file for them: an extra document would be another uncapped read, and
+    history already keeps the text. If a passage records a decision that no ledger entry, decision
+    record or registry item holds, keep only its rule and name the passage in the report to the
+    coordinator. Merge repeated statements of a rule into one. The no-race rule is stated three
+    times today.
+
+    References that must still resolve. Keep these headings exactly: Black-box boundary, Running
+    them, Product coverage, The CI engine tier, Cached fixture protocol, Fixture sources and
+    notices, Manual red-first evidence, Tags, Commit rules, The smoke set, Writing a scenario, and
+    The steps this branch's scenarios use. docs/upgrading.md, docs/plans/offline-run-lifecycle.md
+    and docs/decisions/0002 link three of them by anchor. Comments in anchors, checkout-overlap,
+    doctor, hardlinks, lifecycle, offline, recovery and run_exit .feature files, in
+    features_test.go and session_probe_test.go, in smoke.yaml and in tools/bin/engine-fixture and
+    engine-failure-report point at the guarded Linux amd64 CI tier, the cached fixture protocol,
+    the real-engine red-first procedure, the smoke rule, the known gap, the session assembly's
+    production limits, the failure report's purpose, and fixture sources and licenses. Each of
+    these must still be in the file. Leave those other files unchanged.
+
+    The cap. Add `cap features/README.md <n>` to tools/bin/doc-caps after the existing two lines.
+    The value n is the smallest multiple of 4096 that is at least the trimmed size plus 2048 bytes,
+    and it may not exceed 49152. The 2048 bytes of headroom are for T-72. Record the README's size
+    and date in the script's comment, beside the sizes it already records. Change nothing else in
+    the script. If the standing rules cannot fit under 49152, stop and report it. Do not cut a
+    rule, and do not raise the ceiling: under the script's own comment, raising a cap is a decision.
+
+    Tests and gates. At 5e9a173 no test reads features/README.md: the only mentions in Go code are
+    comments. If a merge from main brings in a test that pins removed prose, keep its assertion and
+    point it at the kept rule. No gate, workflow, feature file, step or product code changes.
+    Sibling branches that add evidence paragraphs will fail doc-caps once T-71 is on main. That is
+    the intended effect, and trimming those paragraphs falls to each branch. Before landing, merge
+    main and trim anything a sibling has landed in the meantime.
+
+    Commits and proof. One chore commit with Task T-71 carries features/README.md and
+    tools/bin/doc-caps. Neither file is a proof.code path or an enforcement input, so there is no
+    mutation proof and no fixture matrix. The range is not prose-only, because tools/bin/doc-caps
+    is not a prose path, so CI runs these checks; they are POSIX sh with GNU grep -P, as on
+    ubuntu-latest. The implementer may commit freely in its workspace. The host makes the landing
+    commits and runs itos, submission, publication and review.
+
+    How each check fails today. The first exits 1 at grep, because doc-caps has no README line. The
+    second reads an empty n, and the test refuses it. It also fails a cap set high enough to skip
+    the trim (anything above 49152), and a cap left loose or too tight around the trimmed size.
+    The third passes its heading, digest and license greps today. It fails on the history scan,
+    which finds 32 lines with a commit SHA or a run ID. If grep -P is unavailable it fails
+    (status 2 is not 1), and it fails again if a linked heading or the fixture provenance is
+    removed. The checks cannot tell whether a kept rule is complete or a removed one was history;
+    review of the diff against this entry judges that.
+- id: T-72
+  type: docs
+  title: features/README.md requires engine source or native CI evidence for claims about exact mount option strings
+  why: >
+    The executable /tmp spec showed that leaving out noexec is not enough evidence that a mount
+    behaves a certain way. Add a review rule to the scenario guidance: when a spec claims an exact
+    mount option string produces a particular behaviour, it cites the relevant engine source or a
+    native CI observation. It lands after the trim so the cap has headroom over the shortened file.
+    Broken down from p1-refresh-remaining-template-guidance.
+
+    The problem. slice-34 requested the worker's /tmp tmpfs as rw,nosuid,nodev,mode=1777, and its
+    spec comments, step oracles and warm-up fixture records called that mount executable because
+    noexec was absent from the request. Moby prepends noexec to every HostConfig.Tmpfs option list,
+    and only a later exec token clears it (daemon/oci_linux.go and MergeTmpfsOptions). So the mount
+    was noexec, and every native home case stopped at its temporary-ELF step until 21c40b9 named
+    exec. The spec drew a behaviour from an option string, and neither engine source nor a native
+    observation backed it. The engine may add, reorder or override options, so what a request
+    leaves out says nothing about the mount.
+
+    The rule. Add one bullet to '## Writing a scenario' in features/README.md. When a spec claims
+    that an exact mount option string produces a behaviour, it cites one of two things. The first
+    is the engine source that turns the requested options into the mount. The second is a native
+    CI observation of the mounted result and the behaviour itself. "Spec" covers ledger entries,
+    scenario comments, step oracles and fixture records. Examples are a mount being executable,
+    writable or read-only, or a path being reachable or not. The bullet must contain the words
+    "mount option", "engine source" and "native CI". It may say that an option left out of a
+    request is not evidence, with the noexec prepend as a one-clause example. Following T-71's
+    history rule, it names no commit SHA, run ID, date or slice account. The README already says
+    that local and harness checks are not native evidence, so the bullet points to that and does
+    not repeat it.
+
+    Bounds. Change only features/README.md. Leave every other heading, rule and table as it is.
+    Leave the feature files, step oracles and fixtures alone: harness-home.feature and
+    offline.feature already state moby's noexec prepend. Do not change any gate or doc-caps cap. The
+    bullet must fit in the headroom T-71 left: the file is 46800 bytes and the cap is 49152, so
+    2352 bytes remain. If it does not fit, shorten the bullet. Raising the cap is a decision, not
+    a fix, under doc-caps' own comment. If no bullet that states the rule fits, stop and report it.
+
+    Commits and proof. One docs commit with Task T-72 carries features/README.md only. No
+    proof.code path or enforcement input changes, so there is no mutation proof and no fixture
+    matrix. The range is prose-only (itos.yaml's ci.prose.paths includes **/*.md). On such a range
+    CI keeps only a task's static checks and those declaring prose: true, and itos work done runs
+    no late check. So both checks declare prose: true. They use only POSIX sh, grep, sed and tr.
+    The implementer may commit freely in its workspace. The host makes the landing commits and runs
+    itos, submission, publication and review.
+
+    How each check fails today. The first exits 1 at grep, because features/README.md never says
+    "mount option". Its doc-caps half passes now, and it fails if the bullet pushes the file past
+    49152 bytes. The second reads only the '## Writing a scenario' section and flattens whitespace
+    first, so line wrapping cannot fail it. It fails today on its first anchor, "mount option". It
+    also fails if the rule is placed in another section or leaves out either kind of evidence.
+    Neither check can judge whether the bullet states the rule correctly. Review of the diff
+    against this entry judges that.
+- id: T-73
+  type: docs
+  title: README explains how to register and verify the local commit hooks
+  why: >
+    A contributor checkout was found with core.hooksPath unset and no pre-commit or commit-msg
+    hooks, so the local lint, vulnerability and commit-message gates in itos.yaml (hooks.bin: itos)
+    never ran. Add instructions to README.md for registering the hooks through itos. Also explain
+    how to verify them: core.hooksPath and both hooks present, and how a later commit shows the
+    configured gates are enforced. Leave gates and CI unchanged. Broken down from
+    p1-refresh-remaining-template-guidance.
+
+    The problem. Neither hook can be committed, so a fresh clone has none. tools/hooks/pre-commit
+    says it is "declared once in each clone (README.md)", but README.md never says how. The hook
+    itself runs the structural architecture check, the fixture matrix when staged enforcement
+    inputs change, pinned golangci-lint and govulncheck. Its header gives the two lines that
+    declare it, `git config hook.itos-container-pre-commit.event pre-commit` and `git config
+    hook.itos-container-pre-commit.command tools/hooks/pre-commit`. itos's own commit-msg and
+    pre-push hooks come from `itos hook install`. On git 2.54.0 or later that command declares
+    hook.itos-commit-msg and hook.itos-pre-push in the clone's local git config, which is never
+    committed and is shared by the clone's worktrees. It writes no hook file and leaves
+    core.hooksPath alone. So an unset core.hooksPath is normal and does not mean a hook is
+    missing. The finding above holds because nothing had declared the hooks, not because
+    core.hooksPath was unset. On an older git, `itos hook install` writes its own hook files
+    instead, but nothing runs the project's config-declared pre-commit.
+
+    The rule. Add one section, '## Local commit hooks', to README.md, directly after '## Working
+    here'. It says, briefly, five things.
+    - What to run once in each clone, in one sh block: `itos hook install` and the two `git config`
+      lines above, written exactly as tools/hooks/pre-commit gives them. It also says that they
+      write the clone's local config and that git 2.54.0 or later is required.
+    - That registering the hooks leaves core.hooksPath alone, because git runs config-declared
+      hooks whatever core.hooksPath says. So core.hooksPath should not be pointed at tools/hooks:
+      git would then run that pre-commit a second time, beside the declared entry.
+    - How to verify. `git hook list pre-commit` names itos-container-pre-commit, `git hook list
+      commit-msg` names itos-commit-msg, and `git hook list pre-push` names itos-pre-push. Each
+      prints "no hooks found" and exits non-zero when the hook is not declared.
+    - How a later commit shows the gates are enforced. `itos commit` refuses with exit 3 where
+      itos's commit-msg hook is not declared. With the hook declared, every commit has its message
+      and staged paths judged. `itos config check` runs only when the commit stages itos.yaml, a
+      ledger file, the work registry, a smoke set or a decision record. The checks of the task the
+      commit names run too, but a failing one refuses the commit only once that task's item is
+      done. While the item is open, the failure is printed with the task's status and the commit
+      goes through, so the section must not say that a failing task check always refuses. A commit that stages any path other than Markdown, docs/**, tasks/** or feature files runs
+      the pre-commit's checks (govulncheck needs the network), and any failure refuses the commit.
+      A prose-only commit skips them on purpose, so seeing no lint output there does not mean the
+      hook is missing.
+    - That on a git older than 2.54.0 the project's pre-commit does not run, so git must be
+      upgraded. The section offers no workaround.
+
+    Bounds. Change only README.md, and only by adding this section. Leave every other section as
+    it is. The README already says that hooks are workflow safeguards and not isolation, so the
+    section does not repeat it. Leave tools/hooks/pre-commit, itos.yaml, the CI workflow and every
+    gate unchanged. Tell no one to run a gate by hand, since gates run through their hooks and CI.
+    README.md has no doc-caps cap, and this task adds none. Keep the section short anyway: about
+    25 lines of prose besides the sh block.
+
+    Commits and proof. One docs commit with Task T-73 carries README.md only. It changes no
+    proof.code path and no enforcement input, so there is no mutation proof and no fixture
+    matrix. The range is prose-only, because itos.yaml's ci.prose.paths includes **/*.md. On such
+    a range CI keeps only a task's static checks and those declaring prose: true, and itos work
+    done runs no late check. So both checks declare prose: true, and they use only POSIX sh, grep,
+    sed and tr. The implementer may commit freely in its workspace. The host makes the landing
+    commits and runs itos, submission, publication and review.
+
+    How each check fails today. The first is the item's own check. It exits 1 at its first grep,
+    because README.md never says "core.hooksPath". The second reads only the '## Local commit
+    hooks' section and flattens whitespace first, so line wrapping cannot fail it. Today it exits
+    1 because README.md has no such section. It also fails if the section leaves out
+    `itos hook install`, either pre-commit `git config` line as tools/hooks/pre-commit gives it,
+    any of the three `git hook list` commands, core.hooksPath or the 2.54.0 requirement. Neither
+    check can judge whether the prose is correct. Review of the diff against this entry judges
+    that.
+- id: T-74
+  type: chore
+  title: itos.yaml and release.yml comments describe this project, not a project made from the template
+  why: >
+    Comments inherited from the template still talk to 'a user of a project made from this template'
+    (itos.yaml:34). Reword those comments to describe itos-container. Keep the release workflow's
+    harvest and provenance notes from itos-template and its attribution unchanged. Change comments
+    only. No key, step or gate changes, so itos config check and the fixture matrix see identical
+    configuration. Broken down from p1-refresh-remaining-template-guidance.
+  done_when:
+    - run: "! grep -n 'made from this template' itos.yaml .github/workflows/release.yml && itos config check"
+- id: T-75
+  type: docs
+  title: docs/ORCHESTRATING.md states the implemented CI and push policy
+  why: >
+    ORCHESTRATING already says macOS and Windows platform jobs are manual and Linux is automatic. It
+    does not state how work reaches main as implemented in itos.yaml and ci.yml. Each item goes
+    through one pull request, a draft until marked ready, merged after its checks and Cursor
+    Bugbot's review (Codex still asked, best effort). Docs-only commits outside features/ go
+    straight to main. CI runs on pull requests, pushes to main and manual dispatch. Replace any
+    wording that suggests an unrestricted push or automatic three-platform runs. Leave the egress
+    and credential deferral lines to p1-docs-admit-milestone-two-egress. Stay within the file's
+    doc-caps cap. Broken down from p1-refresh-remaining-template-guidance.
+  done_when:
+    - run: grep -qi 'bugbot' docs/ORCHESTRATING.md && grep -qi 'draft' docs/ORCHESTRATING.md && tools/bin/doc-caps

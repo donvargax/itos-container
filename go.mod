@@ -13,16 +13,18 @@ require (
 	github.com/moby/moby/api v1.56.1
 	github.com/moby/moby/client v0.6.2
 	github.com/moby/sys/mountinfo v0.7.2
+	github.com/moby/term v0.5.2
 	github.com/tailscale/hujson v0.0.0-20260727124030-b80ff77dac4f
 	go.yaml.in/yaml/v3 v3.0.5
 	go.yaml.in/yaml/v4 v4.0.0
 	golang.org/x/net v0.60.0
-	golang.org/x/sys v0.48.0
+	golang.org/x/sys v0.49.0
 	golang.org/x/term v0.46.0
 	pgregory.net/rapid v1.3.0
 )
 
 require (
+	github.com/Azure/go-ansiterm v0.0.0-20261006220739-8c912ac31dd4 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/cucumber/gherkin/go/v42 v42.0.0 // indirect

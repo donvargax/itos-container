@@ -339,3 +339,24 @@ questions:
     item: "slice-28"
     question: "slice-28: its implementer (attempt 3) stopped for engine red evidence of @ID-EGRESSLIFE-10, 12 and 13. Does the dispatched run supply it?"
     answer: "No (the coordinator, 2026-11-16). Run 43837841004 at bc42d2b ran seven cases and every one ended in a nil pointer dereference inside the step code (features/run_preflight_process_test.go:275, startRun), before any assertion: a fault of the harness on the native path, not the product's missing behaviour. slice-28 repairs that, defines the steps still missing for @ID-EGRESSLIFE-06, 07 and 11, and stops once more for one run of all six."
+  - id: q-85
+    item: "slice-38"
+    question: "slice-38: its implementer (attempt 1) returned blocked with a partial checkpoint (two test commits; EXEC-03 to 16, the runtime and CI evidence unfinished) and named nothing it waits on. Is anything owed before it goes on?"
+    answer: "Nothing (the coordinator, 2026-11-16, as q-82 for slice-34). The attempt stopped unfinished, not blocked: its two commits (9a477b1, bbac71b) are on the branch at 52fe0e5 with main merged in. slice-38 goes on with the remaining step definitions, the runtime and the code proof."
+  - id: q-86
+    item: "slice-28"
+    question: "slice-28: its implementer (attempt 4) stopped for engine red evidence on @ID-EGRESSLIFE-06, 07, 10, 11, 12 and 13 at 4b8cc34. Is the evidence accepted?"
+    answer: "Yes (the coordinator, 2026-11-16). Dispatch 43952255861 at 4b8cc34, Engine shard (other): ten cases, 86 steps, 54 passed, 10 failed, 22 skipped, none undefined, no panic; each case fails at an assertion after its product run. slice-28 goes on to the implementation; the run and each failure are in its steer file."
+  - id: q-87
+    item: "slice-28"
+    question: "slice-28: the implementer (attempt 9) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-28-implementer-9.result.json"
+  - id: q-88
+    item: "slice-42"
+    question: "slice-42: the drafter (attempt 24) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-42-drafter-24.result.json"
+  - id: q-89
+    item: "slice-43"
+    question: "slice-43: the drafter (attempt 1) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-43-drafter-1.result.json"
+  - id: q-90
+    item: "p2-credential-brokering"
+    question: "For p2-credential-brokering: how a sandboxed agent gets credentials it cannot keep after the run (design: docs/plans/credential-brokering.md).\n\nWhich credential direction should itos-container take?\n\nRecommended, option E. Keep passing model credentials in (the Claude setup-token, and a Codex API key as the default instead of the shared read-write ChatGPT login), and mint a one-hour GitHub App installation token per run, limited to the approved repository and revoked at teardown. Build no TLS interception, and defer a base-URL broker.\n\nOption A keeps passing everything in as chartered, adding only least-scope rules such as a one-repository fine-grained token with an expiry.\n\nOption B brokers with TLS interception and a planted CA. It first moves the proxy to its own repository, and it cannot carry a Claude subscription under Anthropic's terms.\n\nOption C brokers API keys through a plain-HTTP base URL now, as a component separate from the egress proxy, leaving gh and the Claude subscription on passing in.\n\nThe design's Questions section lists seven narrower questions (Claude login, Codex login, GitHub, runs over an hour, where a base-URL broker lives, interception, microVMs), each with its recommendation."
+    answer: "The person's direction, 2026-11-20, recorded by the coordinator on their word; it replaces the option E recommendation and the earlier Codex correction. Locally run sandboxes share the host's own harness logins: the host's real Codex auth.json through the q-72 mount, unchanged, and Claude's credentials mounted the same way, so a token refresh lands in the same file every other instance uses. No sandbox-only login, no API key, no brokering and no minted model tokens for the local case. Brokering and separate logins apply only to remote sandboxes (microVMs on cloud providers, later): the broker design in docs/plans/credential-brokering.md is deferred until remote sandboxes exist. Still open for the person (the design's question 4): GitHub in the local case, read as keeping the chartered token file. Mounting Claude's refreshing login changes the charter's step 2 line, which the person changes."

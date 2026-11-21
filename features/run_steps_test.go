@@ -17,6 +17,7 @@ import (
 )
 
 func (w *world) runSteps(sc *godog.ScenarioContext) {
+	w.runTerminalSteps(sc)
 	w.runPreflightSteps(sc)
 	w.foregroundRecoverySteps(sc)
 	sc.Step(`^its standard output is empty$`, func() error {

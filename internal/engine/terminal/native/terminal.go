@@ -17,18 +17,29 @@ import (
 
 // Provider never discovers or closes a caller's terminal.
 type Provider struct {
-	file   *os.File
-	osName string
-	mu     sync.Mutex
-	active *lease
+	// Output, when distinct, owns state and hangup observation but never size.
+	Output *os.File
+	// Optional syscall seams permit deterministic rollback tests.
+	ReadOutputState func(int) (*term.State, error)
+	MakeOutputRaw   func(int) (*term.State, error)
+	pair            bool
+	file            *os.File
+	osName          string
+	mu              sync.Mutex
+	active          *lease
 }
 
 // New binds a file and an explicit operating-system value.
 func New(file *os.File, osName string) *Provider { return &Provider{file: file, osName: osName} }
 
+// NewPair binds only the supplied descriptors; it never opens /dev/tty.
+func NewPair(input, output *os.File, osName string) *Provider {
+	return &Provider{file: input, Output: output, osName: osName, pair: true}
+}
+
 // Acquire subscribes before measuring, so a resize between the initial measurement
-// and observation is retained. All fallible setup precedes successful MakeRaw;
-// there is no partially acquired lease or fallible post-raw setup to roll back.
+// and observation is retained. A distinct output terminal is acquired after
+// stdin; failure rolls back each saved state before returning.
 func (p *Provider) Acquire(ctx context.Context) (port.Lease, error) {
 	if p.osName != "linux" || !supported {
 		return nil, &port.Failure{Kind: port.Unsupported}
@@ -46,14 +57,17 @@ func (p *Provider) Acquire(ctx context.Context) (port.Lease, error) {
 	if p.file == nil || *p.file == (os.File{}) {
 		return nil, &port.Failure{Kind: port.InvalidTerminal}
 	}
+	output, err := p.outputLease()
+	if err != nil {
+		return nil, &port.Failure{Kind: port.InvalidTerminal, Err: err}
+	}
 	// SyscallConn only rejects a nil File, already refused above. A closed
 	// file still yields a connection; Control below reports its failure.
 	conn, _ := p.file.SyscallConn()
 	l := &lease{provider: p, conn: conn, resizes: make(chan port.Dimensions, 1),
-		done: make(chan struct{}), stop: make(chan struct{}), signals: make(chan os.Signal, 1)}
-	signal.Notify(l.signals, windowSignal)
+		done: make(chan struct{}), stop: make(chan struct{}), signals: make(chan os.Signal, 1), output: output}
+	signal.Notify(l.signals, windowSignal, syscall.SIGHUP)
 	kind := port.InvalidTerminal
-	var err error
 	err = l.control(func(fd int) error {
 		if !term.IsTerminal(fd) {
 			return errors.New("not a terminal")
@@ -75,12 +89,35 @@ func (p *Provider) Acquire(ctx context.Context) (port.Lease, error) {
 		signal.Stop(l.signals)
 		return nil, &port.Failure{Kind: kind, Err: err}
 	}
+	if output != nil {
+		read, raw := p.ReadOutputState, p.MakeOutputRaw
+		if read == nil {
+			read = term.GetState
+		}
+		if raw == nil {
+			raw = term.MakeRaw
+		}
+		err = output.control(func(fd int) error {
+			var e error
+			output.original, e = read(fd)
+			if e != nil {
+				return e
+			}
+			_, e = raw(fd)
+			return e
+		})
+		if err != nil {
+			signal.Stop(l.signals)
+			return nil, &port.Failure{Kind: port.AcquisitionFailed, Err: err, RestoreErr: l.restore()}
+		}
+	}
 	p.active = l
 	go l.run(ctx)
 	return l, nil
 }
 
 type lease struct {
+	output     *lease
 	provider   *Provider
 	conn       syscall.RawConn
 	original   *term.State
@@ -99,6 +136,40 @@ func (l *lease) Result() port.Result             { <-l.done; return l.result }
 func (l *lease) Close() port.Result {
 	l.closeOnce.Do(func() { close(l.stop) })
 	return l.Result()
+}
+
+func (l *lease) Check() port.Cause {
+	select {
+	case <-l.done:
+		return l.result.Cause
+	default:
+	}
+	for _, endpoint := range []*lease{l, l.output} {
+		if endpoint == nil {
+			continue
+		}
+		hungup, err := endpoint.pollHangup()
+		for errors.Is(err, syscall.EINTR) {
+			hungup, err = endpoint.pollHangup()
+		}
+		if hungup {
+			return port.Hangup
+		}
+		if err != nil {
+			return port.ObservationFailed
+		}
+	}
+	return ""
+}
+
+func (l *lease) pollHangup() (bool, error) {
+	var hungup bool
+	err := l.control(func(fd int) error {
+		var err error
+		hungup, err = disconnected(fd)
+		return err
+	})
+	return hungup, err
 }
 
 // control pins the caller's descriptor for each syscall without File.Fd's
@@ -129,7 +200,7 @@ func (l *lease) run(ctx context.Context) {
 	// ticker, before restoration and the public completion notification.
 	l.result = l.observe(ctx)
 	signal.Stop(l.signals)
-	l.result.RestoreErr = l.control(func(fd int) error { return term.Restore(fd, l.original) })
+	l.result.RestoreErr = l.restore()
 	l.provider.mu.Lock()
 	l.provider.active = nil
 	l.provider.mu.Unlock()
@@ -168,6 +239,9 @@ func (l *lease) observe(ctx context.Context) port.Result {
 			}
 			return sizeErr
 		})
+		if err == nil && !hungup && l.output != nil {
+			hungup, err = l.output.pollHangup()
+		}
 		if errors.Is(err, syscall.EINTR) {
 			continue
 		}
@@ -189,6 +263,55 @@ func (l *lease) observe(ctx context.Context) port.Result {
 		}
 		resize = false
 	}
+}
+
+func (l *lease) restore() error {
+	var in, out error
+	if l.original != nil {
+		in = l.control(func(fd int) error { return term.Restore(fd, l.original) })
+	}
+	if l.output != nil && l.output.original != nil {
+		out = l.output.control(func(fd int) error { return term.Restore(fd, l.output.original) })
+	}
+	return errors.Join(in, out)
+}
+
+func (p *Provider) outputLease() (*lease, error) {
+	if p.Output == nil && !p.pair {
+		return nil, nil
+	}
+	if p.Output == nil || *p.Output == (os.File{}) {
+		return nil, errors.New("missing output terminal")
+	}
+	input, _ := p.file.SyscallConn()
+	in, err := (&lease{conn: input}).device()
+	if err != nil {
+		return nil, err
+	}
+	// Like stdin, this nonnil File always yields a connection. Control pins
+	// and validates its live descriptor even if the caller closes it later.
+	conn, _ := p.Output.SyscallConn()
+	l := &lease{conn: conn}
+	out, err := l.device()
+	if err != nil {
+		return nil, err
+	}
+	// TIOCGDEV resolves the actual terminal behind aliases such as /dev/tty.
+	// Filesystem identity would save an already-raw state for the second alias.
+	if in == out {
+		return nil, nil
+	}
+	return l, nil
+}
+
+func (l *lease) device() (int, error) {
+	var device int
+	err := l.control(func(fd int) error {
+		var err error
+		device, err = terminalDevice(fd)
+		return err
+	})
+	return device, err
 }
 
 func disconnected(fd int) (bool, error) {

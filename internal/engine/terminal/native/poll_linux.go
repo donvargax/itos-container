@@ -13,3 +13,5 @@ const (
 type pollDescriptor = unix.PollFd
 
 func poll(descriptors []pollDescriptor) (int, error) { return unix.Poll(descriptors, 0) }
+
+func terminalDevice(fd int) (int, error) { return unix.IoctlGetInt(fd, unix.TIOCGDEV) }

@@ -264,6 +264,48 @@ T-48 and slice-31 must prove this on the real engine in CI. A rejected staged bi
 a copy that outlives its worker reopens the mechanism with that evidence; it does not
 select a fallback.
 
+## T-48 implementation status
+
+The token-only session seam is implemented, without command wiring or real-engine
+acceptance. This records implementation of the delivery proposal above; it does not
+change the charter, the six questions below or the native-evidence requirements.
+
+`session/disk.CheckedSources` retains the source descriptors from the existing
+readiness observation, including decision 0027's complete exclusion checks. Revalidation
+repeats the complete observation and compares against retained original identities
+when the capability has already been checked. The
+copying adapter reopens only `/proc/self/fd/<n>`, checks metadata and observed size
+before and after its one read, and clears its one bounded buffer on every return.
+The capability is separate from `Binding`, intent records and engine requests.
+
+Schema 4 extends the protected session intent with the staging directory, selected
+kinds, directory device/inode, each staged file's device/inode and progress. Schema 3
+remains T-40's egress encoding; schema 4 can retain that same egress authority. Existing
+schemas retain their meaning. Directory intent precedes mkdir; directory and file
+identity publications precede copying. A collision is never reused. Recovery refuses
+unrecorded or substituted entries rather than adopting them by name or recursively
+deleting them. A crash before a newly created identity is durably published can retain
+uncertain evidence; an absent pathname alone never supplies a workload result.
+
+The registered runner stages before create, verifies individual read-only binds and
+unlinks after the start wait and applicable detector. Source handles and the operation
+lock outlive a cancelled copy or publication until its operation returns. Late replies
+cannot resume launch. Recovery observes staging independently as present, absent or
+unknown and requires confirmed worker, staging, egress and anchor removal before
+completion. Its original public session ID and stop retry survive incomplete cleanup.
+
+The shared memory/disk copy contract preserves final newlines and boundary sizes.
+The memory/SDK mount and uncertain-start contracts inspect independent observations,
+including acquired references surviving unlink, delayed start and failed removal.
+Controlled-time tests cover late reads, copies, unlink and intent publication; existing
+startup, cancellation, recovery and egress tests remain regression controls. Synthetic
+marker searches cover provisioning traffic and failures, staging output and controller
+metadata, with positive detector controls. These unit fixtures do not prove Docker's
+kernel mount behavior, cross-project runtime isolation or integrated absence across all
+approval, snapshot, diagnostics, checkout and refusal-log surfaces. Slice-31/33 still
+own those CI-only scenarios; question 6 still gates the integrated refusal-log claim.
+No Codex delivery or real credential use is enabled.
+
 ## Delivery alternatives rejected in the ledger's source review
 
 These are source-based reasons, not experiments run for T-47:

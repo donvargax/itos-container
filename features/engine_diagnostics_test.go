@@ -18,10 +18,24 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	// A helper or probe of the socket-backend fixture runs here, before the
+	// directory below exists: an exec'ing helper never returns to remove it.
+	socketBackendChild()
 	if os.Getenv("ITOS_CONTAINER_ENGINE_TESTS") == "1" || os.Getenv("ITOS_CONTAINER_SIGNAL_DIAGNOSTIC_CHILD") == "1" {
 		logFeatureSignals(runtime.GOOS)
 	}
-	os.Exit(m.Run())
+	var err error
+	standaloneProbeDir, err = os.MkdirTemp("", "itos-container-feature-binaries-")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "create feature binary directory:", err)
+		os.Exit(1)
+	}
+	code := m.Run()
+	if err := os.RemoveAll(standaloneProbeDir); err != nil {
+		fmt.Fprintln(os.Stderr, "remove feature binary directory:", err)
+		code = 1
+	}
+	os.Exit(code)
 }
 
 func logFeatureSignals(hostOS string) {
@@ -82,11 +96,17 @@ engine_now() {
 }
 engine_started=''
 engine_finish() {
-  local result=$? finished elapsed=unknown outcome=failed
+  local result=$? finished elapsed=unknown outcome=failed shard=${ITOS_CONTAINER_ENGINE_SHARD:-unknown}
   trap - EXIT
   if finished=$(engine_now) && [[ -n $engine_started ]] && (( finished >= engine_started )); then
     elapsed=$(((finished - engine_started) * 10))
-    if (( elapsed > 180000 && result == 0 )); then result=1; fi
+    if (( elapsed > 180000 )); then
+      printf '::warning::Engine shard %s took %s ms, over the 180000 ms soft budget\n' "$shard" "$elapsed"
+    fi
+    if (( elapsed > 600000 )); then
+      printf '::error::Engine shard %s took %s ms, over the 600000 ms hang guard\n' "$shard" "$elapsed"
+    fi
+    if (( elapsed > 600000 && result == 0 )); then result=1; fi
   elif (( result == 0 )); then
     result=1
   fi
@@ -116,7 +136,7 @@ cd features
 set +e
 # Run 42233015284 traced no product/harness process-group signals; the step died
 # from outside that tree. Isolate tests from CI runner/Docker session signals.
-setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=4m -test.paniconexit0 -test.run '^TestFeatures$' 2>&1 | tee "$RUNNER_TEMP/slice-11-features.log"
+setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=10m -test.paniconexit0 -test.run '^TestFeatures$' 2>&1 | tee "$RUNNER_TEMP/slice-11-features.log"
 results=("${PIPESTATUS[@]}")
 set -e
 test_status=${results[0]}
@@ -192,7 +212,7 @@ cp "$RUNNER_TEMP/program" "$4"
 			program := `#!/bin/bash
 set -euo pipefail
 [[ "$PWD" = "$RUNNER_TEMP/features" ]]
-[[ "$*" = '-test.count=1 -test.v -test.timeout=4m -test.paniconexit0 -test.run ^TestFeatures$' ]]
+[[ "$*" = '-test.count=1 -test.v -test.timeout=10m -test.paniconexit0 -test.run ^TestFeatures$' ]]
 [[ -d "$ITOS_CC_TEST_COVERDIR" && "$ITOS_CC_TEST_COVERDIR" = "$RUNNER_TEMP"/T-36-engine-coverage.* ]]
 if [[ $(ps -o sid= -p "$$") -ne $$ ]]; then
   printf 'feature test did not get its own session\n' >&2

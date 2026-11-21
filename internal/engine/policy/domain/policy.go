@@ -40,7 +40,7 @@ func Inspect(source port.Source, names port.Names) port.Result {
 // issue records that version, so its fix names the schema the file was judged by.
 func inspectFields(root port.Value, version int, names port.Names) port.Result {
 	policy := port.Policy{Version: version, Network: port.Network{Mode: "offline"}}
-	keys := []string{"version", "manifest", "network"}
+	keys := []string{"version", "manifest", "network", "home"}
 	if version == 3 {
 		keys = append(keys, "credentials")
 	}
@@ -73,10 +73,39 @@ func inspectFields(root port.Value, version int, names port.Names) port.Result {
 		policy.Credentials, found = inspectCredentials(credentials)
 		issues = append(issues, found...)
 	}
+	if home, exists := root.Fields["home"]; exists {
+		var found []port.Issue
+		policy.Home, found = inspectHome(home, version)
+		issues = append(issues, found...)
+	}
 	if len(issues) != 0 {
 		return port.Result{Issues: issues}
 	}
 	return port.Result{Policy: &policy}
+}
+
+func inspectHome(value port.Value, version int) (*port.Home, []port.Issue) {
+	if value.Kind != port.Object {
+		return nil, []port.Issue{{Kind: port.Type, Path: []string{"home"}, Version: version}}
+	}
+	issues := unknown(value, []string{"home"}, version, "storage")
+	storage, exists := value.Fields["storage"]
+	kind := port.None
+	switch {
+	case !exists:
+		kind = port.Required
+	case storage.Kind != port.String:
+		kind = port.Type
+	case storage.Text != "volume":
+		kind = port.HomeStorage
+	}
+	if kind != port.None {
+		issues = append(issues, port.Issue{Kind: kind, Path: []string{"home", "storage"}, Version: version})
+	}
+	if len(issues) != 0 {
+		return nil, issues
+	}
+	return &port.Home{Storage: "volume"}, nil
 }
 
 func refused(kind port.Failure, path ...string) port.Result {

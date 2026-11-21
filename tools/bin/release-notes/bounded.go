@@ -11,6 +11,8 @@ const bodyLimit = 125000 // GitHub's character limit, conservatively enforced in
 // Selection below replaces slices; it never edits the caller's backing arrays.
 type renderedNotes struct {
 	notes
+	SyncCounts       string // what the omitted sync merges add to the totals release-version reads, or empty
+	SyncBreaking     bool   // an omitted sync merge is breaking
 	Breaking         []commit
 	DependencyPatch  bool
 	Omitted          bool
@@ -95,14 +97,76 @@ func (c changes) first(commits []commit) changes {
 	return out
 }
 
+// without drops the entries whose commit link names one of the commits, and
+// says whether it dropped any. A heading left with no entry is not written back
+// by text.
+func (c *changes) without(drop []commit) bool {
+	kept := c.entries[:0:0]
+	for _, entry := range c.entries {
+		gone := false
+		for _, d := range drop {
+			if strings.Contains(entry.text, "/commit/"+d.SHA+")") {
+				gone = true
+				break
+			}
+		}
+		if !gone {
+			kept = append(kept, entry)
+		}
+	}
+	dropped := len(kept) < len(c.entries)
+	c.entries = kept
+	return dropped
+}
+
 func (n notes) render() (string, error) {
-	view := renderedNotes{notes: n, DependencyPatch: len(n.Moved) > 0}
+	// A merge of main into an item branch is no change of the release: it is
+	// neither counted nor listed, and git-cliff's entry for it goes. With none,
+	// the text is left exactly as git-cliff wrote it.
+	var syncs, kept []commit
+	for _, c := range n.Commits {
+		if c.sync {
+			syncs = append(syncs, c)
+		} else {
+			kept = append(kept, c)
+		}
+	}
+	entries := readChanges(n.Changed)
+	var syncCounts string
+	var syncBreaking bool
+	if len(syncs) > 0 {
+		// The version calculation reads the whole range, so the totals are taken
+		// before the syncs go; a sentence is due only for what the syncs add.
+		own := notes{Commits: syncs}
+		var adds []string
+		for _, part := range []struct{ kind, one, many string }{
+			{"feat", "feat", "feats"}, {"fix", "fix", "fixes"}, {"breaking", "breaking change", "breaking changes"},
+		} {
+			if c := own.count(part.kind); c > 0 {
+				adds = append(adds, plural(c, part.one, part.many))
+			}
+		}
+		syncBreaking = own.count("breaking") > 0
+		if len(adds) > 0 {
+			list := adds[0]
+			if len(adds) > 1 {
+				list = strings.Join(adds[:len(adds)-1], ", ") + " and " + adds[len(adds)-1]
+			}
+			syncCounts = fmt.Sprintf("Omitted branch syncs add %s, bringing the totals for the version calculation to %s, %s and %s.",
+				list, plural(n.count("feat"), "feat", "feats"), plural(n.count("fix"), "fix", "fixes"),
+				plural(n.count("breaking"), "breaking change", "breaking changes"))
+		}
+		n.Commits = kept
+		if entries.without(syncs) {
+			n.Changed = entries.text()
+		}
+	}
+	view := renderedNotes{notes: n, SyncCounts: syncCounts, SyncBreaking: syncBreaking, DependencyPatch: len(n.Moved) > 0}
 	for _, c := range n.Commits {
 		if c.Breaking != "" {
 			view.Breaking = append(view.Breaking, c)
 		}
 	}
-	entries := readChanges(n.Changed)
 	if n.From == "" {
 		entries = entries.first(n.Commits)
 		view.Changed = entries.text()

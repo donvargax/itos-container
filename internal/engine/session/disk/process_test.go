@@ -86,6 +86,43 @@ func TestWorkerProcessRefusesInvalidReferences(t *testing.T) {
 	}
 }
 
+func TestWorkerProcessPollRetriesInterrupt(t *testing.T) {
+	// Signal delivery can interrupt even a non-blocking poll readiness check
+	// (EINTR) without anything being known about the held process. The
+	// interruption must not masquerade as a mount refusal; the check retries.
+	for _, tc := range []struct {
+		name   string
+		events int16
+		exited bool
+	}{
+		{"interrupted while running", 0, false},
+		{"interrupted before exit readiness", pidfdReadable, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			file, err := os.CreateTemp(t.TempDir(), "reference")
+			if err != nil {
+				t.Fatal(err)
+			}
+			interrupted := false
+			p := &workerProcess{file: file, poll: func(fd int32) (int16, error) {
+				if !interrupted {
+					interrupted = true
+					return 0, syscall.EINTR
+				}
+				if int(fd) != int(file.Fd()) {
+					t.Errorf("poll used different reference: %d", fd)
+				}
+				return tc.events, nil
+			}}
+			defer p.Close()
+			exited, failure := p.Exited()
+			if exited != tc.exited || failure != "" || p.MountError().Message != "" {
+				t.Fatal("an interrupted poll was misread as process failure", exited, failure, p.MountError())
+			}
+		})
+	}
+}
+
 func TestHoldProcessRetainsPIDFDOpenError(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("native pidfd is Linux only")
