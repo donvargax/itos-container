@@ -2695,3 +2695,20 @@ items:
       the frozen grant, the anchor binding and the last completed check, after current sources are
       removed, in text and JSON. It reads no source and changes no protected record. Run and stop
       later write this record, so it lands before them. Broken down from slice-32.
+  - id: codex-share-run-delivery
+    title: Run rechecks the sources, binds the approved directory and lock through mount acquisition, and refuses deliveries that have not landed
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [codex-share-session-record]
+    kind: idea
+    why: >
+      This is the run stage: renumbered ID-CODEXAUTH-11, 12, 16, 17 and 15 without its final-check
+      clause. Run repeats the inspection and alias rule before create. Each injected late fault
+      gives its source or mount diagnostic, with proof the fault was applied and an unchanged
+      control that reaches start. A CI-only test substitutes the lock at the mount-acquisition
+      boundary. Requests for deliveries that have not landed, such as Codex plus tokens, are refused
+      early. ID-CODEXAUTH-15 asserts two-way atomic replacement, the inode change, preserved
+      directory identity, and exit zero after owned cleanup with auth and lock preserved. Lock
+      contention is covered, and the boundary probe first shows the host UID can read the sentinels.
+      Native rows run only in CI. Broken down from slice-32.
