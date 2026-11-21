@@ -9064,16 +9064,113 @@
   type: chore
   title: Trim features/README.md to its standing harness rules and hold it under a doc-caps cap
   why: >
-    features/README.md is 79,818 bytes on main and every implementer is told to read it. Most of the
-    weight is in 'The CI engine tier' (30.8 KB), 'Manual red-first evidence' (15.2 KB) and 'Cached
-    fixture protocol' (11.1 KB), plus per-slice evidence paragraphs under '## Tags'. Move per-slice
-    red-evidence and history notes out, since commits and run numbers already record them. Keep
-    every standing harness rule. Add a `cap features/README.md <bytes>` line to tools/bin/doc-caps
-    with headroom over the shortened size, so later slices cannot grow it back. Keep existing gates,
-    provenance and limits on container-support claims, and fix any harness test that pins removed
-    prose without weakening it. Broken down from p1-refresh-remaining-template-guidance.
+    Every implementer is told to read features/README.md, and it keeps growing because each slice
+    adds its own evidence notes. At 5e9a173 it is 113,103 bytes, not the 79,818 the promoted entry
+    measured. Most of that is in 'The CI engine tier' (33.2 KB), 'Manual red-first evidence'
+    (28.0 KB), 'Cached fixture protocol' (19.5 KB), the slice-17 and slice-27 paragraphs under
+    '## Tags' (6.5 KB) and 'Black-box boundary' (7.3 KB). Much of the bulk is history: 27 commit
+    SHAs, 18 Actions run IDs, dated measurements, investigation write-ups such as the overlay
+    failure, the goroutine-label analysis and the 2026-11-15 CI excerpts, and per-slice notes on
+    which checkpoint supplied which red and how many rows passed. Commits, run pages, ledger
+    entries, decision records and the registry already hold all of it. T-71 trims the file to its
+    standing harness rules and adds a doc-caps cap so later slices cannot grow it back. T-72
+    depends on it and adds one rule inside the cap's headroom.
+
+    What stays. A standing rule is something a person writing scenarios, step definitions, fixtures
+    or workflow steps, or running or judging the tiers, has to follow or rely on today. Keep each
+    one once, in short form, in these areas:
+    the black-box boundary and clean environment;
+    running and selection, including the no-race rule for the whole suite;
+    the product coverage routing table and its per-ID rules;
+    the engine tier: what @engine means, the switch and its CI-only context, that agents get no
+    socket and do not spoof CI, the shards and the rule for moving a whole feature only on
+    measured times, ITOS_CONTAINER_ENGINE_FEATURES, the aggregate check name and its gate, the
+    preflight bounds, the step command, the 180 s warning, the 600 s guard and the 10, 11 and
+    15 minute limits, the 1/3/1 fixture budgets against production's 10/120/10 with no product
+    input able to enable them, that the session contract assembly keeps production limits, what
+    the failure report and timing records are for, and that proof runs stay engine-disabled;
+    the LIFECYCLE-09 signal-window limits and the known gap of the first repeat's restart;
+    the cached fixture protocol: CI-only helper modes, pinned references and provenance, recipe
+    constraints, preparation and warm-up bounds, the fixture-input table, the duties of future
+    engine Given steps, cleanup rules, and that no evidence is committed;
+    the manual red-first input, where it is read, its selection rules, the four-step procedure
+    and what is not red proof;
+    the settled operating rules: under q-63 a slow first create gets a re-run, and no limit,
+    assertion or retry changes for it; a registration timeout goes to the coordinator; suite
+    timeouts are not raised to pass;
+    the tags table, IDs, commit rules, smoke set, scenario-writing rules and steps table.
+    "Fixture sources and notices" stays word for word. So do the limits on support claims: local
+    and harness checks are not native evidence, and no support is claimed without CI runtime
+    evidence.
+    Where a paragraph only describes what a harness test already holds, replace it with that
+    test's name and the rule an author relies on.
+
+    What goes. Commit SHAs, run IDs and URLs, dated observations and measurements, per-slice
+    accounts of red and green evidence, row counts, and explanations of past failures. Delete them
+    and do not create a new file for them: an extra document would be another uncapped read, and
+    history already keeps the text. If a passage records a decision that no ledger entry, decision
+    record or registry item holds, keep only its rule and name the passage in the report to the
+    coordinator. Merge repeated statements of a rule into one. The no-race rule is stated three
+    times today.
+
+    References that must still resolve. Keep these headings exactly: Black-box boundary, Running
+    them, Product coverage, The CI engine tier, Cached fixture protocol, Fixture sources and
+    notices, Manual red-first evidence, Tags, Commit rules, The smoke set, Writing a scenario, and
+    The steps this branch's scenarios use. docs/upgrading.md, docs/plans/offline-run-lifecycle.md
+    and docs/decisions/0002 link three of them by anchor. Comments in anchors, checkout-overlap,
+    doctor, hardlinks, lifecycle, offline, recovery and run_exit .feature files, in
+    features_test.go and session_probe_test.go, in smoke.yaml and in tools/bin/engine-fixture and
+    engine-failure-report point at the guarded Linux amd64 CI tier, the cached fixture protocol,
+    the real-engine red-first procedure, the smoke rule, the known gap, the session assembly's
+    production limits, the failure report's purpose, and fixture sources and licenses. Each of
+    these must still be in the file. Leave those other files unchanged.
+
+    The cap. Add `cap features/README.md <n>` to tools/bin/doc-caps after the existing two lines.
+    The value n is the smallest multiple of 4096 that is at least the trimmed size plus 2048 bytes,
+    and it may not exceed 49152. The 2048 bytes of headroom are for T-72. Record the README's size
+    and date in the script's comment, beside the sizes it already records. Change nothing else in
+    the script. If the standing rules cannot fit under 49152, stop and report it. Do not cut a
+    rule, and do not raise the ceiling: under the script's own comment, raising a cap is a decision.
+
+    Tests and gates. At 5e9a173 no test reads features/README.md: the only mentions in Go code are
+    comments. If a merge from main brings in a test that pins removed prose, keep its assertion and
+    point it at the kept rule. No gate, workflow, feature file, step or product code changes.
+    Sibling branches that add evidence paragraphs will fail doc-caps once T-71 is on main. That is
+    the intended effect, and trimming those paragraphs falls to each branch. Before landing, merge
+    main and trim anything a sibling has landed in the meantime.
+
+    Commits and proof. One chore commit with Task T-71 carries features/README.md and
+    tools/bin/doc-caps. Neither file is a proof.code path or an enforcement input, so there is no
+    mutation proof and no fixture matrix. The range is not prose-only, because tools/bin/doc-caps
+    is not a prose path, so CI runs these checks; they are POSIX sh with GNU grep -P, as on
+    ubuntu-latest. The implementer may commit freely in its workspace. The host makes the landing
+    commits and runs itos, submission, publication and review.
+
+    How each check fails today. The first exits 1 at grep, because doc-caps has no README line. The
+    second reads an empty n, and the test refuses it. It also fails a cap set high enough to skip
+    the trim (anything above 49152), and a cap left loose or too tight around the trimmed size.
+    The third passes its heading, digest and license greps today. It fails on the history scan,
+    which finds 32 lines with a commit SHA or a run ID. If grep -P is unavailable it fails
+    (status 2 is not 1), and it fails again if a linked heading or the fixture provenance is
+    removed. The checks cannot tell whether a kept rule is complete or a removed one was history;
+    review of the diff against this entry judges that.
   done_when:
     - run: grep -qE '^cap features/README.md [0-9]+$' tools/bin/doc-caps && tools/bin/doc-caps
+    - run: >-
+        n=$(sed -n 's|^cap features/README.md \([0-9][0-9]*\)$|\1|p' tools/bin/doc-caps) &&
+        s=$(wc -c < features/README.md) && [ "$n" -le 49152 ] && [ $((n % 4096)) -eq 0 ] &&
+        [ $((s + 2048)) -le "$n" ] && [ "$n" -lt $((s + 6144)) ]
+    - run: >-
+        for h in '## Black-box boundary' '## Running them' '### Product coverage'
+        '### The CI engine tier' '### Cached fixture protocol' '#### Fixture sources and notices'
+        '### Manual red-first evidence' '## Tags' '## Commit rules' '## The smoke set'
+        '## Writing a scenario' "## The steps this branch's scenarios use"; do
+        grep -qxF "$h" features/README.md || exit 1; done &&
+        grep -qF 'docker.io/library/registry@sha256:5b12b22f21522fe69443079df04c0f3f42cb9977857f3c20404386652a6c6d8e' features/README.md &&
+        grep -qF 'docker.io/library/busybox@sha256:5624bb6777cf469b1fb50ae3f981b15d2715ee2fffaf20b9998cfb7843726835' features/README.md &&
+        grep -qF 'distribution/blob/v3.0.0/LICENSE' features/README.md &&
+        grep -qF 'busybox.net/license.html' features/README.md &&
+        { grep -nP '(?<![0-9A-Za-z])(?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])[0-9a-f]{7,40}(?![0-9A-Za-z])|(?<![0-9A-Za-z])[0-9]{11,}(?![0-9A-Za-z])' features/README.md; [ $? -eq 1 ]; }
 - id: T-72
   type: docs
   title: features/README.md requires engine source or native CI evidence for claims about exact mount option strings
