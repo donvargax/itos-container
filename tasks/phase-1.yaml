@@ -9097,3 +9097,14 @@
     p1-refresh-remaining-template-guidance.
   done_when:
     - run: grep -q 'core.hooksPath' README.md && grep -q 'pre-commit' README.md && grep -q 'commit-msg' README.md
+- id: T-74
+  type: chore
+  title: itos.yaml and release.yml comments describe this project, not a project made from the template
+  why: >
+    Comments inherited from the template still talk to 'a user of a project made from this template'
+    (itos.yaml:34). Reword those comments to describe itos-container. Keep the release workflow's
+    harvest and provenance notes from itos-template and its attribution unchanged. Change comments
+    only. No key, step or gate changes, so itos config check and the fixture matrix see identical
+    configuration. Broken down from p1-refresh-remaining-template-guidance.
+  done_when:
+    - run: "! grep -n 'made from this template' itos.yaml .github/workflows/release.yml && itos config check"

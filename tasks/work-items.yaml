@@ -2590,19 +2590,13 @@ items:
     status: todo
     depends_on: []
     kind: task
-  - id: p1-config-comments-own-project
+  - id: T-74
     title: itos.yaml and release.yml comments describe this project, not a project made from the template
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      Comments inherited from the template still talk to 'a user of a project made from this
-      template' (itos.yaml:34). Reword those comments to describe itos-container. Keep the release
-      workflow's harvest and provenance notes from itos-template and its attribution unchanged.
-      Change comments only. No key, step or gate changes, so itos config check and the fixture
-      matrix see identical configuration. Broken down from p1-refresh-remaining-template-guidance.
+    kind: task
   - id: p1-orchestrating-implemented-push-policy
     title: docs/ORCHESTRATING.md states the implemented CI and push policy
     phase: 1
