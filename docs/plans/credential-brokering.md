@@ -426,21 +426,28 @@ minting.
    and its lock file when the host has one, mounted read-write as a directory. The host's
    Codex reaches it through a symlink the person sets up (charter, step 2). No sandbox-only
    login and no API key.
-3. **Claude: the host's own login, mounted the same way.** No API key, no login of the
-   sandbox's own and no brokering. The charter's step 2 names "Claude's long-lived token from
-   a host file the person keeps", the `setup-token` token, which does not refresh. The login
-   that refreshes lives in `~/.claude/.credentials.json` [3]. Mounting it changes that line of
-   the charter, by the person's hand. Whether Claude Code rewrites the file in place or by
-   rename was not checked [unconfirmed]. If it renames, a single-file mount cannot carry it,
-   and it needs a dedicated directory, as q-72 gave Codex.
+3. **Claude: the host's own login, mounted as a single file.** No API key, no login of the
+   sandbox's own and no brokering. The login that refreshes lives in
+   `~/.claude/.credentials.json` [3], not in the `setup-token` token, which does not refresh.
+   The charter's step 2 now names that file, on the person's direction. Claude Code 2.1.330
+   writes it by renaming a temporary copy over it. When the rename fails with `EXDEV`,
+   `EPERM`, `EEXIST` or `EBUSY`, it truncates and rewrites the file in place instead, and a
+   rename over a bind-mounted file fails with `EBUSY`. So a single-file read-write mount
+   carries a refresh into the host's file. This was read from the shipped code, not yet run
+   against a mount [unconfirmed at runtime]. A directory mount like Codex's does not fit: the
+   host would reach the file through a symlink, and a host refresh renames a regular file
+   over that symlink, breaking the link; one reader also refuses a symlinked credentials
+   file. Two costs remain (analysis). Claude Code serializes its writes with a lock file in
+   its configuration directory, which a single-file mount does not share, so host and sandbox
+   refreshing at once can spend the same single-use refresh token and log one of them out.
+   And the in-place rewrite is not atomic, so a reader can see a half-written file.
 4. **The risks stay as option A states them.** The worker can read and copy the host's
    refresh tokens, which work until they expire or are revoked, and it can replace or break
    the host's Codex login. q-72 accepted that for Codex, and the person's direction accepts it
    for the local case as a whole.
-5. **GitHub: the token file passed in, as chartered.** The person's direction names the
-   model logins. This document reads "local means the shared host login" as keeping GitHub's
-   chartered token file too, with minted tokens moving to the remote design. That reading is
-   open (question 4).
+5. **GitHub: nothing beyond the charter.** Pushes stay on the host (the person,
+   2026-11-17). The sandbox gets no GitHub credential beyond the token file the charter
+   already passes in, and nothing is minted locally (question 4).
 
 ### Remote sandboxes: the broker design, deferred
 
@@ -474,8 +481,8 @@ copy gap for GitHub and for API keys, never for a subscription login.
 uses a real account (charter).
 
 1. Slice-31 and slice-33 as designed, with Codex on q-72's mount.
-2. The host's Claude login mounted, once the person changes the charter's step 2 line. Its
-   mount shape follows how Claude Code rewrites the file.
+2. The host's Claude login mounted as a single read-write file, as the charter's step 2 now
+   says. Its first scenario proves a rewrite inside the sandbox reaches the host's file.
 3. Remote sandboxes: the broker design, specified when remote sandboxes start.
 
 ## Questions for the person
@@ -484,17 +491,12 @@ Settled by the person on 2026-11-20:
 
 1. **Direction.** Local sandboxes share the host's own logins; remote sandboxes get the
    broker design, deferred until they exist. No interception, broker or minting now.
-2. **Claude login, local.** The host's own login, mounted. Open point: the charter's step 2
-   names the `setup-token` token, so mounting the refreshing login changes that line, by the
-   person's hand.
+2. **Claude login, local.** The host's own login: the refreshing
+   `~/.claude/.credentials.json`, mounted read-write as a single file. The charter's step 2
+   says so, amended on the person's word.
 3. **Codex login, local.** The host's own login, through q-72's mount, unchanged.
-
-Open now:
-
-4. **GitHub, local.** Recommended: keep the chartered token file passed in, as a
-   fine-grained token for one repository with an expiry the person sets, and accept that a
-   copy works until then. Alternative: mint a GitHub App installation token per run locally
-   too, which adds a long-lived App key on the host and a controller call to GitHub.
+4. **GitHub, local.** Pushes stay on the host (the person, 2026-11-17). The sandbox gets no
+   GitHub credential beyond what the charter already passes in.
 
 Deferred until remote sandboxes exist, to be asked then:
 
