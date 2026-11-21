@@ -428,7 +428,11 @@ Feature: An approved persistent home for one checkout's harness
   #   downgrade lockout belongs to p2-control-state-upgrade-contract.
   # - Doctor and approve show, before any consent: the harness name, profile
   #   opencode-v1, every environment name and value below, that OpenCode's
-  #   configuration, data and state live only in /home/itos, that the argv and
+  #   global configuration, data and state live in /home/itos, that the
+  #   checkout's own opencode.json and .opencode configuration also apply
+  #   (loaded before the profile, which overrides them where they conflict),
+  #   that any managed configuration in the approved image (/etc/opencode) loads
+  #   after the profile and overrides it, that the argv and
   #   the checkout choose the provider and model, that a provider is reachable
   #   only through the approved allowlist (for an offline policy: that no
   #   provider is reachable), and that this setting delivers no OpenCode login.
@@ -614,7 +618,7 @@ Feature: An approved persistent home for one checkout's harness
     Given an OpenCode approval fixture with an independently seeded approval of a volume home without harnesses and a requested OpenCode harness
     When ordinary doctor inspects the requested harness and bare approve runs at a terminal and receives "y" after the review
     Then doctor and the transcript before exactly one y/N prompt both show the OpenCode harness profile, its exact environment and the /home/harnesses difference with old and new values
-    And the review before its prompt states where OpenCode state lives, who chooses provider and model, that no provider is reachable offline and that no login is delivered
+    And the review before its prompt states where OpenCode's global configuration and state live, that the checkout's own OpenCode configuration applies, that managed configuration in the approved image overrides the profile, who chooses provider and model, that no provider is reachable offline and that no login is delivered
     And approval exits 0 and records the independently expected home object at the next generation
     And doctor and the persisted approval both carry the independently calculated new fingerprint, which differs from the seeded approval's fingerprint
     And no home volume or worker is created and checkout and host-home OpenCode sentinels are unchanged
