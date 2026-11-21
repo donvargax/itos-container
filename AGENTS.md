@@ -6,6 +6,10 @@ Read [docs/charter.md](docs/charter.md) first: it selects what may be built from
 `itos container` extension and offline owned-run milestone. The inherited counting CLI works;
 container commands and isolation are not implemented yet.
 
+[docs/decisions/STANDING.md](docs/decisions/STANDING.md) is the standing-decisions record: one
+short page of this project's settled calls. Read it whole before drafting or deciding; a
+proposal that contradicts a line goes back unless it names a new fact.
+
 The person's session coordinates with `itos go`. Follow the assigned brief and role; read
 `itos guide work` and `itos guide commit` before working and committing. Implement directly,
 without subagents. Read the registry with `itos work`; respect its ownership and never edit
