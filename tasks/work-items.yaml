@@ -1627,7 +1627,7 @@ items:
     title: run hands the approved Claude token to the workload; it appears nowhere in docker inspect, the checkout, status or logs
     phase: 1
     owner: donvargax
-    status: doing
+    status: todo
     depends_on: [slice-30, T-48]
     kind: slice
     why: >
