@@ -67,13 +67,18 @@ findings are inputs, not evidence.
    exception to preferring a library: no interception code exists in the tree. TLS interception
    may come later; if it does, the proxy first moves to a repository and project of its own.
 2. **Credentials passed in, never injected, never in the checkout:** per command, so they
-   never appear in the container's configuration or `docker inspect`. Claude's long-lived
-   token from a host file the person keeps. Codex shares the host's own login. Codex replaces
+   never appear in the container's configuration or `docker inspect`. Locally run sandboxes
+   share the host's own harness logins, so a token refresh lands in the one file every
+   instance uses (the person, 2026-11-20; q-90). Claude shares the host's own login: the
+   refreshing `~/.claude/.credentials.json`, mounted read-write as a single file. Claude Code
+   writes it by renaming a new copy over it and, when the rename fails as it does over a
+   mounted file, rewrites it in place; a symlink in its place does not survive that rename,
+   so the host keeps the real file. Codex shares the host's own login. Codex replaces
    `auth.json` by rename since 0.167.0 (decision 0025), so a single-file mount cannot carry it:
    `auth.json` lives in a dedicated host directory holding nothing else, mounted read-write as a
    directory, which the host's Codex reaches through a symlink the person sets up; its lock
-   file is shared too when the host has one (q-72). A GitHub token for `gh` and pushes, passed
-   as Claude's is.
+   file is shared too when the host has one (q-72). A GitHub token for `gh` and pushes, staged
+   read-only from a host file the person keeps (decision 0025).
 3. **A home for the harness:** a writable volume or tmpfs, never the host home; harness
    state seeded where its first run would otherwise stop or call home (Claude's onboarding
    flags; Codex with update checks, analytics and plugins off, and its own sandbox off because
