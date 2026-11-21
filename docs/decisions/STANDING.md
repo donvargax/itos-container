@@ -17,6 +17,16 @@ coordinator made. A change to a line is the person's, and it replaces the line.
   Codex's is the host's Codex home mounted read-write as a directory, with the worker's
   `auth.json` a symlink into it, because Codex renames a new copy over the file. 2026-11-20.
   `docs/charter.md:72`
+- The Codex grant binds the mounted directory's and its lock's device and inode; a changed
+  identity at the same path needs the person's consent again. This reopens 0029's rotation
+  and no-inode lines for the Codex home only. 2026-11-21.
+  `docs/decisions/0033-codex-home-identity-and-masks.md:15`
+- Inside the read-write Codex home mount, `config.toml` and `AGENTS.md` are read-only binds,
+  `sessions/` and the history files sit behind empty tmpfs, and `auth.json` and its lock stay
+  writable. A run notes an unknown file there as a finding, not a stop. A CI scenario proves
+  the refresh through the symlink with those masks. 2026-11-21.
+  `docs/decisions/0033-codex-home-identity-and-masks.md:35`,
+  `docs/decisions/0033-codex-home-identity-and-masks.md:51`
 - GitHub credentials stay on the host, and the host pushes and lands. A worker holds no
   GitHub token and no SSH key: an empty `gh` configuration and no SSH agent. If an agent must
   reach GitHub, it gets a one-hour token for one repository. 2026-11-17.
@@ -36,7 +46,7 @@ coordinator made. A change to a line is the person's, and it replaces the line.
   agents do and judge it against the item's scope; only an escalation reaches the person.
   2026-11-18. `docs/charter.md:165`
 - Edits to `.github/workflows` go through a normal pull request and this repository's own
-  gates, made by a worker in this repository. 2026-11-20. `docs/charter.md:168`
+  gates, made by a worker in this repository. 2026-11-20. `docs/charter.md:163`
 - CPU is precious and tokens matter less: the shared Go build cache, no `-count=1` by
   default, never rerun a suite on a commit that already ran. 2026-11-17.
   `docs/charter.md:171`
