@@ -2597,3 +2597,16 @@ items:
       TestFeatures fails too. That job runs only on a manual dispatch, so main never shows these.
       Either the tests handle a temp directory on another volume and an unsupported platform, or the
       job's scope says which tests Windows cannot run.
+  - id: p2-flaky-engine-suite-warmup-hanging-child
+    title: Stop TestEngineSuiteWarmup/failure_controls/hanging_child from failing by timing
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      In dispatched run 44877418171 on 2026-11-20 it failed once in Tests (ubuntu-latest) with
+      'watchdog fired before the intended blocking operation'
+      (features/engine_suite_warmup_regression_test.go:341), then passed when only that job was
+      rerun, on the same commit. A test that can fail on scheduling noise turns a branch's CI red
+      for nothing and costs a rerun of the whole job.
