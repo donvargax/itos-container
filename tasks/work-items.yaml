@@ -2687,14 +2687,15 @@ items:
       the frozen grant, the anchor binding and the last completed check, after current sources are
       removed, in text and JSON. It reads no source and changes no protected record. Run and stop
       later write this record, so it lands before them. Broken down from slice-32.
-  - id: codex-share-run-delivery
+  - id: slice-52
     title: Run rechecks the sources, binds the approved directory and lock through mount acquisition, and refuses deliveries that have not landed
     phase: 1
     owner: null
     status: todo
     depends_on: [slice-51]
-    kind: idea
+    kind: slice
     why: >
+      Was codex-share-run-delivery.
       This is the run stage: renumbered ID-CODEXAUTH-11, 12, 16, 17 and 15 without its final-check
       clause. Run repeats the inspection and alias rule before create. Each injected late fault
       gives its source or mount diagnostic, with proof the fault was applied and an unchanged
@@ -2709,7 +2710,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [codex-share-run-delivery]
+    depends_on: [slice-52]
     kind: idea
     why: >
       This is the teardown stage: renumbered ID-CODEXAUTH-18 to 20, plus ID-CODEXAUTH-15's 'with a
