@@ -2673,14 +2673,15 @@ items:
       are refused. A safe auth.json replacement keeps the grant. A different directory or lock gives
       the single `/credentials` difference. Consent cannot publish a substituted directory.
       Approve's help carries the disclosures. Broken down from slice-32.
-  - id: codex-share-session-record
+  - id: slice-51
     title: Status reads a frozen Codex grant and its last completed source check from the session record without touching current sources
     phase: 1
     owner: null
     status: todo
     depends_on: [slice-50]
-    kind: idea
+    kind: slice
     why: >
+      Was codex-share-session-record.
       This is the session-record stage: renumbered ID-CODEXAUTH-13. The decoder gains the Codex
       record form from the contracts task, kept separate from schema-4 token staging. Status shows
       the frozen grant, the anchor binding and the last completed check, after current sources are
@@ -2691,7 +2692,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [codex-share-session-record]
+    depends_on: [slice-51]
     kind: idea
     why: >
       This is the run stage: renumbered ID-CODEXAUTH-11, 12, 16, 17 and 15 without its final-check
