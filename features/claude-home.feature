@@ -73,15 +73,74 @@ Feature: Claude starts with onboarding completed in its private persistent home
   # https://code.claude.com/docs/en/settings
   # distinguishes Claude's mutable .claude.json from settings.json.
   # https://github.com/anthropics/claude-code/releases/tag/v2.1.325
-  # The published @anthropic-ai/claude-code-linux-x64 2.1.325 package resolves
-  # .claude.json under CLAUDE_CONFIG_DIR, gates initial onboarding on the true
-  # hasCompletedOnboarding flag, and can prefer legacy .config.json when present.
-  # Its source inspection is a design input; CLAUDEHOME-10 must prove consumption.
-  # Pin that CI-only package, fetched from the official npm registry, to integrity
-  # sha512-BqZzMvP/zgLLL34S+7OzbG+cyoFp7gwWHU5koVwsyMlTAz+0zZAmbY+UkzvtN2RXxp6AcMenbYIjQJxoXfUY3w==
-  # and bind the prepared fixture image by digest. Keep its license/notices; it is
-  # not relicensed under this repository's AGPL. No floating latest installation
-  # or production version-discovery execution. Other versions gain no support claim.
+  # Claude 2.1.325 resolves .claude.json under CLAUDE_CONFIG_DIR, gates initial
+  # onboarding on the true hasCompletedOnboarding flag, and can prefer legacy
+  # .config.json when present. That reading is a design input; CLAUDEHOME-10 must
+  # prove consumption. Keep Claude's own terms and notices: it is not relicensed
+  # under this repository's AGPL and is never committed, cached in the repository or
+  # published. No floating latest installation or production version-discovery
+  # execution. Other versions gain no support claim.
+  #
+  # CI Claude fixture image, the only way CLAUDEHOME-10 obtains Claude:
+  # - Source: the GitHub release asset
+  #   https://github.com/anthropics/claude-code/releases/download/v2.1.325/claude-linux-x64.tar.gz
+  #   of exactly 167356144 bytes with sha256
+  #   9686b0fb1eefbd7f2cc1f53f932516c29cd605e9d976223323a6c6e9a4c9c7fe, the digest
+  #   GitHub publishes for it, confirmed by the drafter's download on 2026-11-21.
+  #   No npm registry, install script or other host. Its only tar entry is the
+  #   regular file claude, 365842960 bytes, mode 0755: a dynamically linked glibc
+  #   ELF with interpreter /lib64/ld-linux-x86-64.so.2 that needs exactly
+  #   librt.so.1, libc.so.6, ld-linux-x86-64.so.2, libpthread.so.0, libdl.so.2 and
+  #   libm.so.6.
+  # - Fetcher: a trusted CLAUDEHOME-10 Given in features, run only with the engine
+  #   switch on in GitHub Actions. It uses Go net/http with no proxy, HTTPS only,
+  #   reaches github.com and its redirect target release-assets.githubusercontent.com,
+  #   and refuses any other redirect host. It streams into a fresh 0700 directory
+  #   under RUNNER_TEMP, outside every checkout. It refuses a length or sha256
+  #   mismatch; any other entry, name, size, type or link; and any other interpreter
+  #   or needed-library set, read with debug/elf. Nothing downloaded runs on the
+  #   runner host.
+  # - Image: the busybox fixture cannot load that ELF. The same Given therefore
+  #   derives one image from the cached ITOS_CONTAINER_ENGINE_FIXTURE_IMAGE, without
+  #   pulling, using Moby's classic builder. It adds claude at
+  #   /opt/slice-36/claude-2.1.325/claude, plus the runner's own loader and the five
+  #   named libraries, copied as regular files to the absolute paths they resolve to
+  #   on the runner. The derived config keeps the fixture's USER, empty entrypoint
+  #   and CMD. The copied glibc keeps its LGPL terms and stays CI-only.
+  # - Digest: the image is published through a loopback registry started from the
+  #   registry pin that preparation already cached. Its tag and digest references
+  #   are removed and it is pulled back by digest, and the registry is then
+  #   removed, as tools/bin/engine-fixture does for the base image. The manifest and
+  #   the independently written approval then bind
+  #   127.0.0.1:<port>/slice-36-claude@sha256:<digest> with the derived image ID.
+  #   Before any product call, a control container from that image runs claude
+  #   --version on network none as the fixture identity. It must exit 0 with 2.1.325
+  #   in its output.
+  # - Delivery: no new step output, no ci.yml or tools/bin/engine-fixture edit, and
+  #   no change to the busybox recipe or its pins in engine_fixture_test.go. The test
+  #   reads only the four existing fixture inputs, so no host-owned workflow edit is
+  #   needed. Fixture teardown removes the derived image references, containers and
+  #   runner directory the Given created, and never the pinned base or registry.
+  # - Budget: one fetch and build per test process, within 120 s in total. Download
+  #   and verification take at most 90 s across up to three attempts. The time is
+  #   spent in the other shard's Engine scenarios step: inside its 600 s hang guard
+  #   and the 10 m test timeout, and counted toward its 180 s soft warning. Record the
+  #   preparation duration in that row's engine timing record. If the shard then
+  #   exceeds its soft budget, moving claude-home.feature to a shard of its own is a
+  #   host-owned workflow change under decision 0024, not part of this slice. A
+  #   fetch, verification, build or control failure is a fixture failure, never red
+  #   or green evidence.
+  # - Fake Messages service, its CA and DNS: a trusted static Go program in
+  #   features/testdata/slice-36/messages. It is built like slice-27's endpoint and
+  #   run the same way, from the fixture image on a fixture network. It makes its own
+  #   throwaway CA and a leaf for messages.example and publishes only ca.pem. It
+  #   answers POST /v1/messages with fixed fake turns, answers 404 to anything else,
+  #   and records the method, path and host of every request. DNS is that network's
+  #   alias messages.example, which the product's proxy resolves once the harness
+  #   attaches it, as in slice-27. The CLAUDEHOME-10 policy allowlists only
+  #   messages.example. The fixture child environment sets
+  #   ANTHROPIC_BASE_URL=https://messages.example and points NODE_EXTRA_CA_CERTS at
+  #   the published ca.pem, copied into the checkout.
   #
   # Retention and path decisions:
   # - On EVERY selected run inspect the owned home and fixed Claude paths before
@@ -193,6 +252,8 @@ Feature: Claude starts with onboarding completed in its private persistent home
   #   Keep that assignment for CI red dispatch; all eleven scenarios remain @wip.
   #   Add a smoke entry when a scenario becomes live. No local engine, full-features
   #   race run, generated coverage or mutation evidence belongs to this draft.
+  # - The implementer may commit freely in its workspace; the host makes the
+  #   landing commits.
   # - Neighbours: HOME policy/approval/runtime/recovery and retained-state cases,
   #   CODEXHOME selection once merged, POLICY/MANIFEST reserved-variable checks,
   #   APPROVAL/RUN frozen inputs and literal argv, OFFLINE/ANCHORS/LIFECYCLE/RECOVERY,
@@ -366,7 +427,8 @@ Feature: Claude starts with onboarding completed in its private persistent home
   # unseeded one must show initial onboarding. Stop/join both after observation.
   # A headless -p success alone does not prove the onboarding flag was consumed.
   # Then run real -p and --resume through two product runs and a deterministic fake
-  # Messages service with test-only DNS/CA and an explicitly approved proxy route.
+  # Messages service with test-only DNS/CA and an explicitly approved proxy route,
+  # all provisioned as in "CI Claude fixture image" above.
   # Only the fixture child environment supplies the fake endpoint and a synthetic
   # nonsecret auth marker; no credential grant, real token, account or model. It
   # must preserve both selected environment values and state for every seeded
