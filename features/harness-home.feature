@@ -365,27 +365,36 @@ Feature: An approved persistent home for one checkout's harness
   #   run on their OpenCode Go login with a real credential approved for that
   #   check only, is done. Its record, docs/proof/slice-41-opencode-smoke.md
   #   (c8fab73, linked from the item at 1b44058), is the sole authority for what
-  #   OpenCode itself does: that `opencode --standalone run --format json` is
-  #   accepted as written, where inline OPENCODE_CONFIG_CONTENT falls in the
-  #   order of its configuration layers (the global, OPENCODE_CONFIG, project,
-  #   account and managed layers included), and what each
-  #   OPENCODE_DISABLE_* setting below switches off, each with its off/on
-  #   control. This spec repeats none of those findings and claims no OpenCode
-  #   behaviour beyond them; its scenarios test only what the product controls.
+  #   OpenCode itself does, and the opencode-v1 table below is drawn from it:
+  #   `opencode --standalone run --format json` is accepted as written (its
+  #   finding 2); v2.2.1 loads, in order, managed policies, integrations, remote
+  #   well-known configuration, the global file, OPENCODE_CONFIG, project files,
+  #   .opencode directories, inline OPENCODE_CONFIG_CONTENT and then managed
+  #   settings, which override everything (finding 3); and of the
+  #   OPENCODE_DISABLE_* names an earlier draft used, v2.2.1 reads only
+  #   AUTOUPDATE and MODELS_FETCH (finding 4). This spec claims no OpenCode
+  #   behaviour beyond that record; its scenarios test only what the product
+  #   controls.
   # - Before building the opencode-v1 table, the implementer reads that record.
-  #   If it shows that v2.2.1 rejects the argv above, that a value in the table
-  #   below has no effect, or that the table needs a value it lacks, the
-  #   implementer stops and reports to the coordinator. They do not adapt the
-  #   table or the scenarios. Any change to the table is a feat commit with a
-  #   new profile ID and a new approval. The stand-in rows keep their shape.
-  #   Another OpenCode release needs its own smoke check before a new profile.
-  # - In this slice the account layer has no source, because no OpenCode login
-  #   is delivered (slice-40 owns it). Whatever managed configuration the
-  #   approved image holds is in its read-only root filesystem, which the worker
-  #   cannot write. It is the person's approved, digest-pinned input and may
-  #   override the profile. The profile prevents unintended startup calls as a
-  #   convenience. It is not an isolation property: the approved egress proxy
-  #   stays the only route out and the egress boundary.
+  #   The table follows it as of 2026-11-21. If the implementer finds the two
+  #   disagreeing, they stop and report to the coordinator; they do not adapt
+  #   the table or the scenarios. Any later change to the table is a feat commit
+  #   with a new profile ID and a new approval. The stand-in rows keep their
+  #   shape. Another OpenCode release needs its own smoke check before a new
+  #   profile.
+  # - v2.2.1 has no separate account configuration layer (finding 3), and this
+  #   slice delivers no OpenCode login (slice-40 owns it). Managed settings load
+  #   after the inline content and override it; on Linux they live in
+  #   /etc/opencode. OPEN, 2026-11-21: whether the person's approved image holds
+  #   any managed configuration. The record could not establish it, since no
+  #   image was used, and the person has not yet checked it. Until the person
+  #   settles it, this spec treats whatever managed configuration the approved
+  #   image holds as the person's approved, digest-pinned input: it sits in the
+  #   image's read-only root filesystem, which the worker cannot write, and it
+  #   may override the profile. No row depends on the answer. The profile
+  #   prevents unintended startup calls as a convenience. It is not an
+  #   isolation property: the approved egress proxy stays the only route out and
+  #   the egress boundary.
   # - The OpenCode login (auth.json under ~/.local/share/opencode) belongs to
   #   slice-40. This slice delivers no credential and no row needs one: the fake
   #   provider accepts unauthenticated synthetic requests.
@@ -441,19 +450,37 @@ Feature: An approved persistent home for one checkout's harness
   # Runtime decisions (profile opencode-v1):
   # - The controller sets exactly these worker environment values, sorted, beside
   #   the home mappings above, overriding any image default:
-  #     OPENCODE_CONFIG_CONTENT={"autoupdate":false,"share":"disabled"}
+  #     OPENCODE_CONFIG_CONTENT={"share":"disabled"}
   #     OPENCODE_DISABLE_AUTOUPDATE=true
-  #     OPENCODE_DISABLE_DEFAULT_PLUGINS=true
-  #     OPENCODE_DISABLE_LSP_DOWNLOAD=true
   #     OPENCODE_DISABLE_MODELS_FETCH=true
   #   The inline config value is those exact bytes, with no spaces or newline.
-  #   Each name is one the person's v2.2.1 smoke record exercised with an
-  #   off/on control. What each switches off on v2.2.1, and which configuration
-  #   layers the inline keys win over or lose to, are that record's findings,
-  #   not this spec's, as the target-release bullet above says. In ID-HOME-31
-  #   the proxy refuses the startup-service names, which is a proxy property and
-  #   never evidence of any setting's effect. The values are non-secret and
-  #   appear in docker inspect.
+  #   What the smoke record supports for each value on v2.2.1:
+  #   - OPENCODE_DISABLE_MODELS_FETCH turns off the models catalogue fetch. It
+  #     is the one value with an off/on control seen on the wire: a headless
+  #     run connected to models.opencode.ai:443 without it and made no such
+  #     request with it (findings 4 and 5).
+  #   - OPENCODE_DISABLE_AUTOUPDATE is read in the source and skips the update
+  #     check before anything else (finding 4). No off/on control showed `run`
+  #     checking for updates at all, so it is kept as a safeguard, not as an
+  #     observed effect.
+  #   - OPENCODE_CONFIG_CONTENT is read as the inline layer (findings 3 and 4).
+  #     share "disabled" is a value v2.2.1's loader keeps (finding 3). No run
+  #     showed a share request either way, so it too is a safeguard. The legacy
+  #     autoupdate key is left out: v2.2.1 rewrites it to update, and the
+  #     updater never reads the merged configuration (findings 3 and 4), so it
+  #     would switch nothing off.
+  #   - OPENCODE_DISABLE_DEFAULT_PLUGINS and OPENCODE_DISABLE_LSP_DOWNLOAD are
+  #     left out: v2.2.1 reads neither (finding 4).
+  #   - No value stops the bundled LM Studio, Ollama and vLLM providers'
+  #     plain-HTTP probes of 127.0.0.1 ports 1234, 11434 and 8000 (finding 5).
+  #     In the worker NO_PROXY names 127.0.0.1 (egress.feature), so a client
+  #     that honours it probes the worker's own loopback; one that does not
+  #     sends plain HTTP proxy requests, which the proxy refuses as it refuses
+  #     ID-EGRESS-13's GET. Either way nothing leaves the worker. The profile
+  #     claims nothing about these probes and no row tests them.
+  #   In ID-HOME-31 the proxy refuses the startup-service name
+  #   models.opencode.ai, which is a proxy property and never evidence of any
+  #   setting's effect. The values are non-secret and appear in docker inspect.
   # - Seed by environment only: run writes no OpenCode file into the home, makes
   #   no archive copy beyond the root initialization above, and adds no mount.
   #   Every run reapplies the profile, so a repeat run needs no reseeding and
@@ -531,8 +558,8 @@ Feature: An approved persistent home for one checkout's harness
   # Native Givens provision only trusted controls, the stand-in, private state
   # and synthetic approval; no real model, account, credential, public endpoint
   # or resolver rewrite. Fake provider TLS uses in-memory ephemeral keys.
-  # ID-HOME-31's startup-service names are refused by the proxy before any dial;
-  # their independent controls are fixture aliases, never real hosts. This file
+  # ID-HOME-31's startup-service name is refused by the proxy before any dial;
+  # its independent control is a fixture alias, never a real host. This file
   # is already in the offline shard and features/smoke.yaml; ID-HOME-31 needs the
   # egress fixtures inside that shard, within its time limit. Non-engine red runs
   # are local; every @engine red and green run is CI-only, by dispatch.
@@ -690,8 +717,9 @@ Feature: An approved persistent home for one checkout's harness
   # equal to the approved bytes cannot be told from a controller-supplied one,
   # so every defect is missing or differs from those bytes. The two image rows
   # give the synthetic image a conflicting default and observe it left in
-  # effect: OPENCODE_CONFIG_CONTENT={"autoupdate":true} and
-  # OPENCODE_DISABLE_LSP_DOWNLOAD=false.
+  # effect: OPENCODE_CONFIG_CONTENT={"share":"auto"} and
+  # OPENCODE_DISABLE_MODELS_FETCH=false. Every row names a kept opencode-v1
+  # value; each name has a missing row and a differing row.
   @wip @slice-41 @ID-HOME-29 @local-engine-fixture
   Scenario Outline: Boundary inspection refuses a worker without the exact OpenCode profile
     Given an OpenCode launch fixture whose worker inspection has "<defect>" and an independent correct OpenCode control
@@ -702,12 +730,12 @@ Feature: An approved persistent home for one checkout's harness
     Examples:
       | defect                                                        |
       | OPENCODE_CONFIG_CONTENT left at the image's conflicting value |
+      | OPENCODE_CONFIG_CONTENT missing                               |
+      | inline config with sharing set to auto                        |
       | OPENCODE_DISABLE_MODELS_FETCH missing                         |
+      | OPENCODE_DISABLE_MODELS_FETCH left at the image's false       |
       | OPENCODE_DISABLE_AUTOUPDATE set to false                      |
-      | OPENCODE_DISABLE_DEFAULT_PLUGINS missing                      |
-      | OPENCODE_DISABLE_LSP_DOWNLOAD left at the image's false       |
-      | OPENCODE_DISABLE_LSP_DOWNLOAD missing                         |
-      | inline config with autoupdate enabled                         |
+      | OPENCODE_DISABLE_AUTOUPDATE missing                           |
 
   # Recovery and bounded operations. Independently seeded home-aware records
   # are not accepted by the old codec: first Then is red, never a setup assertion.
@@ -934,9 +962,9 @@ Feature: An approved persistent home for one checkout's harness
     And after each run its worker and anchor are absent while the home remains and the host-home sentinels and checkout ownership are unchanged
 
   # Reuses the egress native fixture (README, slice-27's engine rows): every
-  # name, provider.example and the startup-service names alike, is a
+  # name, provider.example and the startup-service name alike, is a
   # controlled TLS alias of a fixture endpoint on a fixture network, so no
-  # request needs ambient DNS and a proxy that forwarded a startup-service name
+  # request needs ambient DNS and a proxy that forwarded the startup-service name
   # would reach a fixture receipt, never a public service. The stand-in stops at
   # the fixture's barrier file in its checkout; there the harness attaches only
   # the proxy to the fixture network, never the worker or the product's two
@@ -944,11 +972,14 @@ Feature: An approved persistent home for one checkout's harness
   # worker starts is captured in When and fails the first Then. Generic
   # allowlist behaviour supplies the network assertions, so the nonce receipt
   # counts only after the stand-in has reported the opencode-v1 profile and the
-  # fake model it received.
+  # fake model it received. The startup-service name is models.opencode.ai, the
+  # catalogue host the smoke record saw on v2.2.1 (finding 5). opencode.ai is the
+  # OpenCode Go provider's own host, not a startup service, and models.dev and
+  # registry.npmjs.org were not seen on v2.2.1, so none of them is listed.
   @wip @slice-41 @ID-HOME-31 @engine @linux
   Scenario: OpenCode reaches only its approved fake provider and its startup services stay closed
     Given a CI OpenCode checkout allowing "provider.example" with an approved volume home with the OpenCode harness, matching protected approval and a synthetic opencode stand-in installed at "/workspace/opencode"
-    And independent fixture TLS aliases with nonce receipts for "provider.example opencode.ai models.dev registry.npmjs.org" on a fixture network
+    And independent fixture TLS aliases with nonce receipts for "provider.example models.opencode.ai" on a fixture network
     When the product runs "/workspace/opencode --standalone run --format json --model fake/fake-model say-ok" and at the stand-in's checkout barrier the harness attaches only the proxy to the fixture network
     Then the run is not refused before its worker starts and the stand-in reports its literal argv, the opencode-v1 environment and model "fake/fake-model" before it sends its model request
     And the fake provider receives exactly the stand-in's nonce request through the proxy variables and the stand-in prints its final JSON event on run's stdout
