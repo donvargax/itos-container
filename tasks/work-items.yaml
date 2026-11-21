@@ -2631,14 +2631,15 @@ items:
     status: todo
     depends_on: [slice-30, T-48]
     kind: task
-  - id: codex-share-policy
+  - id: slice-48
     title: Policy version 4 accepts one closed Codex entry, with or without harness home, and older versions keep their meaning
     phase: 1
     owner: null
     status: todo
     depends_on: [T-76]
-    kind: idea
+    kind: slice
     why: >
+      Was codex-share-policy.
       This is the policy stage: renumbered ID-CODEXAUTH-01 and 02. The strict parser accepts `{kind:
       codex-auth, source, lock}` with its closed fields, and with the landed `home` field as the
       contracts task settles. Version 3 is still refused exactly as before, and other field defects
@@ -2648,7 +2649,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [codex-share-policy]
+    depends_on: [slice-48]
     kind: idea
     why: >
       This is the inspection stage: renumbered ID-CODEXAUTH-03 to 05. It adds the alias rule from
