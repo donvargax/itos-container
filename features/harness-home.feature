@@ -575,7 +575,10 @@ Feature: An approved persistent home for one checkout's harness
   # (predictions, not executed evidence), always at the first Then, never in a
   # Given or When:
   # - ID-HOME-25, 26, 27, 30 and 31 parse the raw policy, which refuses
-  #   /home/harnesses as policy.unknown_key with exit 2.
+  #   /home/harnesses as policy.unknown_key with exit 2. The exception is
+  #   ID-HOME-27's removing mismatch, whose policy has no harnesses: its
+  #   approval record does carry them, and the strict record decode refuses
+  #   it. Neither refusal names /home/harnesses as changed approval.
   # - ID-HOME-28 and 29 never parse policy: the local contract supplies the
   #   approval view in test code. On the disk backend the session codec's
   #   FrozenRecord re-encodes the frozen settings, drops the unknown harnesses
@@ -626,17 +629,31 @@ Feature: An approved persistent home for one checkout's harness
   # itos-container binary's own `run`, so production approval preflight
   # (approval domain Preflight with the disk readiness, disk store and
   # canonical codec that cmd assembles) parses the policy, decodes the records
-  # and computes the difference. Engine connections are recorded at a fixture
-  # engine endpoint outside preflight, as ID-EGRESS-01's "no endpoint
-  # connection was attempted" is. Each mismatch makes no connection there, and
-  # each matching control's connection must be recorded there and reach its
-  # runtime boundary.
+  # and computes the difference.
+  # The engine endpoint is the plain doctor Engine API fixture that "an
+  # approval checkout and isolated host state" starts (doctorLocalAPI,
+  # features/doctor_engine_test.go) at each checkout's DOCKER_HOST. It counts
+  # connections at its listener and journals every request, outside preflight.
+  # It is never the offline or egress fixture, so the When runs the real binary
+  # and not the session probe. Each mismatch leaves the listener with no
+  # connection and the journal empty, as ID-EGRESS-01 judges. A matching
+  # control's runtime boundary is run's read-only readiness inspection, which
+  # run makes only after its local approval preflight has passed. The boundary
+  # is reached when that control's journal holds GET /version, GET /info and
+  # GET /images/<approved image>/json, and run reports no run.approval-changed.
+  # The fixture answers every later request 403. Those requests and the run's
+  # later outcome and exit are not judged here, and no worker environment is
+  # judged: ID-HOME-28 proves the OpenCode environment.
+  # Before the work the removing control (neither side has harnesses) is
+  # slice-34's behaviour and already reaches the boundary, so it is a
+  # regression control. The adding control fails at policy.unknown_key, exit 2,
+  # with no connection.
   @wip @slice-41 @ID-HOME-27 @local-engine-fixture
   Scenario: Adding and removing the OpenCode harness both require approval
     Given OpenCode harness approval mismatch checkouts with raw policies and independently encoded approval records for adding and removing the harness and matching controls
     When the itos-container binary runs each changed request and then each matching control through its production approval preflight
-    Then each mismatch reports changed approval at /home/harnesses with exit 1 and the recording engine endpoint saw no connection
-    And each matching control connects to the recording engine endpoint and reaches its requested runtime boundary with or without the OpenCode environment as approved
+    Then each mismatch reports changed approval at /home/harnesses with exit 1 and the Engine API fixture saw no connection and journalled no request
+    And each matching control reports no approval change and its Engine API fixture journal holds the readiness inspection of version, info and the approved image
 
   # Frozen-input and local lifetime. Red at each first Then: no home profile,
   # no home mount or no home ownership operation exists in the baseline.
