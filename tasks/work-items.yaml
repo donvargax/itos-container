@@ -2582,3 +2582,18 @@ items:
       (seen in dispatched run 44877418171 on 2026-11-20). That job runs only on a manual dispatch,
       so main never shows it. A portable lowercase (tr, or a case pattern for both spellings) keeps
       the manual macOS portability coverage meaningful.
+  - id: p2-windows-coverage-and-admission-tests
+    title: Fix the Windows-only failures in the scenario coverage and credential admission tests
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      In the manual Tests (windows-latest) job (dispatched run 44877418171, 2026-11-20),
+      TestScenarioCoverageContract fails at features/cover_test.go:47: filepath.Rel cannot relate
+      the runner's temp directory on C: to the checkout on D:. TestCredentialAdmissionProcess fails
+      with 'unsupported' at cmd/itos-container/credential_admission_contract_test.go:86, and
+      TestFeatures fails too. That job runs only on a manual dispatch, so main never shows these.
+      Either the tests handle a temp directory on another volume and an unsupported platform, or the
+      job's scope says which tests Windows cannot run.
