@@ -1,4 +1,4 @@
-# T-45: the engine tier runs in three shards of whole features, each inside 180 seconds
+# T-45: the engine tier runs in three shards of whole features, each aiming at 180 seconds
 
 Recorded for T-45 on 2026-11-09. This overrides the part of [arc42](../architecture/arc42.md),
 **Future behaviour evidence**, that describes one dedicated `Engine scenarios (Linux amd64)`
@@ -88,6 +88,31 @@ home engine rows across `ID-HOME-13`, `14`, `15` and `23`, all still `@wip`. Nor
 counts remain 24/19/32; manual red selection assigns the nine home rows only to offline.
 The workflow, negative-control inventory and selector regression use that placement.
 No home runtime timing or red behaviour evidence is claimed by this assignment.
+
+### Soft budget, 2026-11-20
+
+T-69 supersedes this record's 180-second failure and its 4, 5 and 10 minute limits, on the
+person's standing rule that caps are soft and warn and only a hang guard stops. 180 seconds is
+now a target for each shard's step.
+
+- Every run prints `engine step timing: duration_ms=... outcome=...`. Above 180 seconds the
+  step prints a `::warning::` naming the shard and its time and does not fail. Above 600 seconds
+  it also prints an `::error::` naming the hang guard. Both annotations follow elapsed time
+  alone and print whatever the outcome.
+- The only time-based failure is a run that otherwise passed and took more than 600 seconds;
+  exactly 600 seconds passes, and a run that failed keeps its own exit status.
+- There is no watchdog. The guard runs when the step ends, so it is not a timer. A real hang is
+  stopped by Go's `-test.timeout=10m`, counted from the test program's start, at about 606
+  seconds with the compile time added. That run fails with Go's `running tests:` panic and keeps
+  its own status. The 600-second guard therefore fails only a passing run that ended past 600
+  seconds, in practice between 600 and about 606.
+- The Go test timeout becomes 10 minutes, the Engine scenarios step 11 and the shard job 15.
+  Fifteen minutes are enough in practice, since a hang ends near 10.1 minutes; they are not a
+  sum of every cap at its limit. Fixture preparation keeps its 4 minutes.
+- If a shard keeps warning, the person decides whether to move a feature whole to another
+  shard; no warning moves one.
+
+The history above stays as written.
 
 ## Alternatives left
 

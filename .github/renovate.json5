@@ -1,34 +1,51 @@
 // Renovate's shared rules come from the owner's preset repository.
 {
-	$schema: "https://docs.renovatebot.com/renovate-schema.json",
-	extends: [
+	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
+	"extends": [
 		"github>donvargax/renovate-config#v1.3.0",
 		"github>donvargax/renovate-config:go#v1.3.0",
 	],
-	enabledManagers: ["gomod", "github-actions", "renovate-config"],
+	"enabledManagers": ["gomod", "github-actions", "renovate-config", "custom.regex"],
 
 	// itos moves with its config pin and workflow action, not through Renovate.
-	ignoreDeps: ["donvargax/itos"],
-	automergeType: "branch",
-	automergeSchedule: ["at any time"],
-	semanticCommits: "enabled",
-	commitBody: "Renovate's update, landed on main once CI passed on its branch.\n\n{{#each upgrades}}{{#unless @first}}\n{{/unless}}- {{{depName}}} {{#if (equals updateType 'digest')}}{{{currentDigestShort}}} to {{{newDigestShort}}}{{else}}{{{currentVersion}}} to {{{newVersion}}}{{#if newDigestShort}} ({{{newDigestShort}}}){{/if}}{{/if}}{{/each}}",
-	commitTrailers: ["Task: T-2"],
+	"ignoreDeps": ["donvargax/itos"],
+	"automergeType": "branch",
+	"automergeSchedule": ["at any time"],
+	"semanticCommits": "enabled",
+	"commitBody": "Renovate's update, landed on main once CI passed on its branch.\n\n{{#each upgrades}}{{#unless @first}}\n{{/unless}}- {{{depName}}} {{#if (equals updateType 'digest')}}{{{currentDigestShort}}} to {{{newDigestShort}}}{{else}}{{{currentVersion}}} to {{{newVersion}}}{{#if newDigestShort}} ({{{newDigestShort}}}){{/if}}{{/if}}{{/each}}",
 
-	packageRules: [
+	// Every Renovate commit runs the checks of the task named here (itos ci run reads the
+	// footers). T-70's check fails a tool version moved without its refreshed SHA-256 and
+	// asset ID, so such a branch goes red and branch automerge never lands it.
+	"commitTrailers": ["Task: T-70"],
+
+	// Renovate proposes versions of the tools pinned in tools/bin/pinned. It cannot read a
+	// release asset's numeric ID, so the match covers the version line alone and never a
+	// for_version stamp. The launcher refuses a version whose pins were not refreshed.
+	"customManagers": [
 		{
-			matchPackageNames: ["*"],
-			semanticCommitType: "build",
-			semanticCommitScope: null,
+			"customType": "regex",
+			"managerFilePatterns": ["/^tools/bin/pinned$/"],
+			"matchStrings": ["# renovate: depName=(?<depName>\\S+)\\n\\t+version=(?<currentValue>\\S+)\\n"],
+			"datasourceTemplate": "github-releases",
+			"extractVersionTemplate": "^v(?<version>.+)$",
+		},
+	],
+
+	"packageRules": [
+		{
+			"matchPackageNames": ["*"],
+			"semanticCommitType": "build",
+			"semanticCommitScope": null,
 		},
 		{
-			matchManagers: ["github-actions", "renovate-config"],
-			semanticCommitType: "ci",
-			semanticCommitScope: null,
+			"matchManagers": ["github-actions", "renovate-config"],
+			"semanticCommitType": "ci",
+			"semanticCommitScope": null,
 		},
 		{
-			matchManagers: ["github-actions"],
-			pinDigests: true,
+			"matchManagers": ["github-actions"],
+			"pinDigests": true,
 		},
 	],
 }

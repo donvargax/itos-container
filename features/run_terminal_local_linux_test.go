@@ -413,16 +413,29 @@ func (w *world) terminalLocalSteps(sc *godog.ScenarioContext, fixture **terminal
 		f.local = true
 		e := newTerminalEngine()
 		e.hold, e.exit, e.killDelay = true, 17, 2*time.Second
+		e.startDelay = time.Second
 		w.doctor.engine.offline.terminal = e
 		w.doctor.cleanup = append(w.doctor.cleanup, e.finish)
 		closed, signalled := false, false
+		var idError error
 		f.action = func(cmd *exec.Cmd) {
-			select {
-			case <-e.ready:
-			default:
-				return
-			}
 			if !closed {
+				// Launch is complete only once the controller itself waits on the
+				// worker; the fake's output frame can come while Start still runs.
+				api := w.doctor.engine.offline
+				api.mu.Lock()
+				ids := make([]string, 0, 1)
+				for id := range api.started {
+					ids = append(ids, id)
+				}
+				api.mu.Unlock()
+				if len(ids) > 1 {
+					idError = fmt.Errorf("expected one started worker, found %d", len(ids))
+					return
+				}
+				if len(ids) == 0 || !launchObserved(w.doctor.engine.requests(), cmd.Process.Pid, ids[0]) {
+					return
+				}
 				closed = true
 				_ = f.master.Close()
 				f.master = nil
@@ -442,7 +455,10 @@ func (w *world) terminalLocalSteps(sc *godog.ScenarioContext, fixture **terminal
 				}
 			}
 		}
-		return f.invoke("run --tty -- fixture-workload", "0")
+		if err := f.invoke("run --tty -- fixture-workload", "0"); err != nil {
+			return err
+		}
+		return idError
 	})
 	sc.Step(`^terminal run reports "run.terminal-disconnected" and returns the workload exit (\d+)$`, func(exit int) error {
 		f := *fixture

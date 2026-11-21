@@ -77,6 +77,45 @@ follow the assigned brief, `itos guide work` and `itos guide commit`. Agents com
 items after the actual pushed head is green and required proof passes. Hooks and CI judge
 the configured rules; published history is not rewritten.
 
+## Local commit hooks
+
+Hooks cannot be committed, so a fresh clone has none. Run these once in each clone. They write
+the clone's local git config, shared by its worktrees, and need git 2.54.0 or later:
+
+```sh
+itos hook install
+git config hook.itos-container-pre-commit.event pre-commit
+git config hook.itos-container-pre-commit.command tools/hooks/pre-commit
+```
+
+`itos hook install` declares the commit-msg and pre-push hooks; the two `git config` lines
+declare this project's pre-commit. None of them touches core.hooksPath, which can stay unset:
+git runs config-declared hooks whatever core.hooksPath says. Do not point core.hooksPath at
+`tools/hooks`, or git runs that pre-commit a second time beside the declared entry.
+
+To verify, each command below must name its hook. Each prints "no hooks found" and exits
+non-zero when the hook is not declared.
+
+```sh
+git hook list pre-commit   # itos-container-pre-commit
+git hook list commit-msg   # itos-commit-msg
+git hook list pre-push     # itos-pre-push
+```
+
+A later commit shows the gates are enforced. `itos commit` refuses with exit 3 where the
+commit-msg hook is not declared. With it declared, every commit has its message and staged
+paths judged. `itos config check` runs only when the commit stages `itos.yaml`, a ledger file,
+the work registry, a smoke set or a decision record. The checks of the task the commit names
+run too, but a failing one refuses the commit only once that task's item is done; while the
+item is open the failure is printed with the task's status and the commit goes through.
+
+A commit that stages any path other than Markdown, `docs/**`, `tasks/**` or feature files runs
+the pre-commit's checks (govulncheck needs the network), and any failure refuses the commit.
+A prose-only commit skips them on purpose, so seeing no lint output there does not mean the
+hook is missing.
+
+On a git older than 2.54.0 the project's pre-commit does not run. Upgrade git.
+
 ## License and provenance
 
 This project is AGPL-3.0 licensed, with copyright attributed to donvargax. Infrastructure comes
