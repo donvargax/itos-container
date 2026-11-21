@@ -2597,19 +2597,10 @@ items:
     status: todo
     depends_on: []
     kind: task
-  - id: p1-orchestrating-implemented-push-policy
+  - id: T-75
     title: docs/ORCHESTRATING.md states the implemented CI and push policy
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      ORCHESTRATING already says macOS and Windows platform jobs are manual and Linux is automatic.
-      It does not state how work reaches main as implemented in itos.yaml and ci.yml. Each item goes
-      through one pull request, a draft until marked ready, merged after its checks and Cursor
-      Bugbot's review (Codex still asked, best effort). Docs-only commits outside features/ go
-      straight to main. CI runs on pull requests, pushes to main and manual dispatch. Replace any
-      wording that suggests an unrestricted push or automatic three-platform runs. Leave the egress
-      and credential deferral lines to p1-docs-admit-milestone-two-egress. Stay within the file's
-      doc-caps cap. Broken down from p1-refresh-remaining-template-guidance.
+    kind: task
