@@ -564,10 +564,25 @@ Feature: An approved persistent home for one checkout's harness
   # egress fixtures inside that shard, within its time limit. Non-engine red runs
   # are local; every @engine red and green run is CI-only, by dispatch.
   #
+  # ID-HOME-28 and 29 need their own cases in TestHomeLocalContract, whose
+  # dispatch fails any unbound ID. Their fixtures carry the harness in frozen
+  # settings and snapshot bytes the step encodes itself. They never go through
+  # canonical.JSON{}.Encode, which today silently drops the harnesses member.
+  # ID-HOME-29's new When sets the same captured result that the reused
+  # ID-HOME-08 Then reads.
+  #
   # Expected red, from reading 16e5bdb, whose product code is main's at b880d99
-  # (predictions, not executed evidence): the policy parser refuses
-  # /home/harnesses as policy.unknown_key with exit 2. Every slice-41 row's first
-  # Then fails on that captured result, never in a Given or When.
+  # (predictions, not executed evidence), always at the first Then, never in a
+  # Given or When:
+  # - ID-HOME-25, 26, 27, 30 and 31 parse the raw policy, which refuses
+  #   /home/harnesses as policy.unknown_key with exit 2.
+  # - ID-HOME-28 and 29 never parse policy: the local contract supplies the
+  #   approval view in test code. On the disk backend the session codec's
+  #   FrozenRecord re-encodes the frozen settings, drops the unknown harnesses
+  #   member and refuses them as state.invalid before create. If a launch got
+  #   past that, its created environment would lack the opencode-v1 values.
+  #   Either way ID-HOME-28's environment Then fails, and ID-HOME-29's control
+  #   half fails on every row.
   #
   # The implementer may commit freely in its own workspace; the host makes the
   # landing commits and handles itos, submission, publication and review.
@@ -712,19 +727,30 @@ Feature: An approved persistent home for one checkout's harness
     And no worker environment, mount or archive copy carries a host sentinel or any OpenCode file
     And the second run reuses the same home without writing into it and host-home sentinels are unchanged
 
-  # Each defect is independently injected into the created worker's observed
-  # environment; the matching control has the same harness request. A value
-  # equal to the approved bytes cannot be told from a controller-supplied one,
-  # so every defect is missing or differs from those bytes. The two image rows
-  # give the synthetic image a conflicting default and observe it left in
-  # effect: OPENCODE_CONFIG_CONTENT={"share":"auto"} and
-  # OPENCODE_DISABLE_MODELS_FETCH=false. Every row names a kept opencode-v1
-  # value; each name has a missing row and a differing row.
-  @wip @slice-41 @ID-HOME-29 @local-engine-fixture
+  # The row runs only through the disk backend. There cmd's production docker
+  # adapter creates the worker and inspects it at the SDK recording endpoint
+  # (home_sdk_fixture_test.go), so VerifyRun's sameEnvironment judges a real
+  # inspection reply. The memory fake observes no environment and refuses only
+  # by its Boundary flag, so it cannot tell a missing profile from a defect. No
+  # row sets that flag. @linux keeps the scenario from passing on a run whose
+  # only disk subtest was skipped.
+  # The recorder leaves every create body unchanged. It alters only the
+  # inspection reply for the defective launch's worker: a "missing" row removes
+  # the named entry, an image row puts back the synthetic image's own
+  # conflicting default (OPENCODE_CONFIG_CONTENT={"share":"manual"} or
+  # OPENCODE_DISABLE_MODELS_FETCH=false), and the other two rows replace the
+  # value with the stated bytes. The control has the same harness request and
+  # an unaltered reply. Its create body and its inspection reply must each hold
+  # exactly the three opencode-v1 entries with the approved bytes, so a run that
+  # never applies the profile fails every row on the control. A value equal to
+  # the approved bytes cannot be told from a controller-supplied one, so every
+  # defect is missing or differs from those bytes. Every row names a kept
+  # opencode-v1 value, and each name has a missing row and a differing row.
+  @wip @slice-41 @ID-HOME-29 @local-engine-fixture @linux
   Scenario Outline: Boundary inspection refuses a worker without the exact OpenCode profile
     Given an OpenCode launch fixture whose worker inspection has "<defect>" and an independent correct OpenCode control
-    When the OpenCode boundary launches are attempted through both local backends
-    Then the defective launch, whose observed environment differs from the approved opencode-v1 bytes, reports run.isolation-unverified with exit 1 and no start while the correct OpenCode control succeeds
+    When the OpenCode boundary launches are attempted through the disk backend's recording engine endpoint
+    Then the defective launch, whose inspected environment differs from the approved opencode-v1 bytes, reports run.isolation-unverified with exit 1 and no start while the correct OpenCode control's created and inspected environments each hold exactly the opencode-v1 bytes and it succeeds
     And the owned unstarted worker is removed and the retained home and unrelated resources remain intact
 
     Examples:
