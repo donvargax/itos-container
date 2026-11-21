@@ -9244,9 +9244,12 @@
       commit-msg` names itos-commit-msg, and `git hook list pre-push` names itos-pre-push. Each
       prints "no hooks found" and exits non-zero when the hook is not declared.
     - How a later commit shows the gates are enforced. `itos commit` refuses with exit 3 where
-      itos's commit-msg hook is not declared. With the hook declared, it judges the message, the
-      staged paths, itos config check and the named task checks, and it refuses a failing commit.
-      A commit that stages any path other than Markdown, docs/**, tasks/** or feature files runs
+      itos's commit-msg hook is not declared. With the hook declared, every commit has its message
+      and staged paths judged. `itos config check` runs only when the commit stages itos.yaml, a
+      ledger file, the work registry, a smoke set or a decision record. The checks of the task the
+      commit names run too, but a failing one refuses the commit only once that task's item is
+      done. While the item is open, the failure is printed with the task's status and the commit
+      goes through, so the section must not say that a failing task check always refuses. A commit that stages any path other than Markdown, docs/**, tasks/** or feature files runs
       the pre-commit's checks (govulncheck needs the network), and any failure refuses the commit.
       A prose-only commit skips them on purpose, so seeing no lint output there does not mean the
       hook is missing.
