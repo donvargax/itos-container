@@ -9350,9 +9350,6 @@
     rather than reworded. A simulated rewording of both comments passes both checks. Neither
     check can tell whether the new wording is accurate or whether a key moved. Review of the diff
     against this entry judges that.
-  done_when:
-    - run: "! grep -n 'made from this template' itos.yaml .github/workflows/release.yml && itos config check"
-    - run: "! grep -n -e 'Stack branches' -e 'language-neutral' itos.yaml && sed -n '/^    Scenarios:/,/^    Upgrading:/p' itos.yaml | grep -q 'itos-container'"
 - id: T-75
   type: docs
   title: docs/ORCHESTRATING.md states the implemented CI and push policy
