@@ -2599,3 +2599,17 @@ items:
       mount option string produces a particular behaviour, it cites the relevant engine source or a
       native CI observation. It lands after the trim so the cap has headroom over the shortened
       file. Broken down from p1-refresh-remaining-template-guidance.
+  - id: p1-readme-hook-registration
+    title: README explains how to register and verify the local commit hooks
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      A contributor checkout was found with core.hooksPath unset and no pre-commit or commit-msg
+      hooks, so the local lint, vulnerability and commit-message gates in itos.yaml (hooks.bin:
+      itos) never ran. Add instructions to README.md for registering the hooks through itos. Also
+      explain how to verify them: core.hooksPath and both hooks present, and how a later commit
+      shows the configured gates are enforced. Leave gates and CI unchanged. Broken down from
+      p1-refresh-remaining-template-guidance.
