@@ -2025,7 +2025,7 @@ items:
     title: Claude starts with isolated state and onboarding already completed
     phase: 1
     owner: donvargax
-    status: doing
+    status: todo
     depends_on: [slice-34]
     kind: slice
     why: >
