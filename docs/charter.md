@@ -160,6 +160,11 @@ Review, cost and CPU:
 
 - Cursor Bugbot is this repository's pull request review gate; Codex is still asked, best
   effort. 2026-11-19.
+- Edits to `.github/workflows` go through a normal pull request and this repository's own
+  gates, made by a worker in this repository. 2026-11-20.
+- No exact-match allowlists of commands, questions or tool calls for agent runs: record
+  what agents do and judge it against the item's scope; only an escalation reaches the
+  person. 2026-11-18.
 - Caps on cost, turns, minutes, attempts and cycles are soft: passing one logs a warning,
   and work never stops or holds. Only the no-progress guard and bounded retries stop.
   2026-11-16 and 2026-11-17.
