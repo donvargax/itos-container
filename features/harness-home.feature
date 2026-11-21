@@ -719,11 +719,20 @@ Feature: An approved persistent home for one checkout's harness
       | another unapproved mount            |
 
   # Slice-41's local runtime rows; its decisions sit above ID-HOME-25.
-  @wip @slice-41 @ID-HOME-28 @local-engine-fixture
+  # Only the disk backend judges the worker environment. There cmd's production
+  # docker adapter creates and inspects the worker at the SDK recording endpoint
+  # (home_sdk_fixture_test.go), and the step reads each worker's environment
+  # from both the journalled create body and the inspection reply. The memory
+  # fake records argv and mounts but no environment (porttest/run.go), so the
+  # memory half judges only the literal argv, the mounts and archive copies,
+  # and home reuse; no environment clause, in either Then, is judged there.
+  # @linux keeps the row from passing on a process whose disk subtest is
+  # skipped (home_local_contract_test.go), as the macOS and Windows jobs do.
+  @wip @slice-41 @ID-HOME-28 @local-engine-fixture @linux
   Scenario: The worker gets the OpenCode profile and literal argv and nothing from the host
     Given an OpenCode launch fixture with conflicting image OPENCODE and XDG defaults, host OPENCODE XDG and HOME sentinels, host-home OpenCode configuration and login sentinels and two sequential runs of "opencode --standalone run --format json --model fake/fake-model say-ok"
     When fresh run controllers execute both runs through both local backends
-    Then each worker's command is exactly the supplied argv and its environment holds exactly the opencode-v1 values and the home mappings over the image defaults
+    Then each worker's command is exactly the supplied argv and on the disk backend its created and inspected environment holds exactly the opencode-v1 values and the home mappings over the image defaults
     And no worker environment, mount or archive copy carries a host sentinel or any OpenCode file
     And the second run reuses the same home without writing into it and host-home sentinels are unchanged
 
