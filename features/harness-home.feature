@@ -351,50 +351,41 @@ Feature: An approved persistent home for one checkout's harness
   # decisions above are unchanged.
   #
   # Scope and limits:
-  # - No scenario installs or runs OpenCode itself. Fetching it would need a host
-  #   outside this item's signed hosts, and the charter makes a real harness run
-  #   the person's smoke check. Native rows run a synthetic stand-in executable,
+  # - No scenario installs or runs OpenCode itself: the charter makes a real
+  #   harness run the person's smoke check, and no scenario uses a real model,
+  #   account or credential. Native rows run a synthetic stand-in executable,
   #   installed in the CI checkout as /workspace/opencode and named by that
   #   explicit path in the literal argv, that reports what the worker gave it.
   #   These rows prove what the product controls: request, approval, the
   #   worker's environment and argv, isolation, egress and cleanup. They claim no
   #   OpenCode compatibility.
-  # - Target release: OpenCode v1.19.0. opencode-v1 is provisional until the
-  #   host smoke check below passes against that release. The drafter could not
-  #   read the release, because github.com and opencode.ai are outside this
-  #   item's signed hosts. The layer order here is the spec review's reading of
-  #   v1.19.0's loader (packages/opencode/src/config/config.ts, lines 447-506),
-  #   which the smoke check confirms. That loader merges OPENCODE_CONFIG_CONTENT
-  #   after the global (~/.config/opencode), OPENCODE_CONFIG, project
-  #   opencode.json and .opencode layers, so the inline keys win over the
-  #   checkout's and the retained home's configuration. It merges account and
-  #   managed configuration after the inline content, so inline is not the
-  #   highest layer. In this slice the account layer has no source, because no
-  #   OpenCode login is delivered (slice-40 owns it). The managed layer is read
-  #   from the approved image's system location (/etc/opencode on Linux). The
-  #   worker's root filesystem is read-only and the worker cannot write there,
-  #   so whatever is in that location is the person's approved, digest-pinned
-  #   input, which may override the profile. The profile prevents unintended
-  #   startup calls as a convenience. It is not an isolation property: the
-  #   approved egress proxy stays the only route out and the egress boundary.
-  # - Host smoke check (the person's, held for a person: it needs OpenCode's
-  #   download host and a real provider, both outside the signed hosts). It must
-  #   establish each of these on v1.19.0 in the person's approved image before
-  #   opencode-v1 is finalized and before any claim of OpenCode support:
-  #   1. `opencode --standalone run --format json --model <provider/model>
-  #      <prompt>` is accepted as written: no unknown-flag error, JSON event
-  #      lines on stdout and exit 0. A failing prompt exits non-zero.
-  #   2. With a checkout opencode.json and a home global config that each set
-  #      "autoupdate": true and "share": "auto", the effective configuration
-  #      still has autoupdate false and share disabled.
-  #   3. For each OPENCODE_DISABLE_* name below, a run that would otherwise use
-  #      its service (update check, models catalogue, default plugin install,
-  #      language-server download) leaves no refused CONNECT for that service's
-  #      name in the session's egress-refusals.jsonl, under an allowlist of the
-  #      provider's name only.
-  #   4. The approved image holds no managed configuration that sets these keys.
-  #   A setting that fails changes this spec in a feat commit, with a new
-  #   profile ID and a new approval. The stand-in rows keep their shape.
+  # - Target release: OpenCode v2.2.1, the version installed on the person's
+  #   host, pinned by the person on 2026-11-20 in place of v1.19.0 (which has no
+  #   --standalone option). The person's one host smoke check on that release,
+  #   run on their OpenCode Go login with a real credential approved for that
+  #   check only, is done. Its record, docs/proof/slice-41-opencode-smoke.md
+  #   (c8fab73, linked from the item at 1b44058), is the sole authority for what
+  #   OpenCode itself does: that `opencode --standalone run --format json` is
+  #   accepted as written, where inline OPENCODE_CONFIG_CONTENT falls in the
+  #   order of its configuration layers (the global, OPENCODE_CONFIG, project,
+  #   account and managed layers included), and what each
+  #   OPENCODE_DISABLE_* setting below switches off, each with its off/on
+  #   control. This spec repeats none of those findings and claims no OpenCode
+  #   behaviour beyond them; its scenarios test only what the product controls.
+  # - Before building the opencode-v1 table, the implementer reads that record.
+  #   If it shows that v2.2.1 rejects the argv above, that a value in the table
+  #   below has no effect, or that the table needs a value it lacks, the
+  #   implementer stops and reports to the coordinator. They do not adapt the
+  #   table or the scenarios. Any change to the table is a feat commit with a
+  #   new profile ID and a new approval. The stand-in rows keep their shape.
+  #   Another OpenCode release needs its own smoke check before a new profile.
+  # - In this slice the account layer has no source, because no OpenCode login
+  #   is delivered (slice-40 owns it). Whatever managed configuration the
+  #   approved image holds is in its read-only root filesystem, which the worker
+  #   cannot write. It is the person's approved, digest-pinned input and may
+  #   override the profile. The profile prevents unintended startup calls as a
+  #   convenience. It is not an isolation property: the approved egress proxy
+  #   stays the only route out and the egress boundary.
   # - The OpenCode login (auth.json under ~/.local/share/opencode) belongs to
   #   slice-40. This slice delivers no credential and no row needs one: the fake
   #   provider accepts unauthenticated synthetic requests.
@@ -456,15 +447,13 @@ Feature: An approved persistent home for one checkout's harness
   #     OPENCODE_DISABLE_LSP_DOWNLOAD=true
   #     OPENCODE_DISABLE_MODELS_FETCH=true
   #   The inline config value is those exact bytes, with no spaces or newline.
-  #   These names come from OpenCode's published environment and config
-  #   reference and are held for the smoke check against v1.19.0 above. They
-  #   switch off the update check, session sharing, the models catalogue fetch,
-  #   default plugin installs and language-server downloads, which would
-  #   otherwise call home at startup or first use. The inline keys override the
-  #   checkout's project config and a worker-edited global config in the
-  #   retained home, but not account or managed configuration, as the
-  #   target-release bullet above says. The values are non-secret and appear in
-  #   docker inspect.
+  #   Each name is one the person's v2.2.1 smoke record exercised with an
+  #   off/on control. What each switches off on v2.2.1, and which configuration
+  #   layers the inline keys win over or lose to, are that record's findings,
+  #   not this spec's, as the target-release bullet above says. In ID-HOME-31
+  #   the proxy refuses the startup-service names, which is a proxy property and
+  #   never evidence of any setting's effect. The values are non-secret and
+  #   appear in docker inspect.
   # - Seed by environment only: run writes no OpenCode file into the home, makes
   #   no archive copy beyond the root initialization above, and adds no mount.
   #   Every run reapplies the profile, so a repeat run needs no reseeding and
@@ -548,10 +537,10 @@ Feature: An approved persistent home for one checkout's harness
   # egress fixtures inside that shard, within its time limit. Non-engine red runs
   # are local; every @engine red and green run is CI-only, by dispatch.
   #
-  # Expected red, from reading main at b880d99 (predictions, not executed
-  # evidence): the policy parser refuses /home/harnesses as policy.unknown_key
-  # with exit 2. Every slice-41 row's first Then fails on that captured result,
-  # never in a Given or When.
+  # Expected red, from reading 16e5bdb, whose product code is main's at b880d99
+  # (predictions, not executed evidence): the policy parser refuses
+  # /home/harnesses as policy.unknown_key with exit 2. Every slice-41 row's first
+  # Then fails on that captured result, never in a Given or When.
   #
   # The implementer may commit freely in its own workspace; the host makes the
   # landing commits and handles itos, submission, publication and review.
@@ -568,6 +557,13 @@ Feature: An approved persistent home for one checkout's harness
       | 2       |
       | 3       |
 
+  # Approval status compares canonical settings, so a changed review and the
+  # next generation alone do not show a changed digest. The fixture calculates
+  # both fingerprints itself, as approval.feature's "independently calculated
+  # fingerprint" does: the old one from the seeded no-harness settings and the
+  # new one from the expected settings with the OpenCode harness. It requires
+  # the two to differ, and requires doctor's reported fingerprint and the
+  # persisted approval's to equal the new one.
   @wip @slice-41 @ID-HOME-26 @local-engine-fixture
   Scenario: Review binds the OpenCode profile without creating storage
     Given an OpenCode approval fixture with an independently seeded approval of a volume home without harnesses and a requested OpenCode harness
@@ -575,16 +571,30 @@ Feature: An approved persistent home for one checkout's harness
     Then doctor and the transcript before exactly one y/N prompt both show the OpenCode harness profile, its exact environment and the /home/harnesses difference with old and new values
     And the review before its prompt states where OpenCode state lives, who chooses provider and model, that no provider is reachable offline and that no login is delivered
     And approval exits 0 and records the independently expected home object at the next generation
+    And doctor and the persisted approval both carry the independently calculated new fingerprint, which differs from the seeded approval's fingerprint
     And no home volume or worker is created and checkout and host-home OpenCode sentinels are unchanged
 
   # Each mismatch must name /home/harnesses; each matching control must reach
   # its runtime boundary, so a generic policy refusal passes neither half.
+  # Unlike ID-HOME-03's fixture, which sets the approval status in test code,
+  # no status, view or difference is supplied by the test. As in ID-EGRESS-01,
+  # each Given writes a temporary Git checkout with a raw itos-container.yaml
+  # (adding or removing home.harnesses) and approval records whose JSON bytes
+  # the step encodes itself, never through the product codec. The When runs the
+  # itos-container binary's own `run`, so production approval preflight
+  # (approval domain Preflight with the disk readiness, disk store and
+  # canonical codec that cmd assembles) parses the policy, decodes the records
+  # and computes the difference. Engine connections are recorded at a fixture
+  # engine endpoint outside preflight, as ID-EGRESS-01's "no endpoint
+  # connection was attempted" is. Each mismatch makes no connection there, and
+  # each matching control's connection must be recorded there and reach its
+  # runtime boundary.
   @wip @slice-41 @ID-HOME-27 @local-engine-fixture
   Scenario: Adding and removing the OpenCode harness both require approval
-    Given OpenCode harness approval mismatch fixtures for adding and removing the harness and independently approved matching controls
-    When run attempts each changed request and then each matching control through both local backends
-    Then each mismatch reports changed approval at /home/harnesses with exit 1 before any engine connection
-    And each matching control reaches its requested runtime boundary with or without the OpenCode environment as approved
+    Given OpenCode harness approval mismatch checkouts with raw policies and independently encoded approval records for adding and removing the harness and matching controls
+    When the itos-container binary runs each changed request and then each matching control through its production approval preflight
+    Then each mismatch reports changed approval at /home/harnesses with exit 1 and the recording engine endpoint saw no connection
+    And each matching control connects to the recording engine endpoint and reaches its requested runtime boundary with or without the OpenCode environment as approved
 
   # Frozen-input and local lifetime. Red at each first Then: no home profile,
   # no home mount or no home ownership operation exists in the baseline.
