@@ -413,7 +413,8 @@ Feature: An approved persistent home for one checkout's harness
   # - Malformed requests, each exit 2 with file-only doctor and no state or
   #   engine access: harnesses null, "opencode" or {} -> policy.type
   #   /home/harnesses; [] -> policy.home_harness /home/harnesses; [codex] or
-  #   [OpenCode] -> policy.home_harness /home/harnesses/0; [opencode, opencode]
+  #   [OpenCode] -> policy.home_harness /home/harnesses/0 (slice-35, adding
+  #   codex, replaces the [codex] example); [opencode, opencode]
   #   -> policy.home_harness /home/harnesses/1; [7] -> policy.type
   #   /home/harnesses/0; {harnesses: [opencode]} without storage -> the existing
   #   policy.required /home/storage. policy.home_harness is new; its fix names
@@ -426,25 +427,48 @@ Feature: An approved persistent home for one checkout's harness
   #   environment table below, so changing that table needs a new profile ID and
   #   a new approval. An older binary's strict codec refuses such a record; that
   #   downgrade lockout belongs to p2-control-state-upgrade-contract.
-  # - Doctor and approve show, before any consent: the harness name, profile
-  #   opencode-v1, every environment name and value below, that OpenCode's
-  #   global configuration, data and state live in /home/itos, that the
-  #   checkout's own opencode.json and .opencode configuration also apply
-  #   (loaded before the profile, which overrides them where they conflict),
-  #   that any managed configuration in the approved image (/etc/opencode) loads
-  #   after the profile and overrides it, that the argv and
-  #   the checkout choose the provider and model, that a provider is reachable
-  #   only through the approved allowlist (for an offline policy: that no
-  #   provider is reachable), and that this setting delivers no OpenCode login.
-  #   The difference lists add /home/harnesses in the existing sorted order.
+  # - What each output shows, split by doctor mode so no new JSON field and no
+  #   new difference output is needed:
+  #   - `doctor --json` (ordinary doctor, as ID-HOME-02 runs it) gains no field.
+  #     Its existing approval.effective carries the home object above, with
+  #     harnesses [{"name":"opencode","profile":"opencode-v1"}]. Its existing
+  #     approval.differences carries {"path":"/home/harnesses","before":null,
+  #     "after":[that harness]} in the existing sorted order (an added key under
+  #     an existing home object is reported at its own path), and
+  #     approval.fingerprint is the new digest. JSON names the profile only. It
+  #     does not list the environment, which the profile ID binds.
+  #   - Plain `doctor` and bare approve's review print the existing shared home
+  #     disclosure (presentation homeDisclosure). When harnesses are requested,
+  #     it adds these lines after its existing three, in this order: "OpenCode
+  #     harness: profile opencode-v1.", then one line per environment entry in
+  #     the sorted order below, written NAME=value with the value JSON-escaped
+  #     for display as the settings line already is, then the disclosure
+  #     sentences: OpenCode's global configuration, data and state live in
+  #     /home/itos; the checkout's own opencode.json and .opencode configuration
+  #     also apply (loaded before the profile, which overrides them where they
+  #     conflict); any managed configuration in the approved image
+  #     (/etc/opencode) loads after the profile and overrides it; the image's
+  #     other OPENCODE_* defaults stay in effect and can redirect or turn off
+  #     configuration layers (OPENCODE_CONFIG, OPENCODE_CONFIG_DIR, which
+  #     replaces the global directory, OPENCODE_DISABLE_PROJECT_CONFIG); the
+  #     argv and the checkout choose the provider and model; a provider is
+  #     reachable only through the approved allowlist (for an offline policy:
+  #     no provider is reachable); and this setting delivers no OpenCode login.
+  #     The wording of each sentence is the implementer's; the step checks for
+  #     the stated facts by their fixed words (/home/itos, opencode.json,
+  #     /etc/opencode, OPENCODE_CONFIG_DIR, provider, model, login).
+  #   - Plain doctor gains no difference lines. Only the review prints the
+  #     existing "path: before -> after" lines, so it adds
+  #     "/home/harnesses: null -> [...]" in the existing sorted order.
+  #   docs/CLI.md's "Implemented approval" gains one paragraph saying this.
   # - The harness profile is not a network or credential grant. q-52's rules are
   #   unchanged: an offline harness request without credentials may still be
   #   approved by its matching --fingerprint; allowlist or credential settings
   #   still need the person at a terminal. The fingerprint route shows no
   #   review (approve's domain skips ui.Review there), so ID-HOME-26 proves the
-  #   disclosure through doctor and bare terminal approve: the review prints the
-  #   profile, its environment and the /home/harnesses difference before the
-  #   single y/N prompt. Inspecting or approving allocates no volume and creates
+  #   disclosure through plain doctor and bare terminal approve: the review
+  #   prints the profile, its environment and the /home/harnesses difference
+  #   before the single y/N prompt. Inspecting or approving allocates no volume and creates
   #   no worker.
   # - Adding or removing the harness changes the fingerprint and needs a fresh
   #   approval. Run reports the local mismatch as egress.feature specifies,
@@ -505,7 +529,8 @@ Feature: An approved persistent home for one checkout's harness
   #   or ~/.local/state/opencode. Manifest containerEnv/remoteEnv already reserve
   #   the OPENCODE_ and XDG_ prefixes, which stays unchanged. Other OPENCODE_*
   #   defaults in the approved image are left alone: the image is the person's
-  #   approved, digest-pinned input.
+  #   approved, digest-pinned input, and the review discloses that they stay
+  #   in effect.
   # - Boundary inspection before start, beside the home inspection above, also
   #   verifies each opencode-v1 name has exactly its value in the created
   #   worker's environment. The check is the existing exact environment
@@ -613,12 +638,18 @@ Feature: An approved persistent home for one checkout's harness
   # new one from the expected settings with the OpenCode harness. It requires
   # the two to differ, and requires doctor's reported fingerprint and the
   # persisted approval's to equal the new one.
+  # Doctor runs twice, before approve: `doctor --json` is judged for the
+  # effective home object, the /home/harnesses difference and the fingerprint;
+  # plain `doctor` for the harness lines of the shared home disclosure. The
+  # review transcript is judged for both. The decisions above ID-HOME-25 state
+  # each output's lines.
   @wip @slice-41 @ID-HOME-26 @local-engine-fixture
   Scenario: Review binds the OpenCode profile without creating storage
     Given an OpenCode approval fixture with an independently seeded approval of a volume home without harnesses and a requested OpenCode harness
-    When ordinary doctor inspects the requested harness and bare approve runs at a terminal and receives "y" after the review
-    Then doctor and the transcript before exactly one y/N prompt both show the OpenCode harness profile, its exact environment and the /home/harnesses difference with old and new values
-    And the review before its prompt states where OpenCode's global configuration and state live, that the checkout's own OpenCode configuration applies, that managed configuration in the approved image overrides the profile, who chooses provider and model, that no provider is reachable offline and that no login is delivered
+    When JSON doctor and plain doctor inspect the requested harness and bare approve runs at a terminal and receives "y" after the review
+    Then JSON doctor reports the independently expected home object and the /home/harnesses difference from null to the OpenCode harness
+    And plain doctor and the transcript before exactly one y/N prompt both show the OpenCode harness profile and its exact environment lines, and the transcript shows the /home/harnesses difference with old and new values
+    And plain doctor and the review before its prompt state where OpenCode's global configuration and state live, that the checkout's own OpenCode configuration applies, that managed configuration in the approved image overrides the profile, that the image's other OPENCODE defaults can redirect or turn off configuration layers, who chooses provider and model, that no provider is reachable offline and that no login is delivered
     And approval exits 0 and records the independently expected home object at the next generation
     And doctor and the persisted approval both carry the independently calculated new fingerprint, which differs from the seeded approval's fingerprint
     And no home volume or worker is created and checkout and host-home OpenCode sentinels are unchanged
@@ -768,8 +799,9 @@ Feature: An approved persistent home for one checkout's harness
   # inspection reply for the defective launch's worker: a "missing" row removes
   # the named entry, an image row puts back the synthetic image's own
   # conflicting default (OPENCODE_CONFIG_CONTENT={"share":"manual"} or
-  # OPENCODE_DISABLE_MODELS_FETCH=false), and the other two rows replace the
-  # value with the stated bytes. The control has the same harness request and
+  # OPENCODE_DISABLE_MODELS_FETCH=false), and the two "set to" rows replace the
+  # value with the stated bytes ({"share":"auto"}, no spaces or newline, and
+  # false). The control has the same harness request and
   # an unaltered reply. Its create body and its inspection reply must each hold
   # exactly the three opencode-v1 entries with the approved bytes, so a run that
   # never applies the profile fails every row on the control. A value equal to
@@ -787,7 +819,7 @@ Feature: An approved persistent home for one checkout's harness
       | defect                                                        |
       | OPENCODE_CONFIG_CONTENT left at the image's conflicting value |
       | OPENCODE_CONFIG_CONTENT missing                               |
-      | inline config with sharing set to auto                        |
+      | OPENCODE_CONFIG_CONTENT set to {"share":"auto"}               |
       | OPENCODE_DISABLE_MODELS_FETCH missing                         |
       | OPENCODE_DISABLE_MODELS_FETCH left at the image's false       |
       | OPENCODE_DISABLE_AUTOUPDATE set to false                      |
