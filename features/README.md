@@ -599,6 +599,13 @@ unchanged.
   the file, failing every run of the features.
 - **Say why beside the scenario** when a setup would make a reader ask: a comment above the tag
   line.
+- **Cite evidence for a mount option claim.** When a spec (ledger entry, scenario comment, step
+  oracle or fixture record) says an exact mount option string makes a mount executable, writable
+  or read-only, or a path reachable, it cites the engine source that turns the requested options
+  into the mount, or a native CI observation of the mounted result and the behaviour. An option
+  left out of a request is not evidence: the engine may add, reorder or override options (moby
+  prepends `noexec` to tmpfs). Local and harness checks are not native CI evidence, as stated
+  below.
 
 ## The steps this branch's scenarios use
 
