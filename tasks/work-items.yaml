@@ -2576,19 +2576,13 @@ items:
     status: todo
     depends_on: []
     kind: task
-  - id: p1-features-readme-mount-option-evidence-rule
+  - id: T-72
     title: features/README.md requires engine source or native CI evidence for claims about exact mount option strings
     phase: 1
     owner: null
     status: todo
     depends_on: [T-71]
-    kind: idea
-    why: >
-      The executable /tmp spec showed that leaving out noexec is not enough evidence that a mount
-      behaves a certain way. Add a review rule to the scenario guidance: when a spec claims an exact
-      mount option string produces a particular behaviour, it cites the relevant engine source or a
-      native CI observation. It lands after the trim so the cap has headroom over the shortened
-      file. Broken down from p1-refresh-remaining-template-guidance.
+    kind: task
   - id: p1-readme-hook-registration
     title: README explains how to register and verify the local commit hooks
     phase: 1
