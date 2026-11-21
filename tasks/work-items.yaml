@@ -2705,14 +2705,15 @@ items:
       directory identity, and exit zero after owned cleanup with auth and lock preserved. Lock
       contention is covered, and the boundary probe first shows the host UID can read the sentinels.
       Native rows run only in CI. Broken down from slice-32.
-  - id: codex-share-final-check
+  - id: slice-53
     title: After worker removal, run and stop record a final Codex source check that survives uncertainty and repeated stop
     phase: 1
     owner: null
     status: todo
     depends_on: [slice-52]
-    kind: idea
+    kind: slice
     why: >
+      Was codex-share-final-check.
       This is the teardown stage: renumbered ID-CODEXAUTH-18 to 20, plus ID-CODEXAUTH-15's 'with a
       safe source check' clause, which the person assigned here. After owned removal on foreground
       exit, cancellation and recovery stop, run and stop check the sources before releasing the
