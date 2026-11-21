@@ -9217,8 +9217,82 @@
     how to verify them: core.hooksPath and both hooks present, and how a later commit shows the
     configured gates are enforced. Leave gates and CI unchanged. Broken down from
     p1-refresh-remaining-template-guidance.
+
+    The problem. Neither hook can be committed, so a fresh clone has none. tools/hooks/pre-commit
+    says it is "declared once in each clone (README.md)", but README.md never says how. The hook
+    itself runs the structural architecture check, the fixture matrix when staged enforcement
+    inputs change, pinned golangci-lint and govulncheck. Its header gives the two lines that
+    declare it, `git config hook.itos-container-pre-commit.event pre-commit` and `git config
+    hook.itos-container-pre-commit.command tools/hooks/pre-commit`. itos's own commit-msg and
+    pre-push hooks come from `itos hook install`. On git 2.54.0 or later that command declares
+    hook.itos-commit-msg and hook.itos-pre-push in the clone's local git config, which is never
+    committed and is shared by the clone's worktrees. It writes no hook file and leaves
+    core.hooksPath alone. So an unset core.hooksPath is normal and does not mean a hook is
+    missing. The finding above holds because nothing had declared the hooks, not because
+    core.hooksPath was unset. On an older git, `itos hook install` writes its own hook files
+    instead, but nothing runs the project's config-declared pre-commit.
+
+    The rule. Add one section, '## Local commit hooks', to README.md, directly after '## Working
+    here'. It says, briefly, five things.
+    - What to run once in each clone, in one sh block: `itos hook install` and the two `git config`
+      lines above, written exactly as tools/hooks/pre-commit gives them. It also says that they
+      write the clone's local config and that git 2.54.0 or later is required.
+    - That registering the hooks leaves core.hooksPath alone, because git runs config-declared
+      hooks whatever core.hooksPath says. So core.hooksPath should not be pointed at tools/hooks:
+      git would then run that pre-commit a second time, beside the declared entry.
+    - How to verify. `git hook list pre-commit` names itos-container-pre-commit, `git hook list
+      commit-msg` names itos-commit-msg, and `git hook list pre-push` names itos-pre-push. Each
+      prints "no hooks found" and exits non-zero when the hook is not declared.
+    - How a later commit shows the gates are enforced. `itos commit` refuses with exit 3 where
+      itos's commit-msg hook is not declared. With the hook declared, every commit has its message
+      and staged paths judged. `itos config check` runs only when the commit stages itos.yaml, a
+      ledger file, the work registry, a smoke set or a decision record. The checks of the task the
+      commit names run too, but a failing one refuses the commit only once that task's item is
+      done. While the item is open, the failure is printed with the task's status and the commit
+      goes through, so the section must not say that a failing task check always refuses. A commit that stages any path other than Markdown, docs/**, tasks/** or feature files runs
+      the pre-commit's checks (govulncheck needs the network), and any failure refuses the commit.
+      A prose-only commit skips them on purpose, so seeing no lint output there does not mean the
+      hook is missing.
+    - That on a git older than 2.54.0 the project's pre-commit does not run, so git must be
+      upgraded. The section offers no workaround.
+
+    Bounds. Change only README.md, and only by adding this section. Leave every other section as
+    it is. The README already says that hooks are workflow safeguards and not isolation, so the
+    section does not repeat it. Leave tools/hooks/pre-commit, itos.yaml, the CI workflow and every
+    gate unchanged. Tell no one to run a gate by hand, since gates run through their hooks and CI.
+    README.md has no doc-caps cap, and this task adds none. Keep the section short anyway: about
+    25 lines of prose besides the sh block.
+
+    Commits and proof. One docs commit with Task T-73 carries README.md only. It changes no
+    proof.code path and no enforcement input, so there is no mutation proof and no fixture
+    matrix. The range is prose-only, because itos.yaml's ci.prose.paths includes **/*.md. On such
+    a range CI keeps only a task's static checks and those declaring prose: true, and itos work
+    done runs no late check. So both checks declare prose: true, and they use only POSIX sh, grep,
+    sed and tr. The implementer may commit freely in its workspace. The host makes the landing
+    commits and runs itos, submission, publication and review.
+
+    How each check fails today. The first is the item's own check. It exits 1 at its first grep,
+    because README.md never says "core.hooksPath". The second reads only the '## Local commit
+    hooks' section and flattens whitespace first, so line wrapping cannot fail it. Today it exits
+    1 because README.md has no such section. It also fails if the section leaves out
+    `itos hook install`, either pre-commit `git config` line as tools/hooks/pre-commit gives it,
+    any of the three `git hook list` commands, core.hooksPath or the 2.54.0 requirement. Neither
+    check can judge whether the prose is correct. Review of the diff against this entry judges
+    that.
   done_when:
     - run: grep -q 'core.hooksPath' README.md && grep -q 'pre-commit' README.md && grep -q 'commit-msg' README.md
+      prose: true
+    - run: |
+        s=$(sed -n '/^## Local commit hooks$/,/^## /p' README.md | tr -s ' \n' ' ')
+        test -n "$s" || { echo "README.md lacks '## Local commit hooks'" >&2; exit 1; }
+        for a in 'itos hook install' \
+          'git config hook.itos-container-pre-commit.event pre-commit' \
+          'git config hook.itos-container-pre-commit.command tools/hooks/pre-commit' \
+          'git hook list pre-commit' 'git hook list commit-msg' 'git hook list pre-push' \
+          'core.hooksPath' '2.54.0'; do
+          printf '%s' "$s" | grep -qF -- "$a" || { echo "Local commit hooks lacks: $a" >&2; exit 1; }
+        done
+      prose: true
 - id: T-74
   type: chore
   title: itos.yaml and release.yml comments describe this project, not a project made from the template
