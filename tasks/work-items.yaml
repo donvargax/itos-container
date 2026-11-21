@@ -2669,3 +2669,16 @@ items:
       duplicate-inode check in internal/engine/readiness/domain/credentials.go. Local rows use
       `@linux` tags and test-only raw-observation assembly, so they reach their assertion and not
       host.unsupported or credential.filesystem. Broken down from slice-32.
+  - id: codex-share-approval
+    title: Terminal approval binds the Codex directory and lock identities, shows the shared-write exposure, and help discloses the limits
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [codex-share-inspection]
+    kind: idea
+    why: >
+      This is the approval stage: renumbered ID-CODEXAUTH-06 to 10 and 14. Review and publication
+      use the settled canonical entry, including Codex with home. Fingerprint and redirected routes
+      are refused. A safe auth.json replacement keeps the grant. A different directory or lock gives
+      the single `/credentials` difference. Consent cannot publish a substituted directory.
+      Approve's help carries the disclosures. Broken down from slice-32.
