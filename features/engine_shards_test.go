@@ -57,8 +57,9 @@ func engineFeatureFiles(dir string) ([]string, error) {
 // shardOtherFiles is the other shard's fixed set of files (T-59): every engine feature
 // this tree keeps outside offline, lifecycle and egress.
 var shardOtherFiles = []string{
-	"anchors.feature", "checkout-overlap.feature", "doctor.feature", "hardlinks.feature",
-	"recovery.feature", "run_terminal.feature", "session.feature", "sockets.feature",
+	"anchors.feature", "checkout-overlap.feature", "claude-home.feature", "doctor.feature",
+	"hardlinks.feature", "recovery.feature", "run_terminal.feature", "session.feature",
+	"sockets.feature",
 }
 
 // egressShardFiles is the egress shard's complete pinned set: egress.feature, plus
