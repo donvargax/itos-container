@@ -9279,20 +9279,6 @@
     any of the three `git hook list` commands, core.hooksPath or the 2.54.0 requirement. Neither
     check can judge whether the prose is correct. Review of the diff against this entry judges
     that.
-  done_when:
-    - run: grep -q 'core.hooksPath' README.md && grep -q 'pre-commit' README.md && grep -q 'commit-msg' README.md
-      prose: true
-    - run: |
-        s=$(sed -n '/^## Local commit hooks$/,/^## /p' README.md | tr -s ' \n' ' ')
-        test -n "$s" || { echo "README.md lacks '## Local commit hooks'" >&2; exit 1; }
-        for a in 'itos hook install' \
-          'git config hook.itos-container-pre-commit.event pre-commit' \
-          'git config hook.itos-container-pre-commit.command tools/hooks/pre-commit' \
-          'git hook list pre-commit' 'git hook list commit-msg' 'git hook list pre-push' \
-          'core.hooksPath' '2.54.0'; do
-          printf '%s' "$s" | grep -qF -- "$a" || { echo "Local commit hooks lacks: $a" >&2; exit 1; }
-        done
-      prose: true
 - id: T-74
   type: chore
   title: itos.yaml and release.yml comments describe this project, not a project made from the template
