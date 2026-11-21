@@ -2569,29 +2569,19 @@ items:
       name the start files, the fake and the test command, to cut what every session relearns
       (charter, Settled by the person). This repository has no MAP.md yet. Measure the effect again
       after about ten tasks.
-  - id: p1-features-readme-standing-rules-and-cap
+  - id: T-71
     title: Trim features/README.md to its standing harness rules and hold it under a doc-caps cap
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      features/README.md is 79,818 bytes on main and every implementer is told to read it. Most of
-      the weight is in 'The CI engine tier' (30.8 KB), 'Manual red-first evidence' (15.2 KB) and
-      'Cached fixture protocol' (11.1 KB), plus per-slice evidence paragraphs under '## Tags'. Move
-      per-slice red-evidence and history notes out, since commits and run numbers already record
-      them. Keep every standing harness rule. Add a `cap features/README.md <bytes>` line to
-      tools/bin/doc-caps with headroom over the shortened size, so later slices cannot grow it back.
-      Keep existing gates, provenance and limits on container-support claims, and fix any harness
-      test that pins removed prose without weakening it. Broken down from
-      p1-refresh-remaining-template-guidance.
+    kind: task
   - id: p1-features-readme-mount-option-evidence-rule
     title: features/README.md requires engine source or native CI evidence for claims about exact mount option strings
     phase: 1
     owner: null
     status: todo
-    depends_on: [p1-features-readme-standing-rules-and-cap]
+    depends_on: [T-71]
     kind: idea
     why: >
       The executable /tmp spec showed that leaving out noexec is not enough evidence that a mount
