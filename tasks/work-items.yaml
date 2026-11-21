@@ -2536,7 +2536,7 @@ items:
     title: Trim features/README.md to its standing harness rules and hold it under a doc-caps cap
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: T-72
