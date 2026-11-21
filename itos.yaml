@@ -1,5 +1,5 @@
-# Shared commit rules and checks. Stack branches add language gates with the
-# code they prove; the root remains language-neutral.
+# itos-container's commit rules and checks: its Go gates, its scenarios and its code
+# proof.
 version: 1
 
 # The source project's pin and checksum, copied with its workflow action.
@@ -31,9 +31,9 @@ commits:
       validate_for: [feat, fix]
       must_be_live: true
       read_at: commit
-    # What a user of a project made from this template must change for the commit, or none
-    # (itos commit --upgrading none): feat and fix are what a user can feel, and the release
-    # notes quote it.
+    # What a user of itos-container (its released binary, its commands or its
+    # itos-container.yaml) must change for the commit, or none (itos commit --upgrading
+    # none): feat and fix are what a user can feel, and the release notes quote it.
     Upgrading:
       source: text
       required_for: [feat, fix]
