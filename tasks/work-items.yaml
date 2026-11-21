@@ -2552,3 +2552,8 @@ items:
       The person corrected the Codex part of q-90 on 2026-11-20: Codex defaults to a sandbox-only
       ChatGPT login in the harness home (device login, never the host auth.json), with an API key
       only as the fallback when a weekly limit is reached. The design is amended to match.
+    deferred: >
+      Deferred until remote sandboxes (microVMs on cloud providers) exist, by the person's direction
+      of 2026-11-20 (q-90). Locally run sandboxes share the host's own logins, so the local case
+      needs no brokering; this item's broker design applies only to remote sandboxes, and the person
+      decides it when those start.
