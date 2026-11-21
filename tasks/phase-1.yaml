@@ -9364,3 +9364,20 @@
     doc-caps cap. Broken down from p1-refresh-remaining-template-guidance.
   done_when:
     - run: grep -qi 'bugbot' docs/ORCHESTRATING.md && grep -qi 'draft' docs/ORCHESTRATING.md && tools/bin/doc-caps
+- id: T-76
+  type: docs
+  title: Decision 0032 settles lock binding, credential-set aliases, version-4 home and delivery forms, the session record and metadata fixtures
+  why: >
+    Every later child depends on these contracts, and the round-1 P1s showed the spec lacks them. It
+    records five things. First, how the approved lock inode stays bound while Docker acquires the
+    mount, or a stop for the person if no mechanism exists. Second, which directory, auth, lock and
+    token overlaps are refused, with their diagnostics. Third, whether version 4 carries `home`, the
+    canonical and frozen forms and profile names for Codex alone and Codex with home, and the early
+    run outcome for requests with no grant, Codex only, or Codex plus tokens. Fourth, a Codex
+    session-record schema separate from schema-4 token staging: where the external grant and owned
+    anchor go, how they bind to the original session, and when a source check moves from pending to
+    completed. Fifth, `@linux`-tagged raw-observation fixtures for local rows, and native rows on a
+    verified supported filesystem with a private state root. It keeps 0032's settled directory, lock
+    and version lines unchanged. Broken down from slice-32.
+  done_when:
+    - run: for h in 'Lock binding through mount acquisition' 'Credential-set aliases' 'Version 4, harness home and delivery gates' 'Session record and source-check publication' 'Deterministic metadata fixtures'; do grep -qxF "## $h" docs/decisions/0032-codex-shared-directory.md || exit 1; done
