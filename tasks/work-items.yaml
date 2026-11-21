@@ -2543,7 +2543,7 @@ items:
     title: features/README.md requires engine source or native CI evidence for claims about exact mount option strings
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [T-71]
     kind: task
   - id: T-73

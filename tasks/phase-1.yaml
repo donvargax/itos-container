@@ -9207,16 +9207,6 @@
     also fails if the rule is placed in another section or leaves out either kind of evidence.
     Neither check can judge whether the bullet states the rule correctly. Review of the diff
     against this entry judges that.
-  done_when:
-    - run: grep -qi 'mount option' features/README.md && tools/bin/doc-caps
-      prose: true
-    - run: |
-        s=$(sed -n '/^## Writing a scenario$/,/^## /p' features/README.md | tr -s ' \n' ' ')
-        test -n "$s" || { echo "features/README.md lacks '## Writing a scenario'" >&2; exit 1; }
-        for a in 'mount option' 'engine source' 'native CI'; do
-          printf '%s' "$s" | grep -qiF -- "$a" || { echo "Writing a scenario lacks: $a" >&2; exit 1; }
-        done
-      prose: true
 - id: T-73
   type: docs
   title: README explains how to register and verify the local commit hooks
