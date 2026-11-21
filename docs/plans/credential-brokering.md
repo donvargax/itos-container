@@ -3,10 +3,10 @@
 ## Status
 
 Proposed, for the person's decision, 2026-11-20. Amended the same day by the person's
-direction, which replaces an earlier amendment to question 3: locally run sandboxes share
-the host's own harness logins, and brokering and separate logins apply only to remote
-sandboxes (microVMs on cloud providers), deferred until those exist. See the
-recommendation.
+direction, which replaces an earlier amendment to question 3 and is recorded in the
+charter's "Settled by the person": locally run sandboxes share the host's own harness
+logins, and brokering and separate logins apply only to remote sandboxes (microVMs on cloud
+providers), deferred until those exist. See the recommendation.
 
 This is research under the [charter](../charter.md)'s "Not yet", which lists a capability
 broker as a research direction. It selects nothing to build. It changes no code, scenario,
@@ -422,10 +422,18 @@ minting.
    then lands in the one file they all read. A copy would fork the login: a refresh token
    works once [55][56], so when one copy refreshes, every other copy holds a spent token and
    is logged out (analysis).
-2. **Codex: q-72's mount, unchanged.** A dedicated host directory holding only `auth.json`,
-   and its lock file when the host has one, mounted read-write as a directory. The host's
-   Codex reaches it through a symlink the person sets up (charter, step 2). No sandbox-only
-   login and no API key.
+2. **Codex: the host's own `auth.json`, refreshed where it lies.** No dedicated directory,
+   no sandbox-only login and no API key; this replaces q-72's dedicated directory. Codex
+   saves by renaming a temporary copy over `auth.json`, with no in-place fallback (decision
+   0025; `FileAuthStorage::save` on Codex's main branch at 0.171.0 still ends in
+   `std::fs::rename`), so a single-file mount cannot carry a refresh. Codex follows a
+   symlinked `auth.json` and renames over its target. So the host's Codex home that holds the
+   file is mounted read-write as a directory, and the worker's `auth.json` is a symlink into
+   it: a refresh in the worker replaces the host's own file, and the host's refreshes are
+   seen in the worker (charter, step 2). Codex's `auth.lock` lives in each side's own Codex
+   home, so it does not serialize host and worker refreshes against each other (analysis),
+   the same cost as Claude's lock below. The mount also shows the worker the rest of the
+   host's Codex home.
 3. **Claude: the host's own login, mounted as a single file.** No API key, no login of the
    sandbox's own and no brokering. The login that refreshes lives in
    `~/.claude/.credentials.json` [3], not in the `setup-token` token, which does not refresh.
@@ -441,13 +449,13 @@ minting.
    its configuration directory, which a single-file mount does not share, so host and sandbox
    refreshing at once can spend the same single-use refresh token and log one of them out.
    And the in-place rewrite is not atomic, so a reader can see a half-written file.
-4. **The risks stay as option A states them.** The worker can read and copy the host's
-   refresh tokens, which work until they expire or are revoked, and it can replace or break
-   the host's Codex login. q-72 accepted that for Codex, and the person's direction accepts it
-   for the local case as a whole.
-5. **GitHub: nothing beyond the charter.** Pushes stay on the host (the person,
-   2026-11-17). The sandbox gets no GitHub credential beyond the token file the charter
-   already passes in, and nothing is minted locally (question 4).
+4. **No threat model for the local case.** The person's call (2026-11-20): a local
+   sandbox shares the host's logins as they are. Option A's analysis stays as survey, not
+   as a gap to close locally.
+5. **GitHub: credentials stay on the host.** The host pushes and lands. The worker gets an
+   empty `gh` configuration, no GitHub token and no SSH agent. If an agent must reach
+   GitHub, it gets a one-hour token for one repository (the person, 2026-11-16 and
+   2026-11-17; question 4).
 
 ### Remote sandboxes: the broker design, deferred
 
@@ -471,16 +479,17 @@ this document is the starting point, and the person decides then. As surveyed to
   without a CA, and is barred for the Claude subscription. Its one unique gain, closing
   fronting, is an egress question, not a credential one.
 
-**Gaps this leaves, stated plainly.** Locally, a copied Claude or Codex refresh token works
-until it expires or is revoked, and the worker can replace or break the host's Codex login.
-A copied GitHub token works until its expiry. Use during the run, data exfiltration through
-allowed hosts and fronting remain, as for every option. The remote design would close the
-copy gap for GitHub and for API keys, never for a subscription login.
+**What the remote design would close.** In a remote sandbox, a copied credential that
+keeps working after the run: for GitHub and for API keys, never for a subscription login.
+Use during the run, data exfiltration through allowed hosts and fronting remain, as for
+every option. The local case shares the host's logins by the person's call and is not
+measured against this.
 
 **Increments.** Each is specified by black-box scenarios first, against fakes; no scenario
 uses a real account (charter).
 
-1. Slice-31 and slice-33 as designed, with Codex on q-72's mount.
+1. Slice-31 and slice-33, with Codex on the host's own `auth.json` as the charter's step 2
+   now says, and no GitHub token in the worker.
 2. The host's Claude login mounted as a single read-write file, as the charter's step 2 now
    says. Its first scenario proves a rewrite inside the sandbox reaches the host's file.
 3. Remote sandboxes: the broker design, specified when remote sandboxes start.
@@ -494,9 +503,11 @@ Settled by the person on 2026-11-20:
 2. **Claude login, local.** The host's own login: the refreshing
    `~/.claude/.credentials.json`, mounted read-write as a single file. The charter's step 2
    says so, amended on the person's word.
-3. **Codex login, local.** The host's own login, through q-72's mount, unchanged.
-4. **GitHub, local.** Pushes stay on the host (the person, 2026-11-17). The sandbox gets no
-   GitHub credential beyond what the charter already passes in.
+3. **Codex login, local.** The host's own `auth.json`, refreshed where it lies, through a
+   directory mount of the host's Codex home; q-72's dedicated directory is replaced.
+4. **GitHub, local.** GitHub credentials stay on the host, which pushes and lands; the
+   worker gets no GitHub token or SSH key. If an agent must reach GitHub, it gets a one-hour
+   token for one repository (2026-11-16 and 2026-11-17).
 
 Deferred until remote sandboxes exist, to be asked then:
 
