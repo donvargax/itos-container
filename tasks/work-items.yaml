@@ -2624,3 +2624,22 @@ items:
       and failed on a survivor at internal/engine/session/disk/home.go:190, a file the branch never
       touched. A draft PR skips all CI, so a dispatch is the only way to test a draft branch, and
       its proof should judge only what the branch adds over main.
+  - id: codex-share-contracts
+    title: Decision 0032 settles lock binding, credential-set aliases, version-4 home and delivery forms, the session record and metadata fixtures
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-30, T-48]
+    kind: idea
+    why: >
+      Every later child depends on these contracts, and the round-1 P1s showed the spec lacks them.
+      It records five things. First, how the approved lock inode stays bound while Docker acquires
+      the mount, or a stop for the person if no mechanism exists. Second, which directory, auth,
+      lock and token overlaps are refused, with their diagnostics. Third, whether version 4 carries
+      `home`, the canonical and frozen forms and profile names for Codex alone and Codex with home,
+      and the early run outcome for requests with no grant, Codex only, or Codex plus tokens.
+      Fourth, a Codex session-record schema separate from schema-4 token staging: where the external
+      grant and owned anchor go, how they bind to the original session, and when a source check
+      moves from pending to completed. Fifth, `@linux`-tagged raw-observation fixtures for local
+      rows, and native rows on a verified supported filesystem with a private state root. It keeps
+      0032's settled directory, lock and version lines unchanged. Broken down from slice-32.
