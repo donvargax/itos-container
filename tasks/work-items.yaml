@@ -2610,3 +2610,17 @@ items:
       (features/engine_suite_warmup_regression_test.go:341), then passed when only that job was
       rerun, on the same commit. A test that can fail on scheduling noise turns a branch's CI red
       for nothing and costs a rerun of the whole job.
+  - id: p2-dispatched-run-proof-range
+    title: Judge a dispatched CI run's code proof from main, not from the branch's fork point
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      On a workflow_dispatch run there is no pull request base, so the ci job's itos ci range
+      reaches back to the branch's original fork point. For slice-36 on 2026-11-20 (run 44877418171)
+      that was f55e930 from 2026-11-16, so the code proof sampled main's own code merged in since
+      and failed on a survivor at internal/engine/session/disk/home.go:190, a file the branch never
+      touched. A draft PR skips all CI, so a dispatch is the only way to test a draft branch, and
+      its proof should judge only what the branch adds over main.
