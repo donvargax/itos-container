@@ -2568,3 +2568,17 @@ items:
     status: todo
     depends_on: []
     kind: task
+  - id: p2-engine-fixture-bash3-lowercase
+    title: Make tools/lib/engine-fixture-checks.sh run under macOS's bash 3.2
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Line 43 lowercases each header with ${line,,}, which bash 3.2, the default bash on macOS,
+      rejects as a bad substitution. Every TestEngineFixtureManifestValidation and
+      TestEngineFixtureHashesIgnoreCapturedPaths case then fails in the Tests (macos-latest) job
+      (seen in dispatched run 44877418171 on 2026-11-20). That job runs only on a manual dispatch,
+      so main never shows it. A portable lowercase (tr, or a case pattern for both spellings) keeps
+      the manual macOS portability coverage meaningful.
