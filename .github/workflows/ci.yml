@@ -73,7 +73,7 @@ jobs:
           - shard: lifecycle
             features: lifecycle.feature
           - shard: other
-            features: anchors.feature checkout-overlap.feature doctor.feature hardlinks.feature recovery.feature run_terminal.feature session.feature sockets.feature
+            features: anchors.feature checkout-overlap.feature claude-home.feature doctor.feature hardlinks.feature recovery.feature run_terminal.feature session.feature sockets.feature
           - shard: egress
             features: egress.feature
     steps:
