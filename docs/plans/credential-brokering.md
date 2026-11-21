@@ -2,10 +2,11 @@
 
 ## Status
 
-Proposed, for the person's decision, 2026-11-20. Amended the same day: the person corrected
-the Codex recommendation (question 3), because an API key bills the OpenAI API, not the
-ChatGPT subscription, and their rule is subscriptions first, with API credits only as the
-fallback when a weekly limit is reached.
+Proposed, for the person's decision, 2026-11-20. Amended the same day by the person's
+direction, which replaces an earlier amendment to question 3: locally run sandboxes share
+the host's own harness logins, and brokering and separate logins apply only to remote
+sandboxes (microVMs on cloud providers), deferred until those exist. See the
+recommendation.
 
 This is research under the [charter](../charter.md)'s "Not yet", which lists a capability
 broker as a research direction. It selects nothing to build. It changes no code, scenario,
@@ -351,7 +352,7 @@ expires on its own. Minting stays on the control side, whatever the provider.
 
 Each credential gets the cheapest option that closes the gap that matters for it. The
 options compose: D's minted GitHub token rides A's staging seam; C's broker token can come
-from D's helper plumbing. The recommendation below is a mix.
+from D's helper plumbing. The remote part of the recommendation below is a mix.
 
 ## Anthropic's terms and the Claude subscription
 
@@ -408,119 +409,110 @@ like the engine. It needs no move.
 
 ## Recommendation
 
-Adopt option E as two small pieces: **A for model credentials, D for GitHub.** Build no
-interception. Record C as the next step for API keys only, not built now.
+The person set the direction on 2026-11-20, and it replaces the option E recommendation this
+document first made. **Locally run sandboxes share the host's own harness logins. Remote
+sandboxes (microVMs on cloud providers) get the broker design, deferred until remote
+sandboxes exist.** Nothing in this document is built now: no interception, no broker, no
+minting.
 
-1. **Keep A as the base, as already designed.** Slice-31 and slice-33 land as decision 0025
-   describes. Nothing else can carry a Claude subscription, because brokering one is barred
-   [1]. Any brokering design would still need A for that login.
-2. **Claude: the `setup-token` token passed in.** Its copy works for a year, but only for
-   model requests [3]. That limits the damage to the person's plan usage. A Claude API key
-   is a second kind on the same seam, for people who bill by API.
-3. **Codex: default to a ChatGPT login of the sandbox's own.** The charter's shared
-   read-write ChatGPT login is the largest gap in today's design. The worker can read a
-   refresh token that does not expire on its own, and can replace the host's login. The
-   default becomes a separate login kept in the run's persistent harness home
-   ([decision 0030](../decisions/0030-persistent-harness-home.md)), made once there with
-   device login (`codex login --device-auth` [20]), and never the host's `auth.json`. It keeps
-   billing on the ChatGPT subscription, the person's rule. It closes the host-substitution
-   threat: the worker never sees the host's file. It leaves the sandbox's own refresh token
-   readable by the worker (A's gap, for that login only). An API key on the same seam stays
-   as an explicit fallback kind, for when the subscription's weekly limit is reached. The
-   shared host login is no longer offered.
+### Local sandboxes: the host's own login
 
-   *Do two logins of one ChatGPT account refresh independently?* Not stated by OpenAI. Each
-   `codex login` writes its own `auth.json` [20], and a refresh replaces the refresh token,
-   which then works once [55][56]. OpenAI's own guidance is one `auth.json` per runner, never
-   one file across machines or concurrent jobs [57]. So two separate logins should keep
-   separate token chains (analysis). But an open Codex bug reports one account on three hosts,
-   each with its own `auth.json`, where logging in on one host "appears to invalidate" the
-   refresh tokens on the others [58], with no maintainer answer yet; a maintainer has said
-   Codex is not designed for several concurrent logins on one system [59]. Independence is
-   therefore likely but unconfirmed. The first increment must test it on the real account,
-   host and sandbox both refreshing, before it is the default. If the logins do interfere,
-   the failure is a logged-out run or host, not a leaked credential: the run stops and asks
-   for a new device login.
-4. **GitHub: an installation token minted per run (D).** A's real gap here is that a copied
-   personal token keeps write access after the run, for days or months [37]. GitHub is the
-   credential whose misuse others see: pushes, pull requests, comments. A one-hour token,
-   limited to the approved repository and permissions, and revoked at teardown, closes that
-   gap [35][36]. It reuses the staging seam, so the worker sees the same `github-token`
-   file. The approval binds the App, the installation, the repository and the permissions,
-   from the policy, never from the checkout's Git configuration. The fine-grained personal
-   token stays as the fallback for people without an App.
-5. **No option B.** It costs the most: a planted CA per client, HTTP/2 and streaming
-   parsing, body re-masking for refreshes, JWT-shaped Codex placeholders, two gh header
-   forms, and a move to its own repository first. Its credential gain over A is reachable
-   for API keys through C without a CA, and is barred for the Claude subscription. Its one
-   unique gain, closing fronting, is an egress question, not a credential one, and belongs
-   in its own idea if the person wants it.
-6. **C later, if the person wants API keys never inside the worker.** It is the documented
-   Anthropic pattern [2] and fits microVMs. The gap it would close is an API key copied out
-   and used until revoked. It waits until A and D have runtime evidence.
-7. **For microVMs on cloud providers, move toward D.** Long-lived personal tokens should not
-   go into cloud VMs. Federation [9] and installation tokens carry across providers. Build
-   nothing for this now.
+1. **Mount the host's real login, never a copy.** The worker uses the same Codex `auth.json`
+   and the same Claude credentials file as every other instance on the host. A token refresh
+   then lands in the one file they all read. A copy would fork the login: a refresh token
+   works once [55][56], so when one copy refreshes, every other copy holds a spent token and
+   is logged out (analysis).
+2. **Codex: q-72's mount, unchanged.** A dedicated host directory holding only `auth.json`,
+   and its lock file when the host has one, mounted read-write as a directory. The host's
+   Codex reaches it through a symlink the person sets up (charter, step 2). No sandbox-only
+   login and no API key.
+3. **Claude: the host's own login, mounted the same way.** No API key, no login of the
+   sandbox's own and no brokering. The charter's step 2 names "Claude's long-lived token from
+   a host file the person keeps", the `setup-token` token, which does not refresh. The login
+   that refreshes lives in `~/.claude/.credentials.json` [3]. Mounting it changes that line of
+   the charter, by the person's hand. Whether Claude Code rewrites the file in place or by
+   rename was not checked [unconfirmed]. If it renames, a single-file mount cannot carry it,
+   and it needs a dedicated directory, as q-72 gave Codex.
+4. **The risks stay as option A states them.** The worker can read and copy the host's
+   refresh tokens, which work until they expire or are revoked, and it can replace or break
+   the host's Codex login. q-72 accepted that for Codex, and the person's direction accepts it
+   for the local case as a whole.
+5. **GitHub: the token file passed in, as chartered.** The person's direction names the
+   model logins. This document reads "local means the shared host login" as keeping GitHub's
+   chartered token file too, with minted tokens moving to the remote design. That reading is
+   open (question 4).
 
-**Gaps this leaves, stated plainly.** A copied `setup-token` token works for model requests
-for up to a year. A copied sandbox Codex refresh token works until it, or the sandbox's next
-refresh, rotates it; the host's Codex login is never exposed. A copied API key, when that
-fallback is chosen, works until revoked. A copied GitHub token works for up
-to an hour, or until teardown when revocation succeeds. A GitHub run longer than an hour
-loses access unless a refresh design follows. Use during the run, data exfiltration through
-allowed hosts and fronting remain, as for every option.
+### Remote sandboxes: the broker design, deferred
 
-**Increments, if accepted.** Each is specified by black-box scenarios first, against fakes;
-no scenario uses a real account (charter).
+Brokering and separate logins apply only to remote sandboxes. When those exist, the rest of
+this document is the starting point, and the person decides then. As surveyed today
+(analysis):
 
-1. Slice-31 and slice-33 as designed.
-2. A sandbox-only Codex ChatGPT login in the harness home, logged in once by device login,
-   replacing the shared read-write directory and answering decision 0025's question 1 for
-   unattended runs. Its first test is whether host and sandbox logins refresh independently.
-   A Codex API-key kind on the same seam follows as the explicit fallback.
-3. A GitHub App kind: policy and approval binding, a minting port with an I/O-free fake, a
-   fake GitHub endpoint in CI, revocation at teardown recorded in recovery.
-4. Later, and only on the person's word: a refresh design for long GitHub runs, then C.
+- **Separate logins, never the host's.** A long-lived personal token should not go into a
+  VM on a cloud provider's host, its memory or its snapshots (option A, "MicroVM fit").
+- **GitHub: an installation token minted per run (D).** One hour, limited to the approved
+  repository and permissions, revoked at teardown [35][36]. The approval binds the App, the
+  installation, the repository and the permissions, from the policy, never from the
+  checkout's Git configuration.
+- **Model API keys: a base-URL broker (C)**, the documented Anthropic pattern [2], as a
+  component separate from the egress proxy. Federation [9] where the provider gives each VM
+  a workload identity.
+- **The Claude subscription is never brokered** [1].
+- **No option B.** It costs the most: a planted CA per client, HTTP/2 and streaming parsing,
+  body re-masking for refreshes, JWT-shaped Codex placeholders, two gh header forms, and a
+  move to its own repository first. Its credential gain is reachable for API keys through C
+  without a CA, and is barred for the Claude subscription. Its one unique gain, closing
+  fronting, is an egress question, not a credential one.
+
+**Gaps this leaves, stated plainly.** Locally, a copied Claude or Codex refresh token works
+until it expires or is revoked, and the worker can replace or break the host's Codex login.
+A copied GitHub token works until its expiry. Use during the run, data exfiltration through
+allowed hosts and fronting remain, as for every option. The remote design would close the
+copy gap for GitHub and for API keys, never for a subscription login.
+
+**Increments.** Each is specified by black-box scenarios first, against fakes; no scenario
+uses a real account (charter).
+
+1. Slice-31 and slice-33 as designed, with Codex on q-72's mount.
+2. The host's Claude login mounted, once the person changes the charter's step 2 line. Its
+   mount shape follows how Claude Code rewrites the file.
+3. Remote sandboxes: the broker design, specified when remote sandboxes start.
 
 ## Questions for the person
 
-Each lists the recommended answer first.
+Settled by the person on 2026-11-20:
 
-1. **Direction.** Recommended: accept option E as above, A for model credentials and D for
-   GitHub, no interception, C deferred. Alternatives: keep A alone with least-scope rules
-   (decision 0025, question 4); or start option B, which first moves the proxy to its own
-   repository.
-2. **Claude login for unattended runs.** Recommended: the `setup-token` token passed in, as
-   chartered, with an API key as a second kind. Never broker the subscription. Alternative:
-   API keys only, which removes any doubt about the terms at the cost of API billing.
-3. **Codex login.** Recommended (the person's correction, 2026-11-20): a sandbox-only
-   ChatGPT login by default, kept in the harness home, logged in once there by device login,
-   never the host's `auth.json`; it keeps the subscription and closes host substitution. An
-   API key stays as an explicit fallback kind for when the weekly limit is reached.
-   Alternatives: an API key by default, which bills the API instead of the subscription; or
-   keep the shared login as the default, as q-72 set. This changes charter step 2. Open
-   point: whether two logins of one account refresh independently is unconfirmed (see the
-   recommendation) and is the first thing to test.
-4. **GitHub.** Recommended: GitHub App installation tokens minted per run, limited to the
-   approved repository and permissions, revoked at teardown, with the host controller
-   calling GitHub to mint and revoke. Alternative: require a fine-grained personal token
-   for one repository with an expiry the person sets, and accept that a copy works until
-   then.
-5. **GitHub runs longer than an hour.** Recommended: the first increment promises one hour
-   and says so; refresh comes later in its own design. Alternatives: a credential helper
-   over a per-run socket, which needs an exception to the contract's ban on socket
-   forwarding; or rewriting the staged file in place from a descriptor the controller
-   keeps (analysis, untested).
-6. **Where a base-URL broker would live.** Recommended: C is not interception, so the
+1. **Direction.** Local sandboxes share the host's own logins; remote sandboxes get the
+   broker design, deferred until they exist. No interception, broker or minting now.
+2. **Claude login, local.** The host's own login, mounted. Open point: the charter's step 2
+   names the `setup-token` token, so mounting the refreshing login changes that line, by the
+   person's hand.
+3. **Codex login, local.** The host's own login, through q-72's mount, unchanged.
+
+Open now:
+
+4. **GitHub, local.** Recommended: keep the chartered token file passed in, as a
+   fine-grained token for one repository with an expiry the person sets, and accept that a
+   copy works until then. Alternative: mint a GitHub App installation token per run locally
+   too, which adds a long-lived App key on the host and a controller call to GitHub.
+
+Deferred until remote sandboxes exist, to be asked then:
+
+5. **GitHub, remote.** Recommended: App installation tokens minted per run and revoked at
+   teardown. Alternative: a fine-grained token with an expiry.
+6. **GitHub runs longer than an hour.** Recommended: promise one hour first and design
+   refresh later. Alternatives: a credential helper over a per-run socket, which needs an
+   exception to the contract's ban on socket forwarding; or rewriting the staged file in place
+   from a descriptor the controller keeps (analysis, untested).
+7. **Where a base-URL broker would live.** Recommended: C is not interception, so the
    charter's move rule does not apply; it would be its own component and decision record,
-   never part of the egress proxy. Alternative: treat any credential-holding proxy like
-   interception and move it to its own repository first.
-7. **TLS interception.** Recommended: rule it out for this repository; if it is wanted, for
+   never part of the egress proxy. Alternative: move any credential-holding proxy to its own
+   repository first.
+8. **TLS interception.** Recommended: rule it out for this repository; if it is wanted, for
    credentials or for fronting, it starts as its own project, as the charter says.
    Alternative: keep it open as research only.
-8. **MicroVMs on cloud providers.** Recommended: record D (federation, installation tokens)
-   as the credential direction for cloud VMs, and pass no long-lived personal token into
-   one. Build nothing now. Alternative: decide when the microVM work starts.
+9. **Credentials in cloud VMs.** Recommended: D (federation, installation tokens), and no
+   long-lived personal token in a VM. Alternative: decide when the microVM work starts.
 
 ## Sources
 
@@ -580,6 +572,3 @@ Each lists the recommended answer first.
 54. Claude Code, LLM gateway protocol: https://code.claude.com/docs/en/llm-gateway-protocol.md
 55. Codex issue 41973, refresh token revoked; single-use refresh tokens: https://github.com/openai/codex/issues/41973
 56. Codex Security issue 2243, a shared single-use refresh token: https://github.com/openai/codex-security/issues/2243
-57. Codex, maintain account auth in CI/CD: https://learn.chatgpt.com/docs/auth/ci-cd-auth
-58. Codex issue 17340, refresh token already used, across hosts: https://github.com/openai/codex/issues/17340
-59. Codex issue 9634, refresh token already used: https://github.com/openai/codex/issues/9634
