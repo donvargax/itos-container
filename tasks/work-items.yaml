@@ -2557,7 +2557,7 @@ items:
   - id: T-74
     title: itos.yaml and release.yml comments describe this project, not a project made from the template
     phase: 1
-    owner: null
+    owner: donvargax
     status: todo
     depends_on: []
     kind: task
