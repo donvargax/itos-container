@@ -9163,8 +9163,60 @@
     mount option string produces a particular behaviour, it cites the relevant engine source or a
     native CI observation. It lands after the trim so the cap has headroom over the shortened file.
     Broken down from p1-refresh-remaining-template-guidance.
+
+    The problem. slice-34 requested the worker's /tmp tmpfs as rw,nosuid,nodev,mode=1777, and its
+    spec comments, step oracles and warm-up fixture records called that mount executable because
+    noexec was absent from the request. Moby prepends noexec to every HostConfig.Tmpfs option list,
+    and only a later exec token clears it (daemon/oci_linux.go and MergeTmpfsOptions). So the mount
+    was noexec, and every native home case stopped at its temporary-ELF step until 21c40b9 named
+    exec. The spec drew a behaviour from an option string, and neither engine source nor a native
+    observation backed it. The engine may add, reorder or override options, so what a request
+    leaves out says nothing about the mount.
+
+    The rule. Add one bullet to '## Writing a scenario' in features/README.md. When a spec claims
+    that an exact mount option string produces a behaviour, it cites one of two things. The first
+    is the engine source that turns the requested options into the mount. The second is a native
+    CI observation of the mounted result and the behaviour itself. "Spec" covers ledger entries,
+    scenario comments, step oracles and fixture records. Examples are a mount being executable,
+    writable or read-only, or a path being reachable or not. The bullet must contain the words
+    "mount option", "engine source" and "native CI". It may say that an option left out of a
+    request is not evidence, with the noexec prepend as a one-clause example. Following T-71's
+    history rule, it names no commit SHA, run ID, date or slice account. The README already says
+    that local and harness checks are not native evidence, so the bullet points to that and does
+    not repeat it.
+
+    Bounds. Change only features/README.md. Leave every other heading, rule and table as it is.
+    Leave the feature files, step oracles and fixtures alone: harness-home.feature and
+    offline.feature already state moby's noexec prepend. Do not change any gate or doc-caps cap. The
+    bullet must fit in the headroom T-71 left: the file is 46800 bytes and the cap is 49152, so
+    2352 bytes remain. If it does not fit, shorten the bullet. Raising the cap is a decision, not
+    a fix, under doc-caps' own comment. If no bullet that states the rule fits, stop and report it.
+
+    Commits and proof. One docs commit with Task T-72 carries features/README.md only. No
+    proof.code path or enforcement input changes, so there is no mutation proof and no fixture
+    matrix. The range is prose-only (itos.yaml's ci.prose.paths includes **/*.md). On such a range
+    CI keeps only a task's static checks and those declaring prose: true, and itos work done runs
+    no late check. So both checks declare prose: true. They use only POSIX sh, grep, sed and tr.
+    The implementer may commit freely in its workspace. The host makes the landing commits and runs
+    itos, submission, publication and review.
+
+    How each check fails today. The first exits 1 at grep, because features/README.md never says
+    "mount option". Its doc-caps half passes now, and it fails if the bullet pushes the file past
+    49152 bytes. The second reads only the '## Writing a scenario' section and flattens whitespace
+    first, so line wrapping cannot fail it. It fails today on its first anchor, "mount option". It
+    also fails if the rule is placed in another section or leaves out either kind of evidence.
+    Neither check can judge whether the bullet states the rule correctly. Review of the diff
+    against this entry judges that.
   done_when:
     - run: grep -qi 'mount option' features/README.md && tools/bin/doc-caps
+      prose: true
+    - run: |
+        s=$(sed -n '/^## Writing a scenario$/,/^## /p' features/README.md | tr -s ' \n' ' ')
+        test -n "$s" || { echo "features/README.md lacks '## Writing a scenario'" >&2; exit 1; }
+        for a in 'mount option' 'engine source' 'native CI'; do
+          printf '%s' "$s" | grep -qiF -- "$a" || { echo "Writing a scenario lacks: $a" >&2; exit 1; }
+        done
+      prose: true
 - id: T-73
   type: docs
   title: README explains how to register and verify the local commit hooks
