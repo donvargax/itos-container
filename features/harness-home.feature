@@ -334,6 +334,295 @@ Feature: An approved persistent home for one checkout's harness
     Then each mismatch reports changed approval with exit 1 before resource mutation and each matching control reaches its requested runtime boundary
     And disabling home preserves its retained volume and re-enabling selects the original volume
 
+  # Slice-41: OpenCode starts headless in its isolated home and configuration.
+  # The OpenCode counterpart of slice-35 (Codex), built on slice-34 (done): the
+  # home, its HOME/XDG mappings and boundary inspection above are prerequisites,
+  # not repeated. Its rows are ID-HOME-25 to 31, beside their topics' blocks: the
+  # policy and approval rows here, the local runtime rows after ID-HOME-08 and the
+  # native rows after ID-HOME-14. They sit in this file because they are this
+  # area's behaviour and the file is already in the offline engine shard.
+  # Authorities: charter milestone two steps 1 and 3 ("harness state seeded where
+  # its first run would otherwise stop or call home"; "no scenario uses a real
+  # model, account or credential"); container-pilot "Goal and limits" (OpenCode
+  # in the worker; model selection is not included), "Agreed scope" (Agents,
+  # Mounts) and "Credentials and Git"; decisions 0022 and 0030; architecture.md
+  # Slices; egress.feature and offline.feature. Slice-41's spec adds these rows
+  # and comments only: no bindings, product code or evidence. Slice-34's rows and
+  # decisions above are unchanged.
+  #
+  # Scope and limits:
+  # - No scenario installs or runs OpenCode itself: the charter makes a real
+  #   harness run the person's smoke check, and no scenario uses a real model,
+  #   account or credential. Native rows run a synthetic stand-in executable,
+  #   installed in the CI checkout as /workspace/opencode and named by that
+  #   explicit path in the literal argv, that reports what the worker gave it.
+  #   These rows prove what the product controls: request, approval, the
+  #   worker's environment and argv, isolation, egress and cleanup. They claim no
+  #   OpenCode compatibility.
+  # - Target release: OpenCode v2.2.1, the version installed on the person's
+  #   host, pinned by the person on 2026-11-20 in place of v1.19.0 (which has no
+  #   --standalone option). The person's one host smoke check on that release,
+  #   run on their OpenCode Go login with a real credential approved for that
+  #   check only, is done. Its record, docs/proof/slice-41-opencode-smoke.md
+  #   (c8fab73, linked from the item at 1b44058), is the sole authority for what
+  #   OpenCode itself does, and the opencode-v1 table below is drawn from it:
+  #   `opencode --standalone run --format json` is accepted as written (its
+  #   finding 2); v2.2.1 loads, in order, managed policies, integrations, remote
+  #   well-known configuration, the global file, OPENCODE_CONFIG, project files,
+  #   .opencode directories, inline OPENCODE_CONFIG_CONTENT and then managed
+  #   settings, which override everything (finding 3); and of the
+  #   OPENCODE_DISABLE_* names an earlier draft used, v2.2.1 reads only
+  #   AUTOUPDATE and MODELS_FETCH (finding 4). This spec claims no OpenCode
+  #   behaviour beyond that record; its scenarios test only what the product
+  #   controls.
+  # - Before building the opencode-v1 table, the implementer reads that record.
+  #   The table follows it as of 2026-11-21. If the implementer finds the two
+  #   disagreeing, they stop and report to the coordinator; they do not adapt
+  #   the table or the scenarios. Any later change to the table is a feat commit
+  #   with a new profile ID and a new approval. The stand-in rows keep their
+  #   shape. Another OpenCode release needs its own smoke check before a new
+  #   profile.
+  # - v2.2.1 has no separate account configuration layer (finding 3), and this
+  #   slice delivers no OpenCode login (slice-40 owns it). Managed settings load
+  #   after the inline content and override it; on Linux they live in
+  #   /etc/opencode. OPEN, 2026-11-21: whether the person's approved image holds
+  #   any managed configuration. The record could not establish it, since no
+  #   image was used, and the person has not yet checked it. Until the person
+  #   settles it, this spec treats whatever managed configuration the approved
+  #   image holds as the person's approved, digest-pinned input: it sits in the
+  #   image's read-only root filesystem, which the worker cannot write, and it
+  #   may override the profile. No row depends on the answer. The profile
+  #   prevents unintended startup calls as a convenience. It is not an
+  #   isolation property: the approved egress proxy stays the only route out and
+  #   the egress boundary.
+  # - The OpenCode login (auth.json under ~/.local/share/opencode) belongs to
+  #   slice-40. This slice delivers no credential and no row needs one: the fake
+  #   provider accepts unauthenticated synthetic requests.
+  # - Run never chooses the provider or model. The contract leaves model
+  #   selection out. The literal argv (`--model`) and the checkout's own
+  #   opencode.json choose them. A provider is "authorized" only in that its name
+  #   is on the approved egress allowlist (and, later, its login is granted by
+  #   slice-40). The isolation boundary is the proxy, never OpenCode's config.
+  #
+  # Request and approval decisions:
+  # - Add optional home.harnesses to the home object, in policy versions 1, 2 and
+  #   3: a non-empty list of unique harness names. This slice accepts only
+  #   "opencode"; slice-35/36 may add their own names. Canonical order is sorted.
+  #   Omitting harnesses keeps every slice-34 output and canonical byte unchanged.
+  #   Home's storage stays required and exactly volume.
+  # - Malformed requests, each exit 2 with file-only doctor and no state or
+  #   engine access: harnesses null, "opencode" or {} -> policy.type
+  #   /home/harnesses; [] -> policy.home_harness /home/harnesses; [codex] or
+  #   [OpenCode] -> policy.home_harness /home/harnesses/0; [opencode, opencode]
+  #   -> policy.home_harness /home/harnesses/1; [7] -> policy.type
+  #   /home/harnesses/0; {harnesses: [opencode]} without storage -> the existing
+  #   policy.required /home/storage. policy.home_harness is new; its fix names
+  #   home.harnesses [opencode]. Duplicate keys, depth and size keep their rules.
+  # - File-only doctor returns home: {storage: volume, harnesses: [opencode]}.
+  # - The effective approval's home object gains
+  #   harnesses:[{"name":"opencode","profile":"opencode-v1"}]. Approval profile
+  #   names (offline-home-v1 and the rest) stay as slice-34 named them; the home
+  #   object distinguishes harness settings. opencode-v1 binds exactly the
+  #   environment table below, so changing that table needs a new profile ID and
+  #   a new approval. An older binary's strict codec refuses such a record; that
+  #   downgrade lockout belongs to p2-control-state-upgrade-contract.
+  # - Doctor and approve show, before any consent: the harness name, profile
+  #   opencode-v1, every environment name and value below, that OpenCode's
+  #   configuration, data and state live only in /home/itos, that the argv and
+  #   the checkout choose the provider and model, that a provider is reachable
+  #   only through the approved allowlist (for an offline policy: that no
+  #   provider is reachable), and that this setting delivers no OpenCode login.
+  #   The difference lists add /home/harnesses in the existing sorted order.
+  # - The harness profile is not a network or credential grant. q-52's rules are
+  #   unchanged: an offline harness request without credentials may still be
+  #   approved by its matching --fingerprint; allowlist or credential settings
+  #   still need the person at a terminal. The fingerprint route shows no
+  #   review (approve's domain skips ui.Review there), so ID-HOME-26 proves the
+  #   disclosure through doctor and bare terminal approve: the review prints the
+  #   profile, its environment and the /home/harnesses difference before the
+  #   single y/N prompt. Inspecting or approving allocates no volume and creates
+  #   no worker.
+  # - Adding or removing the harness changes the fingerprint and needs a fresh
+  #   approval. Run reports the local mismatch as egress.feature specifies,
+  #   naming /home/harnesses, exit 1, before any engine connection. Selection
+  #   freezes the profile with the other settings, as ID-HOME-04 does for home.
+  #
+  # Runtime decisions (profile opencode-v1):
+  # - The controller sets exactly these worker environment values, sorted, beside
+  #   the home mappings above, overriding any image default:
+  #     OPENCODE_CONFIG_CONTENT={"share":"disabled"}
+  #     OPENCODE_DISABLE_AUTOUPDATE=true
+  #     OPENCODE_DISABLE_MODELS_FETCH=true
+  #   The inline config value is those exact bytes, with no spaces or newline.
+  #   What the smoke record supports for each value on v2.2.1:
+  #   - OPENCODE_DISABLE_MODELS_FETCH turns off the models catalogue fetch. It
+  #     is the one value with an off/on control seen on the wire: a headless
+  #     run connected to models.opencode.ai:443 without it and made no such
+  #     request with it (findings 4 and 5).
+  #   - OPENCODE_DISABLE_AUTOUPDATE is read in the source and skips the update
+  #     check before anything else (finding 4). No off/on control showed `run`
+  #     checking for updates at all, so it is kept as a safeguard, not as an
+  #     observed effect.
+  #   - OPENCODE_CONFIG_CONTENT is read as the inline layer (findings 3 and 4).
+  #     share "disabled" is a value v2.2.1's loader keeps (finding 3). No run
+  #     showed a share request either way, so it too is a safeguard. The legacy
+  #     autoupdate key is left out: v2.2.1 rewrites it to update, and the
+  #     updater never reads the merged configuration (findings 3 and 4), so it
+  #     would switch nothing off.
+  #   - OPENCODE_DISABLE_DEFAULT_PLUGINS and OPENCODE_DISABLE_LSP_DOWNLOAD are
+  #     left out: v2.2.1 reads neither (finding 4).
+  #   - No value stops the bundled LM Studio, Ollama and vLLM providers'
+  #     plain-HTTP probes of 127.0.0.1 ports 1234, 11434 and 8000 (finding 5).
+  #     In the worker NO_PROXY names 127.0.0.1 (egress.feature), so a client
+  #     that honours it probes the worker's own loopback; one that does not
+  #     sends plain HTTP proxy requests, which the proxy refuses as it refuses
+  #     ID-EGRESS-13's GET. Either way nothing leaves the worker. The profile
+  #     claims nothing about these probes and no row tests them.
+  #   In ID-HOME-31 the proxy refuses the startup-service name
+  #   models.opencode.ai, which is a proxy property and never evidence of any
+  #   setting's effect. The values are non-secret and appear in docker inspect.
+  # - Seed by environment only: run writes no OpenCode file into the home, makes
+  #   no archive copy beyond the root initialization above, and adds no mount.
+  #   Every run reapplies the profile, so a repeat run needs no reseeding and
+  #   never rewrites home contents. What the worker leaves under
+  #   /home/itos/.config/opencode or .local/share/opencode is hostile worker
+  #   data it starts with next time, as decision 0030 discloses.
+  # - The argv stays literal: no wrapper, injected flag, model, prompt or
+  #   format. Run does not check that argv[0] is opencode; the profile applies to
+  #   whatever the workload runs. `opencode --standalone run --format json` is
+  #   the person's argv, and its JSON event stream reaches run's stdout unchanged
+  #   under offline.feature's stream rules: run adds no stdout bytes and writes
+  #   its own diagnostics to stderr. The bare name resolves through the
+  #   approved image's own PATH, which run does not change; manifest PATH stays
+  #   reserved. The native rows therefore name the stand-in by its explicit
+  #   checkout path, /workspace/opencode, as slice-34's probe does.
+  # - The host's OPENCODE_*, XDG_* and HOME values never reach the worker. Run
+  #   never reads or copies the host's ~/.config/opencode, ~/.local/share/opencode
+  #   or ~/.local/state/opencode. Manifest containerEnv/remoteEnv already reserve
+  #   the OPENCODE_ and XDG_ prefixes, which stays unchanged. Other OPENCODE_*
+  #   defaults in the approved image are left alone: the image is the person's
+  #   approved, digest-pinned input.
+  # - Boundary inspection before start, beside the home inspection above, also
+  #   verifies each opencode-v1 name has exactly its value in the created
+  #   worker's environment. The check is the existing exact environment
+  #   comparison in VerifyRun (internal/engine/session/docker/run.go,
+  #   sameEnvironment), with the expected environment gaining the opencode-v1
+  #   entries. Docker merges image defaults into the inspected Config.Env, so an
+  #   inherited value is observable only when its bytes differ from the
+  #   approved ones: each defect is an observed value that is missing or differs
+  #   from the approved bytes, including the image's own conflicting value left
+  #   in effect. Any such value is run.isolation-unverified, exit 1, with no
+  #   start; the owned unstarted worker is removed and the home retained.
+  #   Sessions without the harness keep their existing inspection.
+  # - Startup stays bounded by the existing 10 s call and 120 s startup budgets.
+  #   The profile adds no engine call. No workload, OpenCode-startup or output
+  #   timeout is added: the contract sets no workload lifetime limit. Exit,
+  #   failure, cancellation, cleanup and recovery stay as offline, lifecycle,
+  #   egress and the home rows above specify them. The profile owns no resource,
+  #   so status, stop and recovery records gain nothing for it.
+  #
+  # Architecture and libraries: policy and approval keep validation and
+  # canonicalization (the home object and the opencode-v1 table); the shared
+  # session engine applies the frozen environment in its docker adapter and
+  # verifies it with the home boundary (home_boundary.go today). Doctor and
+  # approve presentation go through the existing approval presentation package.
+  # No slice imports another, only cmd assembles, porttest fakes do no I/O and
+  # share contracts with adapters. No new package, dependency, library or
+  # network service: reuse pinned moby client v0.6.2/api v1.56.1 and Go 1.27.4.
+  # No arc42 departure is expected; if the code shows one, record a decision in
+  # the same pull request. The implementation updates docs/CONFIG.md
+  # (home.harnesses, opencode-v1) and docs/CLI.md, and adds home.harnesses to
+  # the three published policy schemas, docs/schemas/itos-container-v1, -v2 and
+  # -v3.schema.json. Each closes its home object with additionalProperties
+  # false and would otherwise reject a request that file-only doctor accepts.
+  #
+  # Step handoff: every phrase in ID-HOME-25 to 31 is NEW except two existing
+  # home steps: ID-HOME-05's "fresh run controllers execute both runs through
+  # both local backends" and ID-HOME-08's "the owned unstarted worker is removed
+  # and the retained home and unrelated resources remain intact". Their
+  # definitions must also accept the OpenCode launch fixtures, without changing
+  # what they assert for ID-HOME-05 and 08. Reuse the helpers
+  # behind harness_home_policy_steps_test.go, harness_home_approval_steps_test.go,
+  # harness_home_local_steps_test.go ("both local backends", as above) and the
+  # harness_home_native_* and egress native fixtures. Add definitions alone in a
+  # red test commit with @wip retained. Steps run the CLI or the test-only cmd
+  # assembly and inspect public output, protected artifacts and independent
+  # engine observations; never product imports or source as an oracle.
+  # Givens create temporary Git checkouts, raw policies and manifests, synthetic
+  # image metadata (with conflicting image OPENCODE_*/XDG defaults where named),
+  # independently encoded approval, snapshot and ownership records, host-home
+  # sentinel files and host environment sentinels. None calls product approve,
+  # run, status or stop, and none asserts. A refused or failed product run is
+  # captured in When and judged in Then. Positive controls use the same harness
+  # request, never a no-harness success that could hide a harness refusal.
+  # Native Givens provision only trusted controls, the stand-in, private state
+  # and synthetic approval; no real model, account, credential, public endpoint
+  # or resolver rewrite. Fake provider TLS uses in-memory ephemeral keys.
+  # ID-HOME-31's startup-service name is refused by the proxy before any dial;
+  # its independent control is a fixture alias, never a real host. This file
+  # is already in the offline shard and features/smoke.yaml; ID-HOME-31 needs the
+  # egress fixtures inside that shard, within its time limit. Non-engine red runs
+  # are local; every @engine red and green run is CI-only, by dispatch.
+  #
+  # Expected red, from reading 16e5bdb, whose product code is main's at b880d99
+  # (predictions, not executed evidence): the policy parser refuses
+  # /home/harnesses as policy.unknown_key with exit 2. Every slice-41 row's first
+  # Then fails on that captured result, never in a Given or When.
+  #
+  # The implementer may commit freely in its own workspace; the host makes the
+  # landing commits and handles itos, submission, publication and review.
+  @wip @slice-41 @ID-HOME-25
+  Scenario Outline: Policy accepts only an explicit OpenCode harness on a volume home
+    Given an OpenCode harness policy fixture using version <version> and no credential grants
+    When file-only doctor inspects a volume home without harnesses, a volume home with the OpenCode harness and the malformed harness requests
+    Then the OpenCode request succeeds with exactly the normalized home storage and harness and the request without harnesses keeps its slice-34 output
+    And malformed harness requests have the specified rules and subjects without state or engine access
+
+    Examples:
+      | version |
+      | 1       |
+      | 2       |
+      | 3       |
+
+  # Approval status compares canonical settings, so a changed review and the
+  # next generation alone do not show a changed digest. The fixture calculates
+  # both fingerprints itself, as approval.feature's "independently calculated
+  # fingerprint" does: the old one from the seeded no-harness settings and the
+  # new one from the expected settings with the OpenCode harness. It requires
+  # the two to differ, and requires doctor's reported fingerprint and the
+  # persisted approval's to equal the new one.
+  @wip @slice-41 @ID-HOME-26 @local-engine-fixture
+  Scenario: Review binds the OpenCode profile without creating storage
+    Given an OpenCode approval fixture with an independently seeded approval of a volume home without harnesses and a requested OpenCode harness
+    When ordinary doctor inspects the requested harness and bare approve runs at a terminal and receives "y" after the review
+    Then doctor and the transcript before exactly one y/N prompt both show the OpenCode harness profile, its exact environment and the /home/harnesses difference with old and new values
+    And the review before its prompt states where OpenCode state lives, who chooses provider and model, that no provider is reachable offline and that no login is delivered
+    And approval exits 0 and records the independently expected home object at the next generation
+    And doctor and the persisted approval both carry the independently calculated new fingerprint, which differs from the seeded approval's fingerprint
+    And no home volume or worker is created and checkout and host-home OpenCode sentinels are unchanged
+
+  # Each mismatch must name /home/harnesses; each matching control must reach
+  # its runtime boundary, so a generic policy refusal passes neither half.
+  # Unlike ID-HOME-03's fixture, which sets the approval status in test code,
+  # no status, view or difference is supplied by the test. As in ID-EGRESS-01,
+  # each Given writes a temporary Git checkout with a raw itos-container.yaml
+  # (adding or removing home.harnesses) and approval records whose JSON bytes
+  # the step encodes itself, never through the product codec. The When runs the
+  # itos-container binary's own `run`, so production approval preflight
+  # (approval domain Preflight with the disk readiness, disk store and
+  # canonical codec that cmd assembles) parses the policy, decodes the records
+  # and computes the difference. Engine connections are recorded at a fixture
+  # engine endpoint outside preflight, as ID-EGRESS-01's "no endpoint
+  # connection was attempted" is. Each mismatch makes no connection there, and
+  # each matching control's connection must be recorded there and reach its
+  # runtime boundary.
+  @wip @slice-41 @ID-HOME-27 @local-engine-fixture
+  Scenario: Adding and removing the OpenCode harness both require approval
+    Given OpenCode harness approval mismatch checkouts with raw policies and independently encoded approval records for adding and removing the harness and matching controls
+    When the itos-container binary runs each changed request and then each matching control through its production approval preflight
+    Then each mismatch reports changed approval at /home/harnesses with exit 1 and the recording engine endpoint saw no connection
+    And each matching control connects to the recording engine endpoint and reaches its requested runtime boundary with or without the OpenCode environment as approved
+
   # Frozen-input and local lifetime. Red at each first Then: no home profile,
   # no home mount or no home ownership operation exists in the baseline.
   @slice-34 @ID-HOME-04 @local-engine-fixture
@@ -413,6 +702,40 @@ Feature: An approved persistent home for one checkout's harness
       | XDG_STATE_HOME inherited from image |
       | TMPDIR points into persistent home  |
       | another unapproved mount            |
+
+  # Slice-41's local runtime rows; its decisions sit above ID-HOME-25.
+  @wip @slice-41 @ID-HOME-28 @local-engine-fixture
+  Scenario: The worker gets the OpenCode profile and literal argv and nothing from the host
+    Given an OpenCode launch fixture with conflicting image OPENCODE and XDG defaults, host OPENCODE XDG and HOME sentinels, host-home OpenCode configuration and login sentinels and two sequential runs of "opencode --standalone run --format json --model fake/fake-model say-ok"
+    When fresh run controllers execute both runs through both local backends
+    Then each worker's command is exactly the supplied argv and its environment holds exactly the opencode-v1 values and the home mappings over the image defaults
+    And no worker environment, mount or archive copy carries a host sentinel or any OpenCode file
+    And the second run reuses the same home without writing into it and host-home sentinels are unchanged
+
+  # Each defect is independently injected into the created worker's observed
+  # environment; the matching control has the same harness request. A value
+  # equal to the approved bytes cannot be told from a controller-supplied one,
+  # so every defect is missing or differs from those bytes. The two image rows
+  # give the synthetic image a conflicting default and observe it left in
+  # effect: OPENCODE_CONFIG_CONTENT={"share":"auto"} and
+  # OPENCODE_DISABLE_MODELS_FETCH=false. Every row names a kept opencode-v1
+  # value; each name has a missing row and a differing row.
+  @wip @slice-41 @ID-HOME-29 @local-engine-fixture
+  Scenario Outline: Boundary inspection refuses a worker without the exact OpenCode profile
+    Given an OpenCode launch fixture whose worker inspection has "<defect>" and an independent correct OpenCode control
+    When the OpenCode boundary launches are attempted through both local backends
+    Then the defective launch, whose observed environment differs from the approved opencode-v1 bytes, reports run.isolation-unverified with exit 1 and no start while the correct OpenCode control succeeds
+    And the owned unstarted worker is removed and the retained home and unrelated resources remain intact
+
+    Examples:
+      | defect                                                        |
+      | OPENCODE_CONFIG_CONTENT left at the image's conflicting value |
+      | OPENCODE_CONFIG_CONTENT missing                               |
+      | inline config with sharing set to auto                        |
+      | OPENCODE_DISABLE_MODELS_FETCH missing                         |
+      | OPENCODE_DISABLE_MODELS_FETCH left at the image's false       |
+      | OPENCODE_DISABLE_AUTOUPDATE set to false                      |
+      | OPENCODE_DISABLE_AUTOUPDATE missing                           |
 
   # Recovery and bounded operations. Independently seeded home-aware records
   # are not accepted by the old codec: first Then is red, never a setup assertion.
@@ -623,6 +946,45 @@ Feature: An approved persistent home for one checkout's harness
     Then each later worker reads only its own retained home marker from a different owned volume
     And neither worker can read the other home or the synthetic host-home sentinel and a same-home read control succeeds
     And cleanup preserves both checkout edits and both homes while removing both sessions
+
+  # Slice-41's native rows. The first assertion needs the absent harness
+  # request; output, exit, retained data, egress and cleanup are regression
+  # controls in this profile, not new behaviour. The stand-in is installed in
+  # the CI checkout as /workspace/opencode and named by that explicit path, so
+  # its lookup depends on no image PATH and no reserved manifest PATH.
+  @wip @slice-41 @ID-HOME-30 @engine
+  Scenario: A headless OpenCode stand-in starts with only its isolated home and configuration
+    Given a CI OpenCode checkout with a cached approved image for the actual non-root controller UID GID, an approved offline volume home with the OpenCode harness, host-home OpenCode configuration and login sentinels and a synthetic opencode stand-in installed at "/workspace/opencode"
+    When two fresh product runs invoke the stand-in as "/workspace/opencode --standalone run --format json" with a prompt, the first exiting zero and the second exiting seven
+    Then in both runs the stand-in reports its literal argv, the opencode-v1 environment and its configuration data and state directories inside a writable private /home/itos
+    And it finds no host OpenCode configuration or login and the second run reads the state marker the first wrote under its OpenCode data directory
+    And run's stdout is exactly the stand-in's JSON event lines with exit codes zero and seven and product diagnostics only on stderr
+    And after each run its worker and anchor are absent while the home remains and the host-home sentinels and checkout ownership are unchanged
+
+  # Reuses the egress native fixture (README, slice-27's engine rows): every
+  # name, provider.example and the startup-service name alike, is a
+  # controlled TLS alias of a fixture endpoint on a fixture network, so no
+  # request needs ambient DNS and a proxy that forwarded the startup-service name
+  # would reach a fixture receipt, never a public service. The stand-in stops at
+  # the fixture's barrier file in its checkout; there the harness attaches only
+  # the proxy to the fixture network, never the worker or the product's two
+  # networks, and records that attachment apart. A run refused before its
+  # worker starts is captured in When and fails the first Then. Generic
+  # allowlist behaviour supplies the network assertions, so the nonce receipt
+  # counts only after the stand-in has reported the opencode-v1 profile and the
+  # fake model it received. The startup-service name is models.opencode.ai, the
+  # catalogue host the smoke record saw on v2.2.1 (finding 5). opencode.ai is the
+  # OpenCode Go provider's own host, not a startup service, and models.dev and
+  # registry.npmjs.org were not seen on v2.2.1, so none of them is listed.
+  @wip @slice-41 @ID-HOME-31 @engine @linux
+  Scenario: OpenCode reaches only its approved fake provider and its startup services stay closed
+    Given a CI OpenCode checkout allowing "provider.example" with an approved volume home with the OpenCode harness, matching protected approval and a synthetic opencode stand-in installed at "/workspace/opencode"
+    And independent fixture TLS aliases with nonce receipts for "provider.example models.opencode.ai" on a fixture network
+    When the product runs "/workspace/opencode --standalone run --format json --model fake/fake-model say-ok" and at the stand-in's checkout barrier the harness attaches only the proxy to the fixture network
+    Then the run is not refused before its worker starts and the stand-in reports its literal argv, the opencode-v1 environment and model "fake/fake-model" before it sends its model request
+    And the fake provider receives exactly the stand-in's nonce request through the proxy variables and the stand-in prints its final JSON event on run's stdout
+    And each startup-service name receives 403 without an upstream dial or a fixture receipt while its independent control succeeds
+    And the product returns the observed workload exit and confirms its worker, proxy and both networks absent while the home remains
 
   # Controller death cannot supply retry output: use the independently captured
   # protected registration, then explicitly invoke fresh status and stop.
