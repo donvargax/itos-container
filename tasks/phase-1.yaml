@@ -9288,8 +9288,68 @@
     harvest and provenance notes from itos-template and its attribution unchanged. Change comments
     only. No key, step or gate changes, so itos config check and the fixture matrix see identical
     configuration. Broken down from p1-refresh-remaining-template-guidance.
-  done_when:
-    - run: "! grep -n 'made from this template' itos.yaml .github/workflows/release.yml && itos config check"
+
+    The problem. itos.yaml still carries two comments written for itos-template, which other
+    projects are made from. Lines 1 and 2 say "Stack branches add language gates with the code
+    they prove; the root remains language-neutral". That describes the template's root and its
+    language stack branches. This file is itos-container's own configuration and holds its Go
+    gates, its scenarios and its code proof, so the comment is false here. Lines 34 to 36, above
+    the Upgrading footer, say it records "What a user of a project made from this template must
+    change". In this project the footer records what a user of itos-container must change when
+    moving to the release that carries the commit. That user runs the released binary's commands
+    and keeps an itos-container.yaml, and docs/upgrading.md and the release notes quote the
+    footer. A drafter or implementer who reads the comment is told to write for a template user
+    who does not exist here. .github/workflows/release.yml says nothing of the kind: it has no
+    "made from this template" text, and its only template references are the harvest and
+    provenance notes at lines 6 to 11 ("Harvested from the owner's itos-template ...", "the
+    rendered-project helpers from itos-template at 79301eba..."). Those are true history and
+    stay.
+
+    The rule. Reword those two itos.yaml comments, and only those.
+    - Replace lines 1 and 2 with a comment that says the file holds itos-container's commit rules
+      and checks. It names itos-container and uses neither "Stack branches" nor
+      "language-neutral". It may say briefly what the file holds (its Go gates, its scenarios and
+      its code proof).
+    - Reword the comment above `Upgrading:` so it says the footer records what a user of
+      itos-container (its released binary, its commands or its itos-container.yaml) must change
+      for the commit, or none. It must contain the word itos-container. Keep the rest of its
+      meaning: `itos commit --upgrading none`, feat and fix being what a user can feel, and the
+      release notes quoting it.
+    - Leave line 5 ("The source project's pin and checksum, copied with its workflow action") as
+      it is. It records where the itos pin came from, and that is provenance, not template
+      guidance.
+    - Change nothing in .github/workflows/release.yml. The signed parent excludes
+      .github/workflows, its attribution and harvest notes must stay word for word, and the
+      first check already passes on it. It is named in the check only so that no such text can
+      return there.
+
+    Bounds. Change only itos.yaml, and only comment lines. A line that is not a comment, a key, a
+    value, an inline comment after a value, blank lines and indentation stay byte for byte, so
+    `itos config check`, CI and the fixture matrix read the same configuration. The diff against
+    the base is two comment hunks. Leave every other comment in itos.yaml as it is. AGENTS.md,
+    docs, the workflows, tools and every gate stay unchanged. The fixture matrix and itos config
+    check are not to be run by hand; the hooks and CI run them.
+
+    Commits and proof. One chore commit with Task T-74 carries itos.yaml only. itos.yaml is not a
+    proof.code path, so there is no mutation proof. It is an enforcement input
+    (tools/testdata/architecture/selection_test.go watches it), so the pre-commit hook runs the
+    fixture matrix and CI runs `architecture-check --fixtures-if-changed`. If the matrix fails
+    under load, as p2-architecture-fixtures-load records, report it to the coordinator and do
+    not weaken it. Staging itos.yaml also makes the commit-msg hook run itos config check. The
+    range is not prose-only, because itos.yaml is outside ci.prose.paths, so CI runs both checks
+    and neither needs prose: true. They are POSIX sh with grep and sed, as on ubuntu-latest. The
+    implementer may commit freely in its workspace. The host makes the landing commits and runs
+    itos, submission, publication and review.
+
+    How each check fails today. The first exits 1 because grep finds itos.yaml:34 and `!` turns
+    that into failure, so itos config check never runs. It also fails if a reworded file no
+    longer passes itos config check. The second exits 1 at its first grep, which finds
+    "Stack branches" and "language-neutral" on lines 1 and 2. Its second half reads itos.yaml
+    from `    Scenarios:` to `    Upgrading:`, which holds the Upgrading comment, and fails
+    today because nothing there says itos-container. It also fails if the comment is deleted
+    rather than reworded. A simulated rewording of both comments passes both checks. Neither
+    check can tell whether the new wording is accurate or whether a key moved. Review of the diff
+    against this entry judges that.
 - id: T-75
   type: docs
   title: docs/ORCHESTRATING.md states the implemented CI and push policy
@@ -9304,3 +9364,20 @@
     doc-caps cap. Broken down from p1-refresh-remaining-template-guidance.
   done_when:
     - run: grep -qi 'bugbot' docs/ORCHESTRATING.md && grep -qi 'draft' docs/ORCHESTRATING.md && tools/bin/doc-caps
+- id: T-76
+  type: docs
+  title: Decision 0032 settles lock binding, credential-set aliases, version-4 home and delivery forms, the session record and metadata fixtures
+  why: >
+    Every later child depends on these contracts, and the round-1 P1s showed the spec lacks them. It
+    records five things. First, how the approved lock inode stays bound while Docker acquires the
+    mount, or a stop for the person if no mechanism exists. Second, which directory, auth, lock and
+    token overlaps are refused, with their diagnostics. Third, whether version 4 carries `home`, the
+    canonical and frozen forms and profile names for Codex alone and Codex with home, and the early
+    run outcome for requests with no grant, Codex only, or Codex plus tokens. Fourth, a Codex
+    session-record schema separate from schema-4 token staging: where the external grant and owned
+    anchor go, how they bind to the original session, and when a source check moves from pending to
+    completed. Fifth, `@linux`-tagged raw-observation fixtures for local rows, and native rows on a
+    verified supported filesystem with a private state root. It keeps 0032's settled directory, lock
+    and version lines unchanged. Broken down from slice-32.
+  done_when:
+    - run: for h in 'Lock binding through mount acquisition' 'Credential-set aliases' 'Version 4, harness home and delivery gates' 'Session record and source-check publication' 'Deterministic metadata fixtures'; do grep -qxF "## $h" docs/decisions/0032-codex-shared-directory.md || exit 1; done

@@ -3,7 +3,6 @@ phases:
   1: null
 queue:
   - slice-28
-  - slice-32
   - slice-35
   - slice-40
   - slice-41
@@ -1646,20 +1645,9 @@ items:
     title: run bind-mounts the approved Codex auth.json, and its lock file when present, read-write as single files
     phase: 1
     owner: donvargax
-    status: todo
+    status: dropped
     depends_on: [slice-30, T-48]
     kind: slice
-    why: >
-      Was p1-credentials-codex-auth-run.
-      Charter step 2: Codex shares the host's own login and rewrites auth.json in place, so the
-      mount is the single file read-write (a directory mount would expose the host home), plus the
-      lock file when the host has one. Scenarios first, real-engine ones in CI, on a synthetic file
-      with no real login. A write by the workload reaches the host file in place. Nothing else from
-      the host directory is visible. A missing or replaced source, a symlink or a path outside the
-      approved one is refused before create. The mount appears in the session's records by path and
-      never by contents. The grant needs approval from a terminal. It also states, in approve's
-      review, that the worker can alter this file, since a read-write mount is the person's chosen
-      design. Broken down from p1-credentials-passed-in.
   - id: slice-33
     title: run hands the approved GitHub token to the workload the same way, for gh and pushes
     phase: 1
@@ -2557,8 +2545,8 @@ items:
   - id: T-74
     title: itos.yaml and release.yml comments describe this project, not a project made from the template
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
     kind: task
   - id: T-75
@@ -2568,3 +2556,157 @@ items:
     status: todo
     depends_on: []
     kind: task
+  - id: p2-engine-fixture-bash3-lowercase
+    title: Make tools/lib/engine-fixture-checks.sh run under macOS's bash 3.2
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Line 43 lowercases each header with ${line,,}, which bash 3.2, the default bash on macOS,
+      rejects as a bad substitution. Every TestEngineFixtureManifestValidation and
+      TestEngineFixtureHashesIgnoreCapturedPaths case then fails in the Tests (macos-latest) job
+      (seen in dispatched run 44877418171 on 2026-11-20). That job runs only on a manual dispatch,
+      so main never shows it. A portable lowercase (tr, or a case pattern for both spellings) keeps
+      the manual macOS portability coverage meaningful.
+  - id: p2-windows-coverage-and-admission-tests
+    title: Fix the Windows-only failures in the scenario coverage and credential admission tests
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      In the manual Tests (windows-latest) job (dispatched run 44877418171, 2026-11-20),
+      TestScenarioCoverageContract fails at features/cover_test.go:47: filepath.Rel cannot relate
+      the runner's temp directory on C: to the checkout on D:. TestCredentialAdmissionProcess fails
+      with 'unsupported' at cmd/itos-container/credential_admission_contract_test.go:86, and
+      TestFeatures fails too. That job runs only on a manual dispatch, so main never shows these.
+      Either the tests handle a temp directory on another volume and an unsupported platform, or the
+      job's scope says which tests Windows cannot run.
+  - id: p2-flaky-engine-suite-warmup-hanging-child
+    title: Stop TestEngineSuiteWarmup/failure_controls/hanging_child from failing by timing
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      In dispatched run 44877418171 on 2026-11-20 it failed once in Tests (ubuntu-latest) with
+      'watchdog fired before the intended blocking operation'
+      (features/engine_suite_warmup_regression_test.go:341), then passed when only that job was
+      rerun, on the same commit. A test that can fail on scheduling noise turns a branch's CI red
+      for nothing and costs a rerun of the whole job.
+  - id: p2-dispatched-run-proof-range
+    title: Judge a dispatched CI run's code proof from main, not from the branch's fork point
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      On a workflow_dispatch run there is no pull request base, so the ci job's itos ci range
+      reaches back to the branch's original fork point. For slice-36 on 2026-11-20 (run 44877418171)
+      that was f55e930 from 2026-11-16, so the code proof sampled main's own code merged in since
+      and failed on a survivor at internal/engine/session/disk/home.go:190, a file the branch never
+      touched. A draft PR skips all CI, so a dispatch is the only way to test a draft branch, and
+      its proof should judge only what the branch adds over main.
+  - id: T-76
+    title: Decision 0032 settles lock binding, credential-set aliases, version-4 home and delivery forms, the session record and metadata fixtures
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-30, T-48]
+    kind: task
+  - id: slice-48
+    title: Policy version 4 accepts one closed Codex entry, with or without harness home, and older versions keep their meaning
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-76]
+    kind: slice
+    why: >
+      Was codex-share-policy.
+      This is the policy stage: renumbered ID-CODEXAUTH-01 and 02. The strict parser accepts `{kind:
+      codex-auth, source, lock}` with its closed fields, and with the landed `home` field as the
+      contracts task settles. Version 3 is still refused exactly as before, and other field defects
+      give located diagnostics. Nothing is delivered at this stage. Broken down from slice-32.
+  - id: slice-49
+    title: Doctor inspects the Codex directory and lock by metadata only, refusing unsafe entries, protected-tree crossings and aliases inside the credential set
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-48]
+    kind: slice
+    why: >
+      Was codex-share-inspection.
+      This is the inspection stage: renumbered ID-CODEXAUTH-03 to 05. It adds the alias rule from
+      round 1: a lock or token that names the auth inode or the directory is refused with a located
+      diagnostic, and an independent-source control passes. The rule extends the existing
+      duplicate-inode check in internal/engine/readiness/domain/credentials.go. Local rows use
+      `@linux` tags and test-only raw-observation assembly, so they reach their assertion and not
+      host.unsupported or credential.filesystem. Broken down from slice-32.
+  - id: slice-50
+    title: Terminal approval binds the Codex directory and lock identities, shows the shared-write exposure, and help discloses the limits
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-49]
+    kind: slice
+    why: >
+      Was codex-share-approval.
+      This is the approval stage: renumbered ID-CODEXAUTH-06 to 10 and 14. Review and publication
+      use the settled canonical entry, including Codex with home. Fingerprint and redirected routes
+      are refused. A safe auth.json replacement keeps the grant. A different directory or lock gives
+      the single `/credentials` difference. Consent cannot publish a substituted directory.
+      Approve's help carries the disclosures. Broken down from slice-32.
+  - id: slice-51
+    title: Status reads a frozen Codex grant and its last completed source check from the session record without touching current sources
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-50]
+    kind: slice
+    why: >
+      Was codex-share-session-record.
+      This is the session-record stage: renumbered ID-CODEXAUTH-13. The decoder gains the Codex
+      record form from the contracts task, kept separate from schema-4 token staging. Status shows
+      the frozen grant, the anchor binding and the last completed check, after current sources are
+      removed, in text and JSON. It reads no source and changes no protected record. Run and stop
+      later write this record, so it lands before them. Broken down from slice-32.
+  - id: slice-52
+    title: Run rechecks the sources, binds the approved directory and lock through mount acquisition, and refuses deliveries that have not landed
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-51]
+    kind: slice
+    why: >
+      Was codex-share-run-delivery.
+      This is the run stage: renumbered ID-CODEXAUTH-11, 12, 16, 17 and 15 without its final-check
+      clause. Run repeats the inspection and alias rule before create. Each injected late fault
+      gives its source or mount diagnostic, with proof the fault was applied and an unchanged
+      control that reaches start. A CI-only test substitutes the lock at the mount-acquisition
+      boundary. Requests for deliveries that have not landed, such as Codex plus tokens, are refused
+      early. ID-CODEXAUTH-15 asserts two-way atomic replacement, the inode change, preserved
+      directory identity, and exit zero after owned cleanup with auth and lock preserved. Lock
+      contention is covered, and the boundary probe first shows the host UID can read the sentinels.
+      Native rows run only in CI. Broken down from slice-32.
+  - id: slice-53
+    title: After worker removal, run and stop record a final Codex source check that survives uncertainty and repeated stop
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-52]
+    kind: slice
+    why: >
+      Was codex-share-final-check.
+      This is the teardown stage: renumbered ID-CODEXAUTH-18 to 20, plus ID-CODEXAUTH-15's 'with a
+      safe source check' clause, which the person assigned here. After owned removal on foreground
+      exit, cancellation and recovery stop, run and stop check the sources before releasing the
+      anchor. They publish a completed safe, unsafe or unavailable check, kept distinct from a check
+      still pending after interrupted cleanup. A fresh stop resumes unfinished work against the same
+      full ID and keeps a completed warning without checking the sources again. A lost start
+      acknowledgement never repeats start and never deletes or repairs a source. Broken down from
+      slice-32.
