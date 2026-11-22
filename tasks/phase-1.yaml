@@ -9381,3 +9381,42 @@
     and version lines unchanged. Broken down from slice-32.
   done_when:
     - run: for h in 'Lock binding through mount acquisition' 'Credential-set aliases' 'Version 4, harness home and delivery gates' 'Session record and source-check publication' 'Deterministic metadata fixtures'; do grep -qxF "## $h" docs/decisions/0032-codex-shared-directory.md || exit 1; done
+- id: T-77
+  type: ci
+  title: credentials-run.feature joins the egress engine shard whole, before slice-31 lands
+  why: >
+    The person agreed on 2026-11-21 that slice-31's features/credentials-run.feature stays whole and
+    joins a CI engine shard through this repository's own pull request, before slice-31 lands.
+    slice-31 is redrafted without splitting the feature and depends on this item. Decision 0024
+    (docs/decisions/0024-engine-tier-shards.md:79-80) moves only whole features, placed by measured
+    shard times. The "Engine scenarios" step on eight green main runs (44931447744 to 44959728012,
+    2026-11-21) took 27-34 s in egress, 41-81 s in offline, 46-116 s in lifecycle and 76-167 s in
+    other. Egress has the most room under the 180-second target, so credentials-run.feature goes to
+    egress. Its five @engine rows are ID-CREDRUN-08 to -12, all @wip on slice-31 at 48ce147. The
+    file is not on this tree, and today the shard runner refuses a listed name that no feature file
+    with an @engine case bears (features/features_test.go:279). TestEngineShards refuses an unknown
+    engine feature (features/engine_shards_test.go:152). Listing it now would fail every egress run.
+    T-59's rule that only files present on this tree belong in the matrix is replaced, for this file
+    only, by one reviewed pending list. Add it in the features harness: a fixed map from a pending
+    feature basename to the item that brings it, holding only credentials-run.feature -> slice-31. -
+    A name in the pending map that no file under features/ has is skipped by selectScenarios. The
+    shard logs one line naming it as pending and the item. It is refused, as today, outside the
+    engine tier. - Any other absent or @engine-less name is refused exactly as today. - Once the
+    file exists, it is an ordinary file: its @engine case is required and its rows are selected. The
+    pending entry then has no effect, and slice-31 removes it in its own test commit. In one ci
+    commit, change .github/workflows/ci.yml's egress include to "egress.feature
+    credentials-run.feature". In features/engine_shards_test.go, the egress pinned set always holds
+    credentials-run.feature, and still holds egress_lifecycle.feature while the inventory has it
+    (slice-28). The real partition check skips a pending file absent from the tree and covers it
+    exactly once when present. Keep every other shard's pinned set and every existing negative
+    control. Add these controls: - An absent name outside the pending map is still refused. - An
+    absent pending name is skipped, and its pending line is logged. - A present pending file with no
+    @engine case is refused. - A pending name in a shard other than egress fails TestEngineShards.
+    Update the shard lists in features/README.md and in docs/architecture/arc42.md's engine
+    inventory. Add a "Credentials-run placement, 2026-11-21" subsection to decision 0024 citing the
+    person and the timings above. No scenario, assertion or limit changes. Run the engine-free
+    self-tests below locally. Before implementation, the check exits 1 at the grep. Engine timing
+    for the new rows is judged in CI once slice-31 lands; this item claims none.
+  done_when:
+    - run: "grep -Eq \"^ +features: egress\\.feature credentials-run\\.feature$\" .github/workflows/ci.yml && grep -q \"Credentials-run placement, 2026-11-21\" docs/decisions/0024-engine-tier-shards.md && go test ./features -run \"^(TestEngineShards|TestEngineSelection)$\""
+      timeout: 600

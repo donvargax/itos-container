@@ -2710,14 +2710,10 @@ items:
       full ID and keeps a completed warning without checking the sources again. A lost start
       acknowledgement never repeats start and never deletes or repairs a source. Broken down from
       slice-32.
-  - id: p1-credentials-run-engine-shard
+  - id: T-77
     title: credentials-run.feature joins the egress engine shard whole, before slice-31 lands
     phase: 1
     owner: donvargax
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      The person's 2026-11-21 call: slice-31's credentials-run.feature stays whole and goes into a
-      CI engine shard through this repository's own pull request; slice-31 depends on it (charter
-      step 2, milestone two).
+    kind: task
