@@ -87,10 +87,12 @@ func main() {
     _ = os.Remove(filepath.Join(home, "slice-41-write-probe"))
     encoder := json.NewEncoder(os.Stdout)
     check(encoder.Encode(r))
-    // The report precedes the barrier and every request the plan makes.
-    if encoded, err := json.Marshal(r); err == nil { _ = os.WriteFile("/workspace/slice-41-report.json", encoded, 0600) }
     exit := 0
     if _, err := os.Stat("/workspace/slice-27-plan.json"); err == nil {
+        // Only the egress run reads this file, and the report precedes the
+        // barrier and every request the plan makes. Runs without a plan leave
+        // the checkout untouched.
+        if encoded, err := json.Marshal(r); err == nil { _ = os.WriteFile("/workspace/slice-41-report.json", encoded, 0600) }
         child := exec.Command("/workspace/slice-27-probe", "/workspace/slice-27-plan.json")
         child.Stderr = os.Stderr
         if err := child.Run(); err != nil {
