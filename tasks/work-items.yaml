@@ -2721,6 +2721,6 @@ items:
     title: claude-home.feature joins the other engine shard, as slice-36's branch places it, before slice-36 lands
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task

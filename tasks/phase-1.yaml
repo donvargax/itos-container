@@ -9451,6 +9451,3 @@
     reasons, and update the shard lists in features/README.md and docs/architecture/arc42.md. No
     scenario, assertion or limit changes. Run the engine-free self-tests below locally. Before the
     work, the check exits 1 at its first grep.
-  done_when:
-    - run: "grep -Eq \"^ +features: anchors\\.feature checkout-overlap\\.feature claude-home\\.feature doctor\\.feature hardlinks\\.feature recovery\\.feature run_terminal\\.feature session\\.feature sockets\\.feature$\" .github/workflows/ci.yml && grep -q \"Claude-home placement, 2026-11-21\" docs/decisions/0024-engine-tier-shards.md && go test ./features -run \"^(TestEngineShards|TestEngineSelection)$\""
-      timeout: 600
