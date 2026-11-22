@@ -75,7 +75,7 @@ jobs:
           - shard: other
             features: anchors.feature checkout-overlap.feature doctor.feature hardlinks.feature recovery.feature run_terminal.feature session.feature sockets.feature
           - shard: egress
-            features: egress.feature
+            features: egress.feature credentials-run.feature
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
