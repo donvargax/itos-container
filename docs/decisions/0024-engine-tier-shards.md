@@ -109,6 +109,24 @@ name in any shard but egress. The egress pinned set always holds `credentials-ru
 scenario, assertion or limit changes, and no timing is claimed for the new rows until slice-31
 lands.
 
+### Claude-home placement, 2026-11-21
+
+slice-36's reviewed spec branch (PR 65) places its new `claude-home.feature` in the **other**
+shard, in `.github/workflows/ci.yml` and in `shardOtherFiles`. The agent that implements slice-36
+may not edit workflows, so the placement lands on main first, as T-77 did, and byte-identical to
+the branch so its merge of main stays clean. Any other shard would list the file twice after that
+merge. The file's `@engine` rows are `ID-CLAUDEHOME-09`, `-10` and `-11`. The measured times in
+the credentials-run placement above would favour offline (41 to 81 seconds against other's 76 to
+167); this record allows a later whole-file move on measured times once slice-36's rows run.
+
+The file is not on this tree, so `claude-home.feature` joins the reviewed pending map. Each entry
+now carries its item and its one permitted shard: `credentials-run.feature` for slice-31 in
+egress, `claude-home.feature` for slice-36 in other. `TestEngineShards` fails a pending name in
+any shard but its own and names that shard. Every existing pending behaviour stays: an absent
+pending name is skipped and logged, a present one is ordinary, and any other absent name is
+refused. slice-36 removes its entry in its own test commit. No scenario, assertion or limit
+changes, and no timing is claimed for the new rows until slice-36 lands.
+
 ### Soft budget, 2026-11-20
 
 T-69 supersedes this record's 180-second failure and its 4, 5 and 10 minute limits, on the

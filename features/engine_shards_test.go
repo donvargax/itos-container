@@ -57,8 +57,9 @@ func engineFeatureFiles(dir string) ([]string, error) {
 // shardOtherFiles is the other shard's fixed set of files (T-59): every engine feature
 // this tree keeps outside offline, lifecycle and egress.
 var shardOtherFiles = []string{
-	"anchors.feature", "checkout-overlap.feature", "doctor.feature", "hardlinks.feature",
-	"recovery.feature", "run_terminal.feature", "session.feature", "sockets.feature",
+	"anchors.feature", "checkout-overlap.feature", "claude-home.feature", "doctor.feature",
+	"hardlinks.feature", "recovery.feature", "run_terminal.feature", "session.feature",
+	"sockets.feature",
 }
 
 // egressShardFiles is the egress shard's complete pinned set: credentials-run.feature
@@ -151,9 +152,9 @@ func engineShardIssues(data []byte) []string {
 		require(len(fields) > 0, "empty shard "+entry.Shard)
 		for _, name := range fields {
 			require(name == filepath.Base(name) && !strings.ContainsAny(name, `/\:`) && strings.HasSuffix(name, ".feature"), "feature path "+strconv.Quote(name)+" in shard "+entry.Shard)
-			_, pending := pendingEngineFeatures[name]
-			if pending && entry.Shard != "egress" {
-				require(false, "pending feature "+strconv.Quote(name)+" in shard "+entry.Shard+": only egress may name it")
+			held, pending := pendingEngineFeatures[name]
+			if pending && entry.Shard != held.shard {
+				require(false, "pending feature "+strconv.Quote(name)+" in shard "+entry.Shard+": only "+held.shard+" may name it")
 			} else {
 				require(err != nil || slices.Contains(want, name) || pending, "unknown engine feature "+strconv.Quote(name))
 			}
@@ -400,8 +401,8 @@ func testShardPartition(t *testing.T, include []shardEntry) {
 			t.Log(line)
 		}
 		for _, file := range files {
-			if item, pending := pendingEngineFeatures[file]; pending && !slices.Contains(engineFiles, file) && !slices.ContainsFunc(selection.pending, func(line string) bool { return strings.Contains(line, file) && strings.Contains(line, item) }) {
-				t.Errorf("shard %s does not log %s as pending for %s", entry.Shard, file, item)
+			if held, pending := pendingEngineFeatures[file]; pending && !slices.Contains(engineFiles, file) && !slices.ContainsFunc(selection.pending, func(line string) bool { return strings.Contains(line, file) && strings.Contains(line, held.item) }) {
+				t.Errorf("shard %s does not log %s as pending for %s", entry.Shard, file, held.item)
 			}
 		}
 		total += selection.count
