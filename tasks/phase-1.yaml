@@ -9417,3 +9417,40 @@
     person and the timings above. No scenario, assertion or limit changes. Run the engine-free
     self-tests below locally. Before implementation, the check exits 1 at the grep. Engine timing
     for the new rows is judged in CI once slice-31 lands; this item claims none.
+- id: T-78
+  type: ci
+  title: claude-home.feature joins the other engine shard, as slice-36's branch places it, before slice-36 lands
+  why: >
+    slice-36's reviewed spec branch (origin/slice-36 at 6135810, PR 65) places its new
+    features/claude-home.feature, whose @engine rows are ID-CLAUDEHOME-09, -10 and -11, in the other
+    engine shard. It does that in .github/workflows/ci.yml and in features/engine_shards_test.go's
+    shardOtherFiles. The agent that implements slice-36 may not edit .github/workflows: the person's
+    2026-11-20 call routes workflow edits through this repository's own pull requests
+    (docs/charter.md:163). So the placement lands on main first, as T-77 did for slice-31's
+    credentials-run.feature. The change on main is byte-identical to the branch's, so the branch's
+    merge of main stays clean. - .github/workflows/ci.yml: the other include's features value
+    becomes "anchors.feature checkout-overlap.feature claude-home.feature doctor.feature
+    hardlinks.feature recovery.feature run_terminal.feature session.feature sockets.feature", on one
+    line. - features/engine_shards_test.go: shardOtherFiles takes the branch's three lines exactly
+    (git diff origin/main...origin/slice-36 -- features/engine_shards_test.go). Any other shard
+    would list the file twice once the branch merges main, and the implementing agent could not
+    repair that. The measured times on decision 0024's credentials-run placement would favour
+    offline (41-81 s against other's 76-167 s). Decision 0024
+    (docs/decisions/0024-engine-tier-shards.md:79-80) allows a later whole-file move on measured
+    times, once slice-36's rows run. The file is not on this tree yet, so it joins the reviewed
+    pending map in features/features_test.go. That map now names credentials-run.feature for
+    slice-31 and allows it only in egress. Make each entry carry its item and its one permitted
+    shard: credentials-run.feature -> slice-31 in egress, and claude-home.feature -> slice-36 in
+    other. engineShardIssues refuses a pending name in any shard but its own and names that shard.
+    Every existing pending behaviour and control stays: an absent pending name is skipped and
+    logged, a present one is ordinary, an absent name outside the map and a shard of pending names
+    alone are refused, and pending names are refused outside the engine tier. Add the second entry
+    to features/engine_pending_test.go's controls, along with a control that refuses
+    claude-home.feature in egress. slice-36 removes its entry in its own test commit once its file
+    lands. Add a "Claude-home placement, 2026-11-21" subsection to decision 0024 giving these
+    reasons, and update the shard lists in features/README.md and docs/architecture/arc42.md. No
+    scenario, assertion or limit changes. Run the engine-free self-tests below locally. Before the
+    work, the check exits 1 at its first grep.
+  done_when:
+    - run: "grep -Eq \"^ +features: anchors\\.feature checkout-overlap\\.feature claude-home\\.feature doctor\\.feature hardlinks\\.feature recovery\\.feature run_terminal\\.feature session\\.feature sockets\\.feature$\" .github/workflows/ci.yml && grep -q \"Claude-home placement, 2026-11-21\" docs/decisions/0024-engine-tier-shards.md && go test ./features -run \"^(TestEngineShards|TestEngineSelection)$\""
+      timeout: 600
