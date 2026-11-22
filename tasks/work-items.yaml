@@ -2717,3 +2717,14 @@ items:
     status: done
     depends_on: []
     kind: task
+  - id: p1-claude-home-engine-shard
+    title: claude-home.feature joins the other engine shard, as slice-36's branch places it, before slice-36 lands
+    phase: 1
+    owner: donvargax
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      slice-36's branch edits .github/workflows/ci.yml to place claude-home.feature, which its
+      implementer may not change; the placement lands on main first, as T-77 did (milestone two,
+      step 3).
