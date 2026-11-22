@@ -2259,7 +2259,7 @@ items:
     title: Start OpenCode headless with isolated home and configuration
     phase: 1
     owner: donvargax
-    status: todo
+    status: doing
     depends_on: [slice-34]
     kind: slice
     why: >
