@@ -618,7 +618,7 @@ Feature: An approved persistent home for one checkout's harness
   #
   # The implementer may commit freely in its own workspace; the host makes the
   # landing commits and handles itos, submission, publication and review.
-  @wip @slice-41 @ID-HOME-25
+  @slice-41 @ID-HOME-25
   Scenario Outline: Policy accepts only an explicit OpenCode harness on a volume home
     Given an OpenCode harness policy fixture using version <version> and no credential grants
     When file-only doctor inspects a volume home without harnesses, a volume home with the OpenCode harness and the malformed harness requests
@@ -643,7 +643,7 @@ Feature: An approved persistent home for one checkout's harness
   # plain `doctor` for the harness lines of the shared home disclosure. The
   # review transcript is judged for both. The decisions above ID-HOME-25 state
   # each output's lines.
-  @wip @slice-41 @ID-HOME-26 @local-engine-fixture
+  @slice-41 @ID-HOME-26 @local-engine-fixture
   Scenario: Review binds the OpenCode profile without creating storage
     Given an OpenCode approval fixture with an independently seeded approval of a volume home without harnesses and a requested OpenCode harness
     When JSON doctor and plain doctor inspect the requested harness and bare approve runs at a terminal and receives "y" after the review
@@ -683,7 +683,7 @@ Feature: An approved persistent home for one checkout's harness
   # slice-34's behaviour and already reaches the boundary, so it is a
   # regression control. The adding control fails at policy.unknown_key, exit 2,
   # with no connection.
-  @wip @slice-41 @ID-HOME-27 @local-engine-fixture
+  @slice-41 @ID-HOME-27 @local-engine-fixture
   Scenario: Adding and removing the OpenCode harness both require approval
     Given OpenCode harness approval mismatch checkouts with raw policies and independently encoded approval records for adding and removing the harness and matching controls
     When the itos-container binary runs each changed request and then each matching control through its production approval preflight
@@ -780,7 +780,7 @@ Feature: An approved persistent home for one checkout's harness
   # and home reuse; no environment clause, in either Then, is judged there.
   # @linux keeps the row from passing on a process whose disk subtest is
   # skipped (home_local_contract_test.go), as the macOS and Windows jobs do.
-  @wip @slice-41 @ID-HOME-28 @local-engine-fixture @linux
+  @slice-41 @ID-HOME-28 @local-engine-fixture @linux
   Scenario: The worker gets the OpenCode profile and literal argv and nothing from the host
     Given an OpenCode launch fixture with conflicting image OPENCODE and XDG defaults, host OPENCODE XDG and HOME sentinels, host-home OpenCode configuration and login sentinels and two sequential runs of "opencode --standalone run --format json --model fake/fake-model say-ok"
     When fresh run controllers execute both runs through both local backends
@@ -808,7 +808,7 @@ Feature: An approved persistent home for one checkout's harness
   # the approved bytes cannot be told from a controller-supplied one, so every
   # defect is missing or differs from those bytes. Every row names a kept
   # opencode-v1 value, and each name has a missing row and a differing row.
-  @wip @slice-41 @ID-HOME-29 @local-engine-fixture @linux
+  @slice-41 @ID-HOME-29 @local-engine-fixture @linux
   Scenario Outline: Boundary inspection refuses a worker without the exact OpenCode profile
     Given an OpenCode launch fixture whose worker inspection has "<defect>" and an independent correct OpenCode control
     When the OpenCode boundary launches are attempted through the disk backend's recording engine endpoint
@@ -1040,7 +1040,7 @@ Feature: An approved persistent home for one checkout's harness
   # controls in this profile, not new behaviour. The stand-in is installed in
   # the CI checkout as /workspace/opencode and named by that explicit path, so
   # its lookup depends on no image PATH and no reserved manifest PATH.
-  @wip @slice-41 @ID-HOME-30 @engine
+  @slice-41 @ID-HOME-30 @engine
   Scenario: A headless OpenCode stand-in starts with only its isolated home and configuration
     Given a CI OpenCode checkout with a cached approved image for the actual non-root controller UID GID, an approved offline volume home with the OpenCode harness, host-home OpenCode configuration and login sentinels and a synthetic opencode stand-in installed at "/workspace/opencode"
     When two fresh product runs invoke the stand-in as "/workspace/opencode --standalone run --format json" with a prompt, the first exiting zero and the second exiting seven
@@ -1064,7 +1064,7 @@ Feature: An approved persistent home for one checkout's harness
   # catalogue host the smoke record saw on v2.2.1 (finding 5). opencode.ai is the
   # OpenCode Go provider's own host, not a startup service, and models.dev and
   # registry.npmjs.org were not seen on v2.2.1, so none of them is listed.
-  @wip @slice-41 @ID-HOME-31 @engine @linux
+  @slice-41 @ID-HOME-31 @engine @linux
   Scenario: OpenCode reaches only its approved fake provider and its startup services stay closed
     Given a CI OpenCode checkout allowing "provider.example" with an approved volume home with the OpenCode harness, matching protected approval and a synthetic opencode stand-in installed at "/workspace/opencode"
     And independent fixture TLS aliases with nonce receipts for "provider.example models.opencode.ai" on a fixture network

@@ -58,7 +58,7 @@ func terminalText(text string) string {
 func (u UI) Report(v port.View) port.Report {
 	report := port.Report{Status: v.Status, Fingerprint: v.Candidate.Fingerprint, Effective: object(v.Candidate.Canonical), Differences: []port.Change{}}
 	report.EffectiveText = jsonText(report.Effective)
-	report.RequestedText = grantLines(requested(v))
+	report.RequestedText = append(grantLines(requested(v)), harnessLines(report.Effective)...)
 	if v.Record.Generation != "" {
 		g := v.Record.Generation
 		report.Generation = &g
@@ -170,6 +170,9 @@ func (u UI) homeDisclosure(effective any) {
 	_, _ = fmt.Fprintf(u.Out, "Harness home: private volume at /home/itos, mode 0700, owner %s:%s.\n", host["uid"], host["gid"])
 	_, _ = fmt.Fprintln(u.Out, "Scoped to this checkout and retained after exit and stop; the host home is never mounted or copied.")
 	_, _ = fmt.Fprintln(u.Out, "Contents are hostile worker data reused by the next run. Only a terminal-consented reset or delete discards them; disabling home does not delete it.")
+	for _, line := range harnessLines(effective) {
+		_, _ = fmt.Fprintln(u.Out, line)
+	}
 }
 
 // harnessLines state what an approved OpenCode harness binds, from the
@@ -221,7 +224,3 @@ func (u UI) networkDisclosure(effective any) {
 	_, _ = fmt.Fprintln(u.Out, "Clients that omit SNI or send ECH, and SSH over 443, are refused.")
 	_, _ = fmt.Fprintln(u.Out, "The proxy logs each refusal, but a stored log is no proof that every refusal was kept: a log that ends early reads as a complete one.")
 }
-
-var (
-	_ = harnessLines
-)

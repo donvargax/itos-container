@@ -94,9 +94,7 @@ type harness struct {
 	Profile string `json:"profile"`
 }
 
-func volumeHome() home {
-	return *new(home)
-}
+func volumeHome() home { return home{"volume", "/home/itos", "project", "0700", nil} }
 
 // validHome accepts the volume home with no harness or exactly the OpenCode one.
 func validHome(h home) bool {
@@ -160,6 +158,9 @@ func (JSON) Candidate(r readiness.Result, uid, gid string) port.Candidate {
 	}
 	if r.Policy.Policy.Home != nil {
 		h := volumeHome()
+		for _, name := range r.Policy.Policy.Home.Harnesses {
+			h.Harnesses = append(h.Harnesses, harness{name, name + "-v1"})
+		}
 		s.Home = &h
 		s.Profile = strings.TrimSuffix(s.Profile, "-v1") + "-home-v1"
 	}
@@ -249,8 +250,48 @@ func valid(s settings) bool {
 		s.Manifest.Image == s.Image.Reference && sha(s.Image.ID) && s.Image.OS == "linux" && s.Image.Architecture == "amd64"
 }
 
-func validProfile(_ settings) bool {
-	return false
+func validProfile(s settings) bool {
+	n := s.Policy.Network
+	profile := s.Profile
+	if s.Home != nil {
+		if !validHome(*s.Home) || !strings.HasSuffix(profile, "-home-v1") {
+			return false
+		}
+		profile = strings.TrimSuffix(profile, "-home-v1") + "-v1"
+	}
+	if len(s.Credentials) > 0 {
+		if s.Policy.Version != 3 || !validGrants(s.Credentials) {
+			return false
+		}
+		switch profile {
+		case "offline-credentials-v1":
+			profile = "offline-v1"
+		case "allowlist-credentials-v1":
+			profile = "allowlist-v1"
+		default:
+			return false
+		}
+	}
+	switch profile {
+	case "offline-v1":
+		return (s.Policy.Version == 1 || s.Policy.Version == 2 || s.Policy.Version == 3) && n.Mode == "offline" && n.Allow == nil && s.Proxy == nil
+	case "allowlist-v1":
+		if (s.Policy.Version != 2 && s.Policy.Version != 3) || n.Mode != "allowlist" || len(n.Allow) == 0 || s.Proxy == nil {
+			return false
+		}
+		name, digest, ok := strings.Cut(s.Proxy.Image, "@")
+		if !ok || name == "" || !sha(digest) {
+			return false
+		}
+		for i, name := range n.Allow {
+			if !policydomain.ValidCanonicalHost(name) || (i > 0 && n.Allow[i-1] >= name) {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
 }
 
 func validGrants(grants []port.CredentialGrant) bool {
@@ -267,8 +308,3 @@ func validGrants(grants []port.CredentialGrant) bool {
 	}
 	return true
 }
-
-var (
-	_ = validHome
-	_ = validGrants
-)
