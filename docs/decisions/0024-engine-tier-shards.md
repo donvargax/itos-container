@@ -89,6 +89,26 @@ counts remain 24/19/32; manual red selection assigns the nine home rows only to 
 The workflow, negative-control inventory and selector regression use that placement.
 No home runtime timing or red behaviour evidence is claimed by this assignment.
 
+### Credentials-run placement, 2026-11-21
+
+The person agreed on 2026-11-21 that slice-31's `credentials-run.feature` stays whole and joins
+a shard through this repository's own pull request, before slice-31 lands. It goes to
+**egress**. The "Engine scenarios" step on eight green main runs (44931447744 to 44959728012,
+2026-11-21) took 27 to 34 seconds in egress, 41 to 81 in offline, 46 to 116 in lifecycle and 76 to
+167 in other, so egress has the most room under the 180-second target. The file's five `@engine`
+rows, `ID-CREDRUN-08` to `-12`, are all `@wip` on slice-31.
+
+The file is not on this tree, and the harness refuses a listed name that no feature file with an
+`@engine` case bears. So `pendingEngineFeatures` in `features/features_test.go` is one reviewed
+map from a pending basename to the item that brings it, holding `credentials-run.feature` for
+slice-31 alone. `selectScenarios` skips such a name while no file of that name is on the tree and
+logs one line naming it and the item. Once the file exists it is ordinary: its `@engine` case is
+required and its rows are selected, and slice-31 removes the entry in its own test commit. Any
+other absent or `@engine`-less name is refused as before, and `TestEngineShards` fails a pending
+name in any shard but egress. The egress pinned set always holds `credentials-run.feature`. No
+scenario, assertion or limit changes, and no timing is claimed for the new rows until slice-31
+lands.
+
 ### Soft budget, 2026-11-20
 
 T-69 supersedes this record's 180-second failure and its 4, 5 and 10 minute limits, on the
