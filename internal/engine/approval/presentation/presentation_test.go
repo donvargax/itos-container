@@ -169,3 +169,63 @@ func TestReviewExplainsHomeLifetimeBeforeConsent(t *testing.T) {
 		}
 	}
 }
+
+func TestReviewDisclosesTheOpenCodeProfileBeforeConsent(t *testing.T) {
+	for _, mode := range []string{"offline", "allowlist"} {
+		var out bytes.Buffer
+		ui := UI{In: strings.NewReader("n\n"), Out: &out, Err: io.Discard}
+		canonical := `{"profile":"` + mode + `-home-v1","home":{"storage":"volume","harnesses":[{"name":"opencode","profile":"opencode-v1"}]},"host":{"uid":"2001","gid":"3001"},"policy":{"network":{"mode":"` + mode + `","allow":["provider.example"]}}}`
+		v := port.View{Inspection: porttest.Ready(), Candidate: port.Candidate{Canonical: canonical}}
+		if ui.Review(v) {
+			t.Fatal("declined review consented")
+		}
+		before, _, found := strings.Cut(out.String(), "Approve these settings? y/N: ")
+		texts := []string{"OpenCode harness: profile opencode-v1.\n", `OPENCODE_CONFIG_CONTENT={"share":"disabled"}` + "\n", "OPENCODE_DISABLE_AUTOUPDATE=true\n", "OPENCODE_DISABLE_MODELS_FETCH=true\n",
+			"OpenCode global configuration, data and state live in /home/itos.",
+			"The checkout's own opencode.json and .opencode configuration also apply, loaded before this profile, which overrides them where they conflict.",
+			"Any managed configuration in the approved image (/etc/opencode) loads after this profile and overrides it.",
+			"The image's other OPENCODE_* defaults stay in effect and can redirect or turn off configuration layers (OPENCODE_CONFIG, OPENCODE_CONFIG_DIR, which replaces the global directory, OPENCODE_DISABLE_PROJECT_CONFIG).", "The argv and the checkout choose the provider and model; run never does.", "No OpenCode login is delivered by this setting."}
+		offline := "No provider is reachable: this policy is offline."
+		reachable := "A provider is reachable only through the approved allowlist."
+		if mode == "offline" {
+			texts = append(texts, offline)
+		} else {
+			texts = append(texts, reachable)
+		}
+		for _, text := range texts {
+			if !found || !strings.Contains(before, text) {
+				t.Fatal(mode, "missing pre-consent disclosure", text, out.String())
+			}
+		}
+		if strings.Contains(before, reachable) == (mode == "offline") || strings.Contains(before, offline) == (mode != "offline") {
+			t.Fatal(mode, "wrong provider statement", before)
+		}
+	}
+	// A home without the OpenCode harness, or with another harness, discloses no profile.
+	for _, canonical := range []string{
+		`{"profile":"offline-home-v1","home":{"storage":"volume"},"host":{"uid":"2001","gid":"3001"}}`,
+		`{"profile":"offline-home-v1","home":{"storage":"volume","harnesses":[{"name":"codex","profile":"codex-v1"}]},"host":{"uid":"2001","gid":"3001"}}`,
+	} {
+		var out bytes.Buffer
+		ui := UI{In: strings.NewReader("n\n"), Out: &out, Err: io.Discard}
+		ui.Review(port.View{Inspection: porttest.Ready(), Candidate: port.Candidate{Canonical: canonical}})
+		if strings.Contains(out.String(), "OpenCode") || strings.Contains(out.String(), "OPENCODE") {
+			t.Fatal("an OpenCode disclosure without the OpenCode harness", out.String())
+		}
+	}
+}
+
+func TestReportShowsTheOpenCodeProfileForPlainDoctor(t *testing.T) {
+	canonical := `{"profile":"offline-home-v1","home":{"storage":"volume","harnesses":[{"name":"opencode","profile":"opencode-v1"}]},"host":{"uid":"2001","gid":"3001"},"policy":{"network":{"mode":"offline"}}}`
+	report := UI{}.Report(port.View{Inspection: porttest.Ready(), Candidate: port.Candidate{Canonical: canonical}})
+	text := strings.Join(report.RequestedText, "\n")
+	for _, want := range []string{"profile opencode-v1", `OPENCODE_CONFIG_CONTENT={"share":"disabled"}`, "OPENCODE_DISABLE_AUTOUPDATE=true", "OPENCODE_DISABLE_MODELS_FETCH=true", "No provider is reachable"} {
+		if !strings.Contains(text, want) {
+			t.Fatal("doctor omits", want, text)
+		}
+	}
+	plain := UI{}.Report(port.View{Inspection: porttest.Ready(), Candidate: port.Candidate{Canonical: `{"profile":"offline-home-v1","home":{"storage":"volume"}}`}})
+	if len(plain.RequestedText) != 0 {
+		t.Fatal(plain.RequestedText)
+	}
+}

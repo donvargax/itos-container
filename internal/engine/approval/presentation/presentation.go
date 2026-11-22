@@ -172,6 +172,44 @@ func (u UI) homeDisclosure(effective any) {
 	_, _ = fmt.Fprintln(u.Out, "Contents are hostile worker data reused by the next run. Only a terminal-consented reset or delete discards them; disabling home does not delete it.")
 }
 
+// harnessLines state what an approved OpenCode harness binds, from the
+// validated candidate: the profile, every environment value, where OpenCode
+// keeps its state, who chooses the provider and model, and what it delivers.
+func harnessLines(effective any) []string {
+	s, _ := effective.(map[string]any)
+	home, _ := s["home"].(map[string]any)
+	harnesses, _ := home["harnesses"].([]any)
+	var lines []string
+	for _, entry := range harnesses {
+		harness, _ := entry.(map[string]any)
+		if harness["name"] != "opencode" {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("OpenCode harness: profile %s.", terminalText(fmt.Sprint(harness["profile"]))))
+		for _, pair := range port.OpenCodeEnvironment() {
+			lines = append(lines, pair[0]+"="+pair[1])
+		}
+		lines = append(lines, "OpenCode global configuration, data and state live in /home/itos.",
+			"The checkout's own opencode.json and .opencode configuration also apply, loaded before this profile, which overrides them where they conflict.",
+			"Any managed configuration in the approved image (/etc/opencode) loads after this profile and overrides it.",
+			"The image's other OPENCODE_* defaults stay in effect and can redirect or turn off configuration layers (OPENCODE_CONFIG, OPENCODE_CONFIG_DIR, which replaces the global directory, OPENCODE_DISABLE_PROJECT_CONFIG).",
+			"The argv and the checkout choose the provider and model; run never does.")
+		if networkMode(s) == "offline" {
+			lines = append(lines, "No provider is reachable: this policy is offline.")
+		} else {
+			lines = append(lines, "A provider is reachable only through the approved allowlist.")
+		}
+		lines = append(lines, "No OpenCode login is delivered by this setting. The profile is no network or credential grant.")
+	}
+	return lines
+}
+
+func networkMode(s map[string]any) any {
+	p, _ := s["policy"].(map[string]any)
+	n, _ := p["network"].(map[string]any)
+	return n["mode"]
+}
+
 func (u UI) networkDisclosure(effective any) {
 	_, _ = fmt.Fprintln(u.Out, restriction(effective))
 	_, _ = fmt.Fprintln(u.Out, "This profile grants network. The worker can reach only these host names, through an owned proxy, by CONNECT on port 443:")
@@ -183,3 +221,7 @@ func (u UI) networkDisclosure(effective any) {
 	_, _ = fmt.Fprintln(u.Out, "Clients that omit SNI or send ECH, and SSH over 443, are refused.")
 	_, _ = fmt.Fprintln(u.Out, "The proxy logs each refusal, but a stored log is no proof that every refusal was kept: a log that ends early reads as a complete one.")
 }
+
+var (
+	_ = harnessLines
+)

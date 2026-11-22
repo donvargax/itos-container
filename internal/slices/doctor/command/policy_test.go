@@ -135,3 +135,22 @@ func TestPolicyPlainHomeStorageAndRefusal(t *testing.T) {
 		t.Fatal(code, diagnostic.String())
 	}
 }
+
+func TestPolicyPlainHomeHarnesses(t *testing.T) {
+	var out, diagnostic bytes.Buffer
+	ui := cli.UI{Stdout: &out, Stderr: &diagnostic}
+	result := port.Result{Policy: &port.Policy{Version: 2, Manifest: "a.json", Network: port.Network{Mode: "offline"}, Home: &port.Home{Storage: "volume", Harnesses: []string{"opencode"}}}}
+	if code := presentPolicy(&ui, result, false); code != 0 || !strings.Contains(out.String(), "home.storage: volume\nhome.harnesses: opencode\n") {
+		t.Fatal(code, out.String())
+	}
+	out.Reset()
+	if code := presentPolicy(&ui, result, true); code != 0 || !strings.Contains(out.String(), `"home":{"storage":"volume","harnesses":["opencode"]}`) {
+		t.Fatal(code, out.String())
+	}
+	out.Reset()
+	diagnostic.Reset()
+	issue := port.Issue{Kind: port.HomeHarness, Path: []string{"home", "harnesses", "0"}, Version: 2}
+	if code := presentPolicy(&ui, port.Result{Issues: []port.Issue{issue}}, false); code != 2 || !strings.Contains(diagnostic.String(), "use home.harnesses [opencode]") {
+		t.Fatal(code, diagnostic.String())
+	}
+}

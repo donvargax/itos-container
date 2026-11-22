@@ -67,6 +67,7 @@ const (
 	CredentialDuplicate
 	CredentialSource
 	HomeStorage
+	HomeHarness
 )
 
 // Issue locates one failure using decoded path components. Version is the
@@ -100,6 +101,9 @@ type Policy struct {
 // Home requests persistent container-managed storage, never a host path.
 type Home struct {
 	Storage string `json:"storage"`
+	// Harnesses holds the requested harness names in canonical, sorted order.
+	// Only "opencode" is accepted; nil means none were requested.
+	Harnesses []string `json:"harnesses,omitempty"`
 }
 
 // Credential keeps the written order for located source observations. Display

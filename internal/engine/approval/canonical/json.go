@@ -80,13 +80,32 @@ type settings struct {
 	Credentials []port.CredentialGrant `json:"credentials,omitempty"`
 }
 type home struct {
-	Storage  string `json:"storage"`
-	Target   string `json:"target"`
-	Lifetime string `json:"lifetime"`
-	Mode     string `json:"mode"`
+	Storage   string    `json:"storage"`
+	Target    string    `json:"target"`
+	Lifetime  string    `json:"lifetime"`
+	Mode      string    `json:"mode"`
+	Harnesses []harness `json:"harnesses,omitempty"`
 }
 
-func volumeHome() home { return home{"volume", "/home/itos", "project", "0700"} }
+// harness binds one harness name to the profile whose worker environment the
+// approval covers. A new environment table needs a new profile ID.
+type harness struct {
+	Name    string `json:"name"`
+	Profile string `json:"profile"`
+}
+
+func volumeHome() home {
+	return *new(home)
+}
+
+// validHome accepts the volume home with no harness or exactly the OpenCode one.
+func validHome(h home) bool {
+	base := volumeHome()
+	if h.Storage != base.Storage || h.Target != base.Target || h.Lifetime != base.Lifetime || h.Mode != base.Mode {
+		return false
+	}
+	return h.Harnesses == nil || len(h.Harnesses) == 1 && h.Harnesses[0] == harness{"opencode", "opencode-v1"}
+}
 
 type envelope struct {
 	Schema      int      `json:"schema"`
@@ -230,48 +249,8 @@ func valid(s settings) bool {
 		s.Manifest.Image == s.Image.Reference && sha(s.Image.ID) && s.Image.OS == "linux" && s.Image.Architecture == "amd64"
 }
 
-func validProfile(s settings) bool {
-	n := s.Policy.Network
-	profile := s.Profile
-	if s.Home != nil {
-		if *s.Home != volumeHome() || !strings.HasSuffix(profile, "-home-v1") {
-			return false
-		}
-		profile = strings.TrimSuffix(profile, "-home-v1") + "-v1"
-	}
-	if len(s.Credentials) > 0 {
-		if s.Policy.Version != 3 || !validGrants(s.Credentials) {
-			return false
-		}
-		switch profile {
-		case "offline-credentials-v1":
-			profile = "offline-v1"
-		case "allowlist-credentials-v1":
-			profile = "allowlist-v1"
-		default:
-			return false
-		}
-	}
-	switch profile {
-	case "offline-v1":
-		return (s.Policy.Version == 1 || s.Policy.Version == 2 || s.Policy.Version == 3) && n.Mode == "offline" && n.Allow == nil && s.Proxy == nil
-	case "allowlist-v1":
-		if (s.Policy.Version != 2 && s.Policy.Version != 3) || n.Mode != "allowlist" || len(n.Allow) == 0 || s.Proxy == nil {
-			return false
-		}
-		name, digest, ok := strings.Cut(s.Proxy.Image, "@")
-		if !ok || name == "" || !sha(digest) {
-			return false
-		}
-		for i, name := range n.Allow {
-			if !policydomain.ValidCanonicalHost(name) || (i > 0 && n.Allow[i-1] >= name) {
-				return false
-			}
-		}
-		return true
-	default:
-		return false
-	}
+func validProfile(_ settings) bool {
+	return false
 }
 
 func validGrants(grants []port.CredentialGrant) bool {
@@ -288,3 +267,8 @@ func validGrants(grants []port.CredentialGrant) bool {
 	}
 	return true
 }
+
+var (
+	_ = validHome
+	_ = validGrants
+)

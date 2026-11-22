@@ -69,3 +69,52 @@ func TestInvalidHomeSettingsCannotAuthorize(t *testing.T) {
 		testRejectsSelfConsistentInvalidSettings(t, change)
 	}
 }
+
+func TestOpenCodeHarnessIsBoundByProfile(t *testing.T) {
+	r := porttest.Ready()
+	codec := JSON{}
+	r.Policy.Policy.Home = &policyport.Home{Storage: "volume"}
+	plain := codec.Candidate(r, "2001", "3001")
+	r.Policy.Policy.Home = &policyport.Home{Storage: "volume", Harnesses: []string{"opencode"}}
+	got := codec.Candidate(r, "2001", "3001")
+	if got.Fingerprint == plain.Fingerprint || got.Project != plain.Project {
+		t.Fatal("the harness must change the fingerprint and keep the project", plain, got)
+	}
+	var settings map[string]any
+	_ = json.Unmarshal([]byte(got.Canonical), &settings)
+	if settings["profile"] != "offline-home-v1" {
+		t.Fatal("profile names stay as slice-34 named them", settings["profile"])
+	}
+	want := `"harnesses":[{"name":"opencode","profile":"opencode-v1"}]`
+	if !strings.Contains(got.Canonical, want) {
+		t.Fatal("the home object omits the harness binding", got.Canonical)
+	}
+	record := port.Record{Candidate: got, Generation: "2"}
+	if decoded, f := codec.Decode(plain, codec.Encode(record)); f != "" || decoded != record {
+		t.Fatal(decoded, f)
+	}
+	frozen, f := codec.FrozenRecord(port.Frozen{Project: got.Project, Generation: "2", Fingerprint: got.Fingerprint, Settings: got.Canonical})
+	if f != "" || frozen != record {
+		t.Fatal("the frozen settings must keep the harness", f)
+	}
+	paths := codec.ChangedPaths(got, port.Record{Candidate: plain, Generation: "1"}, true)
+	if len(paths) != 1 || paths[0] != "/home/harnesses" {
+		t.Fatal(paths)
+	}
+}
+
+func TestInvalidHarnessSettingsCannotAuthorize(t *testing.T) {
+	for _, harnesses := range [][]harness{
+		{{"codex", "codex-v1"}},
+		{{"opencode", "opencode-v2"}},
+		{{"opencode", "opencode-v1"}, {"opencode", "opencode-v1"}},
+		{{"OpenCode", "opencode-v1"}},
+	} {
+		testRejectsSelfConsistentInvalidSettings(t, func(s *settings) {
+			h := volumeHome()
+			h.Harnesses = harnesses
+			s.Home = &h
+			s.Profile = "offline-home-v1"
+		})
+	}
+}

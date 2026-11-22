@@ -26,6 +26,8 @@ func (w *world) homeSteps(sc *godog.ScenarioContext) {
 	w.homeNativeSteps(sc)
 	w.homeApprovalSteps(sc)
 	w.homeLocalSteps(sc)
+	w.homeOpenCodeSteps(sc)
+	w.homeOpenCodeNativeSteps(sc)
 	sc.Step(`^a home policy fixture using version (\d+) and no credential grants$`, func(version int) error {
 		w.home = &homeWorld{version: version}
 		return w.isolatePolicy()
@@ -36,7 +38,7 @@ func (w *world) homeSteps(sc *godog.ScenarioContext) {
 }
 
 func (w *world) homePolicyInspect() error {
-	inputs := []homePolicyObservation{
+	return w.homePolicyRun([]homePolicyObservation{
 		{},
 		{input: "home: {storage: volume}\n"},
 		{input: "home: null\n", rule: "policy.type", subject: "/home"},
@@ -49,7 +51,12 @@ func (w *world) homePolicyInspect() error {
 		{input: "home: {storage: volume, source: /outside}\n", rule: "policy.unknown_key", subject: "/home/source"},
 		{input: "home: {storage: volume}\nhome: {storage: volume}\n", rule: "policy.duplicate_key", subject: "/home"},
 		{input: "home: {storage: volume, storage: volume}\n", rule: "policy.duplicate_key", subject: "/home/storage"},
-	}
+	})
+}
+
+// homePolicyRun runs file-only doctor on each raw home input and keeps what it
+// saw, untouched, for the Then steps.
+func (w *world) homePolicyRun(inputs []homePolicyObservation) error {
 	for _, input := range inputs {
 		data := fmt.Sprintf("version: %d\nmanifest: devcontainer.json\n%s", w.home.version, input.input)
 		if err := os.WriteFile(filepath.Join(w.dir, "itos-container.yaml"), []byte(data), 0600); err != nil {

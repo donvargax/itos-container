@@ -54,6 +54,7 @@ type egressNativeRun struct {
 	reached        map[string]bool
 	observed       map[string]*egressObserved
 	attached       []string // the harness's own extra attachments, recorded apart
+	argv           []string // the workload when it is not the egress probe
 	report         egressProbeReport
 	remaining      []string
 	snapshotPath   string
@@ -81,7 +82,11 @@ func (run *egressNativeRun) start() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 	run.cancel = cancel
-	run.cmd = exec.CommandContext(ctx, w.bin, "run", "--", "/workspace/slice-27-probe", "/workspace/slice-27-plan.json")
+	argv := []string{"run", "--", "/workspace/slice-27-probe", "/workspace/slice-27-plan.json"}
+	if run.argv != nil {
+		argv = append([]string{"run", "--"}, run.argv...)
+	}
+	run.cmd = exec.CommandContext(ctx, w.bin, argv...)
 	run.cmd.Dir, run.cmd.Env = checkout, setEnv(w.env(), "ITOS_ROOT", checkout)
 	run.cmd.Stdout, run.cmd.Stderr = &run.stdout, &run.stderr
 	run.cmd.WaitDelay = 5 * time.Second
