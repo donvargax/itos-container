@@ -124,6 +124,7 @@ func TestEngineSelection(t *testing.T) {
 	})
 	t.Run("inheritance and outline rows", testInheritedEngineTags)
 	t.Run("parse and read errors precede hooks", testEngineFeatureErrors)
+	t.Run("pending engine features", testPendingEngineFeatures)
 	t.Run("runtime failures cannot turn green", func(t *testing.T) {
 		for name, failure := range map[string]error{
 			"step failure": errors.New("memory assertion failed"),

@@ -1628,7 +1628,7 @@ items:
     phase: 1
     owner: donvargax
     status: todo
-    depends_on: [slice-30, T-48]
+    depends_on: [slice-30, T-48, T-77]
     kind: slice
     why: >
       Was p1-credentials-claude-token-run.
@@ -2710,3 +2710,10 @@ items:
       full ID and keeps a completed warning without checking the sources again. A lost start
       acknowledgement never repeats start and never deletes or repairs a source. Broken down from
       slice-32.
+  - id: T-77
+    title: credentials-run.feature joins the egress engine shard whole, before slice-31 lands
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
