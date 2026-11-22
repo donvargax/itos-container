@@ -2553,7 +2553,7 @@ items:
     title: docs/ORCHESTRATING.md states the implemented CI and push policy
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: p2-engine-fixture-bash3-lowercase

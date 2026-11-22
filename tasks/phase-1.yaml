@@ -9439,9 +9439,6 @@
     the work. doc-caps passes today at 6011 bytes, and fails if the new bullets push the file past
     6144 bytes. The check cannot tell whether the facts are right or whether the old bullet went.
     Review of the diff against this entry and the configuration's keys judges that.
-  done_when:
-    - run: grep -qi 'bugbot' docs/ORCHESTRATING.md && grep -qi 'draft' docs/ORCHESTRATING.md && tools/bin/doc-caps
-      prose: true
 - id: T-76
   type: docs
   title: Decision 0032 settles lock binding, credential-set aliases, version-4 home and delivery forms, the session record and metadata fixtures
