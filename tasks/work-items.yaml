@@ -2026,7 +2026,7 @@ items:
     phase: 1
     owner: donvargax
     status: todo
-    depends_on: [slice-34]
+    depends_on: [slice-34, T-78]
     kind: slice
     why: >
       Was p1-harness-claude-home-seeding.
@@ -2712,6 +2712,13 @@ items:
       slice-32.
   - id: T-77
     title: credentials-run.feature joins the egress engine shard whole, before slice-31 lands
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-78
+    title: claude-home.feature joins the other engine shard, as slice-36's branch places it, before slice-36 lands
     phase: 1
     owner: donvargax
     status: done
