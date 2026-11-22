@@ -7,21 +7,58 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"go.yaml.in/yaml/v3"
 )
 
 // testPendingEngineFeatures holds T-77's reviewed pending list: only the names in
 // pendingEngineFeatures may be absent from a shard's files, and then only until the file exists.
 func testPendingEngineFeatures(t *testing.T) {
-	if !maps.Equal(pendingEngineFeatures, map[string]string{"credentials-run.feature": "slice-31"}) {
-		t.Fatalf("the pending list is reviewed to hold credentials-run.feature for slice-31 alone: %v", pendingEngineFeatures)
+	if !maps.Equal(pendingEngineFeatures, map[string]pendingEngineFeature{
+		"credentials-run.feature": {item: "slice-31", shard: "egress"},
+		"claude-home.feature":     {item: "slice-36", shard: "other"},
+	}) {
+		t.Fatalf("the pending list is reviewed to hold credentials-run.feature for slice-31 in egress and claude-home.feature for slice-36 in other alone: %v", pendingEngineFeatures)
 	}
-	const name = "credentials-run.feature"
+	for _, name := range slices.Sorted(maps.Keys(pendingEngineFeatures)) {
+		t.Run(name, func(t *testing.T) { testPendingEngineFeature(t, name, pendingEngineFeatures[name].item) })
+	}
+	t.Run("a pending name is refused in any shard but its own", testPendingNameInWrongShard)
+}
+
+func testPendingNameInWrongShard(t *testing.T) {
+	baseline := shardBaseline(t)
+	for _, tc := range []struct{ name, from, to, issue string }{
+		{"claude-home.feature in egress", "egress.feature", "egress.feature claude-home.feature", "only other may name it"},
+		{"claude-home.feature in offline", "offline.feature", "offline.feature claude-home.feature", "only other may name it"},
+		{"credentials-run.feature in other", "doctor.feature", "doctor.feature credentials-run.feature", "only egress may name it"},
+	} {
+		var workflow engineWorkflow
+		if err := yaml.Unmarshal(baseline, &workflow); err != nil {
+			t.Fatal(err)
+		}
+		job := workflow.Jobs[shardJobID]
+		for i := range job.Strategy.Matrix.Include {
+			job.Strategy.Matrix.Include[i].Features = strings.Replace(job.Strategy.Matrix.Include[i].Features, tc.from, tc.to, 1)
+		}
+		workflow.Jobs[shardJobID] = job
+		fixture, err := yaml.Marshal(workflow)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if issues := strings.Join(engineShardIssues(fixture), "; "); !strings.Contains(issues, tc.issue) {
+			t.Errorf("%s: want an issue containing %q, got %s", tc.name, tc.issue, issues)
+		}
+	}
+}
+
+func testPendingEngineFeature(t *testing.T, name, item string) {
 	shardEnv := func(features string) featureEnvironment {
 		return featureEnvironment{engine: "1", ci: "true", actions: "true", os: "linux", arch: "amd64", shard: features}
 	}
 	dir := writeFeatureFixture(t, tierFixture)
 	t.Run("an absent name outside the pending map is refused", func(t *testing.T) {
-		for _, names := range []string{"memory.feature absent.feature", "absent.feature", "memory.feature credentials-runs.feature"} {
+		for _, names := range []string{"memory.feature absent.feature", "absent.feature", "memory.feature x-" + name} {
 			if _, err := selectScenarios("", dir, shardEnv(names)); err == nil || !strings.Contains(err.Error(), "no feature file") {
 				t.Errorf("%q: want a refusal naming the missing file, got %v", names, err)
 			}
@@ -33,8 +70,8 @@ func testPendingEngineFeatures(t *testing.T) {
 			t.Fatal(err)
 		}
 		if selected.count != 1 || selected.skip != "" || len(selected.pending) != 1 ||
-			!strings.Contains(selected.pending[0], name) || !strings.Contains(selected.pending[0], "pending") || !strings.Contains(selected.pending[0], "slice-31") {
-			t.Errorf("want one live row and one pending line naming %s and slice-31, got %+v", name, selected)
+			!strings.Contains(selected.pending[0], name) || !strings.Contains(selected.pending[0], "pending") || !strings.Contains(selected.pending[0], item) {
+			t.Errorf("want one live row and one pending line naming %s and %s, got %+v", name, item, selected)
 		}
 		if !slices.Equal(selected.paths, []string{filepath.Join(dir, "memory.feature")}) {
 			t.Errorf("the pending name reached the shard's paths: %v", selected.paths)
@@ -65,7 +102,7 @@ func testPendingEngineFeatures(t *testing.T) {
 		if _, err := selectScenarios("", present, shardEnv("memory.feature "+name)); err == nil || !strings.Contains(err.Error(), "@engine case") {
 			t.Errorf("a present pending file with no @engine case: want a refusal, got %v", err)
 		}
-		engine := "@engine @ID-CREDRUN-99\nFeature: credentials\n  Scenario: live\n    Given a plain row\n"
+		engine := "@engine @ID-PENDING-99\nFeature: credentials\n  Scenario: live\n    Given a plain row\n"
 		if err := os.WriteFile(filepath.Join(present, name), []byte(engine), 0600); err != nil {
 			t.Fatal(err)
 		}
@@ -73,7 +110,7 @@ func testPendingEngineFeatures(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(selected.pending) != 0 || selected.count != 2 || !slices.Contains(selected.ids, "@ID-CREDRUN-99") {
+		if len(selected.pending) != 0 || selected.count != 2 || !slices.Contains(selected.ids, "@ID-PENDING-99") {
 			t.Errorf("a present file is ordinary: want no pending line and its row selected, got %+v", selected)
 		}
 	})

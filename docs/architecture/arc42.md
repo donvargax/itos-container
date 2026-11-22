@@ -1387,7 +1387,7 @@ is its operational authority: ordinary, smoke, coverage and mutation runs exclud
 ([T-45's decision](../decisions/0024-engine-tier-shards.md), the fourth added by T-59):
 a matrix of the
 `engine-shard` job, each shard a native runner and daemon of whole feature files
-(offline, lifecycle, other and egress; egress holds `egress.feature` and `credentials-run.feature`, the latter skipped and logged as pending until slice-31 brings the file, per T-77) aiming at 180 seconds a step (a slower step warns; only a passing step over 600 seconds fails, [decision 0024](../decisions/0024-engine-tier-shards.md)), and no feature split. The
+(offline, lifecycle, other and egress; egress holds `egress.feature` and `credentials-run.feature`, the latter skipped and logged as pending until slice-31 brings the file, per T-77; other also holds `claude-home.feature`, pending until slice-36, per T-78) aiming at 180 seconds a step (a slower step warns; only a passing step over 600 seconds fails, [decision 0024](../decisions/0024-engine-tier-shards.md)), and no feature split. The
 `Engine scenarios (Linux amd64)` job only aggregates them: it needs the shards alone and
 fails unless every shard succeeded, and `ci` requires its success. Each shard enables
 `ITOS_CONTAINER_ENGINE_TESTS=1` only under the guarded Linux amd64 GitHub Actions

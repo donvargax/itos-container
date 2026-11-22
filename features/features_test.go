@@ -212,13 +212,21 @@ func (env featureEnvironment) engineFeatures(engine bool) ([]string, error) {
 	return names, nil
 }
 
+// pendingEngineFeature is one reviewed pending entry: the item that brings the file and the
+// one shard that may name it.
+type pendingEngineFeature struct{ item, shard string }
+
 // pendingEngineFeatures is the one reviewed list of engine feature files a shard may name
-// before they exist on this tree (T-77): basename to the item that brings the file. It holds
-// credentials-run.feature alone, in the egress shard. A listed name no file under the features
+// before they exist on this tree (T-77, T-78): basename to the item that brings the file and the
+// one shard that may name it. It holds credentials-run.feature for slice-31 in egress and
+// claude-home.feature for slice-36 in other. A listed name no file under the features
 // folder bears is skipped and logged as pending; once the file exists it is ordinary and needs an
 // @engine case, and the item that brings it removes its entry here. Every other absent or
 // @engine-less name is refused.
-var pendingEngineFeatures = map[string]string{"credentials-run.feature": "slice-31"}
+var pendingEngineFeatures = map[string]pendingEngineFeature{
+	"credentials-run.feature": {item: "slice-31", shard: "egress"},
+	"claude-home.feature":     {item: "slice-36", shard: "other"},
+}
 
 // These tags select native binaries before any scenario hook or fixture runs.
 // The repository's macOS/Windows jobs are manual; Linux proof never runs them.
@@ -288,8 +296,8 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 			}
 		}
 		for _, name := range shard {
-			if item, listed := pendingEngineFeatures[name]; listed && !onTree[name] {
-				result.pending = append(result.pending, fmt.Sprintf("ITOS_CONTAINER_ENGINE_FEATURES: %s is pending, brought by %s; no feature file of that name is on this tree yet", name, item))
+			if pending, listed := pendingEngineFeatures[name]; listed && !onTree[name] {
+				result.pending = append(result.pending, fmt.Sprintf("ITOS_CONTAINER_ENGINE_FEATURES: %s is pending, brought by %s; no feature file of that name is on this tree yet", name, pending.item))
 				continue
 			}
 			if !engineFiles[name] {
