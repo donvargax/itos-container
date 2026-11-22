@@ -9417,6 +9417,3 @@
     person and the timings above. No scenario, assertion or limit changes. Run the engine-free
     self-tests below locally. Before implementation, the check exits 1 at the grep. Engine timing
     for the new rows is judged in CI once slice-31 lands; this item claims none.
-  done_when:
-    - run: "grep -Eq \"^ +features: egress\\.feature credentials-run\\.feature$\" .github/workflows/ci.yml && grep -q \"Credentials-run placement, 2026-11-21\" docs/decisions/0024-engine-tier-shards.md && go test ./features -run \"^(TestEngineShards|TestEngineSelection)$\""
-      timeout: 600

@@ -2714,6 +2714,6 @@ items:
     title: credentials-run.feature joins the egress engine shard whole, before slice-31 lands
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
