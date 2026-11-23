@@ -2715,8 +2715,8 @@ items:
   - id: slice-54
     title: Select Codex defaults explicitly and disclose them for approval
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-34]
     kind: slice
     why: >
