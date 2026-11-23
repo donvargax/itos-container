@@ -2698,14 +2698,15 @@ items:
     status: done
     depends_on: []
     kind: task
-  - id: codex-home-selection-consent
+  - id: slice-54
     title: Select Codex defaults explicitly and disclose them for approval
     phase: 1
     owner: null
     status: todo
     depends_on: [slice-34]
-    kind: idea
+    kind: slice
     why: >
+      Was codex-home-selection-consent.
       This is the smallest observable rule and has no seeding, engine or native dependency. Policy
       versions 1–3 accept an optional home `harness: codex`, as a literal string and only beside
       `storage: volume`. Malformed values report policy.type or policy.home_harness at
@@ -2721,7 +2722,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [codex-home-selection-consent]
+    depends_on: [slice-54]
     kind: idea
     why: >
       This is the core behavior. Its spec defines the selection it reads, so it relies on no draft
