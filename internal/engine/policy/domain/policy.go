@@ -89,7 +89,7 @@ func inspectHome(value port.Value, version int) (*port.Home, []port.Issue) {
 	if value.Kind != port.Object {
 		return nil, []port.Issue{{Kind: port.Type, Path: []string{"home"}, Version: version}}
 	}
-	issues := unknown(value, []string{"home"}, version, "storage", "harnesses")
+	issues := unknown(value, []string{"home"}, version, "storage", "harness", "harnesses")
 	storage, exists := value.Fields["storage"]
 	kind := port.None
 	switch {
@@ -103,12 +103,14 @@ func inspectHome(value port.Value, version int) (*port.Home, []port.Issue) {
 	if kind != port.None {
 		issues = append(issues, port.Issue{Kind: kind, Path: []string{"home", "storage"}, Version: version})
 	}
+	harness, found := inspectHarness(value, version)
+	issues = append(issues, found...)
 	harnesses, found := inspectHarnesses(value, version)
 	issues = append(issues, found...)
 	if len(issues) != 0 {
 		return nil, issues
 	}
-	return &port.Home{Storage: "volume", Harnesses: harnesses}, nil
+	return &port.Home{Storage: "volume", Harness: harness, Harnesses: harnesses}, nil
 }
 
 // inspectHarness reads the optional home.harness string, whose only accepted
@@ -222,7 +224,3 @@ func validPath(path string) bool {
 	}
 	return true
 }
-
-var (
-	_ = inspectHarness
-)

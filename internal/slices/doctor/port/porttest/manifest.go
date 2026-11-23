@@ -16,8 +16,10 @@ type Manifests struct {
 }
 
 // Inspect records the policy's exact relative path and the caller's reserved names.
-func (*Manifests) Inspect(_ string, _ ...string) manifest.Result {
-	return *new(manifest.Result)
+func (m *Manifests) Inspect(path string, reserved ...string) manifest.Result {
+	m.Paths = append(m.Paths, path)
+	m.Reserved = append(m.Reserved, reserved)
+	return m.Result
 }
 
 // ManifestFixture supplies parsed data or a file failure and its expected result.

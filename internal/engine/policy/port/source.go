@@ -103,7 +103,10 @@ type Policy struct {
 // ReservedEnvironment names the containerEnv entries this request reserves for
 // itself, beyond the names every request reserves. The manifest engine takes
 // them from its caller, so it imports no policy package.
-func (Policy) ReservedEnvironment() []string {
+func (p Policy) ReservedEnvironment() []string {
+	if p.Home != nil && p.Home.Harness == "codex" {
+		return []string{"CODEX_HOME"}
+	}
 	return nil
 }
 

@@ -881,7 +881,7 @@ Feature: An approved persistent home for one checkout's harness
   #
   # The implementer may commit freely in its own workspace; the host makes the
   # landing commits and handles itos, submission, publication and review.
-  @wip @slice-54 @ID-CODEXHOME-01
+  @slice-54 @ID-CODEXHOME-01
   Scenario Outline: Policy selects the Codex harness only as an explicit volume home string and reserves CODEX_HOME only then
     Given a Codex harness policy fixture using version <version> and no credential grants
     When file-only doctor inspects the accepted Codex harness requests and the malformed Codex harness requests in JSON, and plain file-only doctor inspects the Codex request
@@ -925,7 +925,7 @@ Feature: An approved persistent home for one checkout's harness
   # no run.approval-changed), so a gate that refuses every home cannot pass.
   # The fixture answers every later request 403, as ID-HOME-27's does, and the
   # control's later outcome is not judged.
-  @wip @slice-54 @ID-CODEXHOME-02 @local-engine-fixture
+  @slice-54 @ID-CODEXHOME-02 @local-engine-fixture
   Scenario: Doctor and approve disclose and bind the Codex harness, and run refuses it until seeding exists
     Given a Codex harness approval fixture whose checkout requests the Codex harness over an independently seeded approval of a volume home without it, with host-home Codex sentinels
     And Codex harness run checkouts with raw policies and independently encoded approval records for removing, adding and matching the harness and a no-harness control

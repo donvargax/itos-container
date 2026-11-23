@@ -183,6 +183,9 @@ func harnessLines(effective any) []string {
 	home, _ := s["home"].(map[string]any)
 	harnesses, _ := home["harnesses"].([]any)
 	var lines []string
+	if codex, _ := home["harness"].(map[string]any); codex["kind"] == "codex" {
+		lines = append(lines, codexLines(codex)...)
+	}
 	for _, entry := range harnesses {
 		harness, _ := entry.(map[string]any)
 		if harness["name"] != "opencode" {
@@ -239,7 +242,3 @@ func (u UI) networkDisclosure(effective any) {
 	_, _ = fmt.Fprintln(u.Out, "Clients that omit SNI or send ECH, and SSH over 443, are refused.")
 	_, _ = fmt.Fprintln(u.Out, "The proxy logs each refusal, but a stored log is no proof that every refusal was kept: a log that ends early reads as a complete one.")
 }
-
-var (
-	_ = codexLines
-)

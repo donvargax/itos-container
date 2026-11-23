@@ -47,7 +47,30 @@ func envName(name string) bool {
 	return true
 }
 
-func reserved(_ string, _ []string) bool {
+func reserved(name string, extra []string) bool {
+	// ASCII folding only; non-ASCII identifiers are rejected by envName.
+	bytes := []byte(name)
+	for i, c := range bytes {
+		if c >= 'a' && c <= 'z' {
+			bytes[i] = c - ('a' - 'A')
+		}
+	}
+	upper := string(bytes)
+	for _, name := range extra {
+		if upper == name {
+			return true
+		}
+	}
+	for _, exact := range []string{"HOME", "USER", "LOGNAME", "PATH", "SHELL", "ENV", "BASH_ENV", "SHELLOPTS", "BASHOPTS", "TMP", "TEMP", "TMPDIR", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_APPLICATION_CREDENTIALS"} {
+		if upper == exact {
+			return true
+		}
+	}
+	for _, prefix := range []string{"ITOS_", "DOCKER_", "CONTAINER_", "XDG_", "LD_", "DYLD_", "SSH_", "GIT_", "GH_", "GITHUB_", "AWS_", "AZURE_", "GOOGLE_", "GCLOUD_", "CLAUDE_", "ANTHROPIC_", "OPENAI_", "OPENCODE_"} {
+		if strings.HasPrefix(upper, prefix) {
+			return true
+		}
+	}
 	return false
 }
 
@@ -92,7 +115,3 @@ func customizations(value port.Value, path []string) ([]string, []port.Issue) {
 	}
 	return unused, issues
 }
-
-var (
-	_ = environment
-)

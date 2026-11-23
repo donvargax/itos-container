@@ -106,7 +106,7 @@ type harness struct {
 }
 
 func volumeHome() home {
-	return *new(home)
+	return home{Storage: "volume", Target: "/home/itos", Lifetime: "project", Mode: "0700"}
 }
 
 // validHome accepts the volume home with no harness or exactly the Codex
@@ -114,6 +114,9 @@ func volumeHome() home {
 func validHome(h home) bool {
 	base := volumeHome()
 	if h.Storage != base.Storage || h.Target != base.Target || h.Lifetime != base.Lifetime || h.Mode != base.Mode {
+		return false
+	}
+	if h.Harness != nil && *h.Harness != codexDefaults() {
 		return false
 	}
 	return h.Harnesses == nil || len(h.Harnesses) == 1 && h.Harnesses[0] == harness{"opencode", "opencode-v1"}
@@ -172,6 +175,10 @@ func (JSON) Candidate(r readiness.Result, uid, gid string) port.Candidate {
 	}
 	if r.Policy.Policy.Home != nil {
 		h := volumeHome()
+		if r.Policy.Policy.Home.Harness == "codex" {
+			codex := codexDefaults()
+			h.Harness = &codex
+		}
 		for _, name := range r.Policy.Policy.Home.Harnesses {
 			h.Harnesses = append(h.Harnesses, harness{name, name + "-v1"})
 		}
@@ -322,7 +329,3 @@ func validGrants(grants []port.CredentialGrant) bool {
 	}
 	return true
 }
-
-var (
-	_ = codexDefaults
-)
