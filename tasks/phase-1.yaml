@@ -9551,5 +9551,3 @@
     worker then mounts an unapproved host directory. Fix: hand Docker an inode-bound source through
     a protected mount anchor held through startup and recovery, and refuse overlapping worker
     checkouts.
-  done_when:
-    - run: grep -q '7236d68' docs/decisions/0020-descriptor-backed-checkout-anchor.md && grep -q 'p2-admission-nested-checkouts-across-state-roots' docs/decisions/0020-descriptor-backed-checkout-anchor.md && go test ./internal/engine/session/docker ./internal/engine/session/port/... -run 'Anchor'
