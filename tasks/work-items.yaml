@@ -2306,7 +2306,7 @@ items:
     title: Bind the checkout socket backend to approval
     phase: 1
     owner: donvargax
-    status: doing
+    status: todo
     depends_on: [T-64]
     kind: slice
     why: >
