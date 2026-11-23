@@ -82,6 +82,15 @@
         "storage": {
           "type": "string",
           "const": "volume"
+        },
+        "harnesses": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "const": "opencode"
+          }
         }
       }
     }

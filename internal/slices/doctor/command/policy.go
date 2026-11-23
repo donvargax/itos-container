@@ -62,6 +62,9 @@ func presentPolicy(u *cli.UI, result port.Result, withJSON bool) int {
 		}
 		if policy.Home != nil {
 			_, _ = fmt.Fprintln(u.Stdout, "home.storage:", policy.Home.Storage)
+			for _, harness := range policy.Home.Harnesses {
+				_, _ = fmt.Fprintln(u.Stdout, "home.harnesses:", harness)
+			}
 		}
 		_, _ = fmt.Fprintln(u.Stdout, "Host readiness and approval were not checked")
 	}

@@ -80,13 +80,30 @@ type settings struct {
 	Credentials []port.CredentialGrant `json:"credentials,omitempty"`
 }
 type home struct {
-	Storage  string `json:"storage"`
-	Target   string `json:"target"`
-	Lifetime string `json:"lifetime"`
-	Mode     string `json:"mode"`
+	Storage   string    `json:"storage"`
+	Target    string    `json:"target"`
+	Lifetime  string    `json:"lifetime"`
+	Mode      string    `json:"mode"`
+	Harnesses []harness `json:"harnesses,omitempty"`
 }
 
-func volumeHome() home { return home{"volume", "/home/itos", "project", "0700"} }
+// harness binds one harness name to the profile whose worker environment the
+// approval covers. A new environment table needs a new profile ID.
+type harness struct {
+	Name    string `json:"name"`
+	Profile string `json:"profile"`
+}
+
+func volumeHome() home { return home{"volume", "/home/itos", "project", "0700", nil} }
+
+// validHome accepts the volume home with no harness or exactly the OpenCode one.
+func validHome(h home) bool {
+	base := volumeHome()
+	if h.Storage != base.Storage || h.Target != base.Target || h.Lifetime != base.Lifetime || h.Mode != base.Mode {
+		return false
+	}
+	return h.Harnesses == nil || len(h.Harnesses) == 1 && h.Harnesses[0] == harness{"opencode", "opencode-v1"}
+}
 
 type envelope struct {
 	Schema      int      `json:"schema"`
@@ -141,6 +158,9 @@ func (JSON) Candidate(r readiness.Result, uid, gid string) port.Candidate {
 	}
 	if r.Policy.Policy.Home != nil {
 		h := volumeHome()
+		for _, name := range r.Policy.Policy.Home.Harnesses {
+			h.Harnesses = append(h.Harnesses, harness{name, name + "-v1"})
+		}
 		s.Home = &h
 		s.Profile = strings.TrimSuffix(s.Profile, "-v1") + "-home-v1"
 	}
@@ -234,7 +254,7 @@ func validProfile(s settings) bool {
 	n := s.Policy.Network
 	profile := s.Profile
 	if s.Home != nil {
-		if *s.Home != volumeHome() || !strings.HasSuffix(profile, "-home-v1") {
+		if !validHome(*s.Home) || !strings.HasSuffix(profile, "-home-v1") {
 			return false
 		}
 		profile = strings.TrimSuffix(profile, "-home-v1") + "-v1"

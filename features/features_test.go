@@ -70,6 +70,9 @@ func TestFeatures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	for _, line := range selection.pending {
+		t.Log(line)
+	}
 	if len(selection.excluded) > 0 {
 		t.Logf("excluded %d scenario(s): %s", len(selection.excluded), strings.Join(selection.excluded, "; "))
 	}
@@ -166,6 +169,7 @@ type scenarioSelection struct {
 	count    int
 	skip     string
 	excluded []string
+	pending  []string // one line per shard file named in pendingEngineFeatures and not on this tree
 	started  time.Time
 	timing   *engineTiming
 }
@@ -206,6 +210,22 @@ func (env featureEnvironment) engineFeatures(engine bool) ([]string, error) {
 		}
 	}
 	return names, nil
+}
+
+// pendingEngineFeature is one reviewed pending entry: the item that brings the file and the
+// one shard that may name it.
+type pendingEngineFeature struct{ item, shard string }
+
+// pendingEngineFeatures is the one reviewed list of engine feature files a shard may name
+// before they exist on this tree (T-77, T-78): basename to the item that brings the file and the
+// one shard that may name it. It holds credentials-run.feature for slice-31 in egress and
+// claude-home.feature for slice-36 in other. A listed name no file under the features
+// folder bears is skipped and logged as pending; once the file exists it is ordinary and needs an
+// @engine case, and the item that brings it removes its entry here. Every other absent or
+// @engine-less name is refused.
+var pendingEngineFeatures = map[string]pendingEngineFeature{
+	"credentials-run.feature": {item: "slice-31", shard: "egress"},
+	"claude-home.feature":     {item: "slice-36", shard: "other"},
 }
 
 // These tags select native binaries before any scenario hook or fixture runs.
@@ -266,8 +286,9 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 	}
 	features, paths := inventory, []string(nil)
 	if len(shard) > 0 {
-		engineFiles := map[string]bool{}
+		engineFiles, onTree := map[string]bool{}, map[string]bool{}
 		for _, feature := range inventory {
+			onTree[filepath.Base(feature.Uri)] = true
 			for _, scenario := range feature.Pickles {
 				for _, tag := range scenario.Tags {
 					engineFiles[filepath.Base(scenario.Uri)] = engineFiles[filepath.Base(scenario.Uri)] || tag.Name == "@engine"
@@ -275,10 +296,17 @@ func selectScenarios(selection, dir string, env featureEnvironment) (scenarioSel
 			}
 		}
 		for _, name := range shard {
+			if pending, listed := pendingEngineFeatures[name]; listed && !onTree[name] {
+				result.pending = append(result.pending, fmt.Sprintf("ITOS_CONTAINER_ENGINE_FEATURES: %s is pending, brought by %s; no feature file of that name is on this tree yet", name, pending.item))
+				continue
+			}
 			if !engineFiles[name] {
 				return result, fmt.Errorf("ITOS_CONTAINER_ENGINE_FEATURES: no feature file %q has an @engine case", name)
 			}
 			paths = append(paths, filepath.Join(dir, name))
+		}
+		if len(paths) == 0 {
+			return result, fmt.Errorf("ITOS_CONTAINER_ENGINE_FEATURES: no feature file of the shard is on this tree")
 		}
 		suite.Options.Paths = paths
 		if features, err = suite.RetrieveFeatures(); err != nil {

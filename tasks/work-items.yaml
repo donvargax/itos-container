@@ -5,7 +5,6 @@ queue:
   - slice-28
   - slice-35
   - slice-40
-  - slice-41
   - slice-31
   - slice-36
 items:
@@ -599,7 +598,7 @@ items:
     title: Run refuses checkouts exposing any project's control state
     phase: 1
     owner: donvargax
-    status: doing
+    status: todo
     depends_on: [slice-21]
     kind: slice
     why: >
@@ -909,7 +908,7 @@ items:
     title: Refusals are logged, a proxy failure stops the run, and cleanup removes the proxy and network
     phase: 1
     owner: donvargax
-    status: doing
+    status: todo
     depends_on: [slice-27]
     kind: slice
     why: >
@@ -1627,8 +1626,8 @@ items:
     title: run hands the approved Claude token to the workload; it appears nowhere in docker inspect, the checkout, status or logs
     phase: 1
     owner: donvargax
-    status: doing
-    depends_on: [slice-30, T-48]
+    status: todo
+    depends_on: [slice-30, T-48, T-77]
     kind: slice
     why: >
       Was p1-credentials-claude-token-run.
@@ -2024,9 +2023,9 @@ items:
   - id: slice-36
     title: Claude starts with isolated state and onboarding already completed
     phase: 1
-    owner: null
+    owner: donvargax
     status: todo
-    depends_on: [slice-34]
+    depends_on: [slice-34, T-78]
     kind: slice
     why: >
       Was p1-harness-claude-home-seeding.
@@ -2061,7 +2060,7 @@ items:
     title: Execute literal argv within a running owned session
     phase: 1
     owner: donvargax
-    status: doing
+    status: todo
     depends_on: []
     kind: slice
     why: >
@@ -2243,7 +2242,7 @@ items:
     title: Deliver an approved OpenCode login to one container run
     phase: 1
     owner: donvargax
-    status: doing
+    status: todo
     depends_on: [T-48, slice-34, slice-30]
     kind: slice
     why: >
@@ -2258,16 +2257,10 @@ items:
   - id: slice-41
     title: Start OpenCode headless with isolated home and configuration
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: [slice-34]
     kind: slice
-    why: >
-      Specify the OpenCode counterpart to slice-35 in the approved worker. Run opencode --standalone
-      run --format json against its isolated home and configuration, with the authorized provider
-      and model. Cover separation from host configuration and services, bounded startup, final
-      output and failure, approved egress and cleanup. Scenarios use synthetic credentials and a
-      fake provider. Specify only for now; implementation follows the Codex and Claude slices.
     refs: [docs/proof/slice-41-opencode-smoke.md]
   - id: T-62
     title: Clarify how branch syncs contribute to release version counts
@@ -2552,8 +2545,8 @@ items:
   - id: T-75
     title: docs/ORCHESTRATING.md states the implemented CI and push policy
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
     kind: task
   - id: p2-engine-fixture-bash3-lowercase
@@ -2710,3 +2703,17 @@ items:
       full ID and keeps a completed warning without checking the sources again. A lost start
       acknowledgement never repeats start and never deletes or repairs a source. Broken down from
       slice-32.
+  - id: T-77
+    title: credentials-run.feature joins the egress engine shard whole, before slice-31 lands
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-78
+    title: claude-home.feature joins the other engine shard, as slice-36's branch places it, before slice-36 lands
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
