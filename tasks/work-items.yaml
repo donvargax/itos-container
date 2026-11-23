@@ -2478,6 +2478,16 @@ items:
       The person corrected the Codex part of q-90 on 2026-11-20: Codex defaults to a sandbox-only
       ChatGPT login in the harness home (device login, never the host auth.json), with an API key
       only as the fallback when a weekly limit is reached. The design is amended to match.
+
+      Discobox's design (github.com/discobox-ai/discobox at 97b2281, proxy/DESIGN.md, read
+      2026-11-23) is the reference for a sentinel-swap broker, built as a separate project because
+      it holds a CA and intercepts TLS: the box holds only sentinels shaped like the real keys; the
+      proxy swaps a sentinel for the real value only on an authorized route, matching the exact set,
+      never a prefix; every request is authorized before any secret is decrypted; values are
+      redacted from the audit; an outage answers 503 and never forwards the real value; grants
+      expire. Unlike slice-31's staged file, the real token never enters the box. Routes finer than
+      a host (method, path, tool) would sit beside the rule against exact-match allowlists of agent
+      actions, so that is for the person to weigh.
     deferred: >
       Deferred until remote sandboxes (microVMs on cloud providers) exist, by the person's direction
       of 2026-11-20 (q-90). Locally run sandboxes share the host's own logins, so the local case
