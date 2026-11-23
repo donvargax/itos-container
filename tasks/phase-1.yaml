@@ -9527,7 +9527,7 @@
     scenario, assertion or limit changes. Run the engine-free self-tests below locally. Before the
     work, the check exits 1 at its first grep.
 - id: T-79
-  type: docs
+  type: test
   title: "Architecture drift: reconcile session and runtime evidence status"
   why: >
     Reconcile arc42 with merged slice-9 ownership work and live engine scenarios, preserving the
