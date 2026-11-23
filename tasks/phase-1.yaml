@@ -9551,3 +9551,24 @@
     worker then mounts an unapproved host directory. Fix: hand Docker an inode-bound source through
     a protected mount anchor held through startup and recovery, and refuse overlapping worker
     checkouts.
+- id: T-81
+  type: test
+  title: engine-fixture prepares, hands off and cleans up a verified pinned Codex 0.167.0 fixture image
+  why: >
+    Native real-Codex evidence needs the rust-v0.167.0 asset codex-x86_64-unknown-linux-musl.tar.gz.
+    Every host this uses is signed: github.com and release-assets.githubusercontent.com for the
+    download, and api.github.com for the published asset digest that the red commit cross-checks
+    against a local sha256sum. features/testdata/codex-fixture/SHA256SUMS pins the asset and the
+    extracted executable, and CI compares only against that file. Inside the existing
+    `tools/bin/engine-fixture prepare` step, already called by ci.yml, it does the following. It
+    builds features/testdata/codex-fixture/Dockerfile FROM the pinned busybox, with the executable
+    root-owned 0555 at /usr/local/bin/codex. It pushes to a separate
+    itos-fixture-<run>-<attempt>-codex repository, verifies the manifest and config digests, removes
+    the tag and digest, and cold-pulls. Its ordered 0600 records (codex.repository, codex.tag,
+    codex.build.iid, codex.digest) exist only for cleanup. Its handoff (codex.reference, codex.iid)
+    is written only after the whole protocol passes. Prepare's four outputs and .github/workflows
+    stay unchanged, and no product code changes, so it has no product prerequisite. The spec states
+    that the implementer may commit freely in its workspace and that the host makes the landing
+    commits. Broken down from slice-35.
+  done_when:
+    - run: A hermetic local Go test beside features/engine_fixture_test.go runs `tools/bin/engine-fixture cleanup` with a recording fake docker on a PATH that reaches no real engine. In the failed-after-tag and failed-after-cold-pull states, it removes exactly the recorded Codex references after inspections whose Id matches codex.build.iid, and it leaves a decoy reference, busybox and the registry. In the mismatched-Id state it fails without removing anything. A static order guard in the same test rejects each negative-control edit that moves a cleanup record after the step it protects or writes the handoff before cold-pull validation.
