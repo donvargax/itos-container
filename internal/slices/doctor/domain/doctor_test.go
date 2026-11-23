@@ -42,3 +42,18 @@ func TestManifestUsesOnlyTheSelectedPath(t *testing.T) {
 		t.Fatalf("manifest request = %#v, %v", got, manifests.Paths)
 	}
 }
+
+func TestManifestReservesTheNamesTheSelectionNames(t *testing.T) {
+	for name, home := range map[string]*policy.Home{"codex": {Storage: "volume", Harness: "codex"}, "volume": {Storage: "volume"}, "none": nil} {
+		policies := &porttest.Policies{Result: policy.Result{Policy: &policy.Policy{Manifest: "worker.json", Home: home}}}
+		manifests := &porttest.Manifests{}
+		domain.InspectManifest(policies, manifests)
+		want := [][]string{nil}
+		if name == "codex" {
+			want = [][]string{{"CODEX_HOME"}}
+		}
+		if !reflect.DeepEqual(manifests.Reserved, want) {
+			t.Fatal(name, manifests.Reserved)
+		}
+	}
+}

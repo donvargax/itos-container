@@ -690,6 +690,255 @@ Feature: An approved persistent home for one checkout's harness
     Then each mismatch reports changed approval at /home/harnesses with exit 1 and the Engine API fixture saw no connection and journalled no request
     And each matching control reports no approval change and its Engine API fixture journal holds the readiness inspection of version, info and the approved image
 
+  # Slice-54: the person selects the Codex defaults explicitly and sees them
+  # before approving. It is slice-35's first stage, built on slice-34 (done),
+  # and its rows are ID-CODEXHOME-01 and 02. slice-55 seeds config.toml on each
+  # run, slice-56 and 57 refuse unsafe or unverifiable seeding, slice-58 starts
+  # pinned Codex, and slice-48 owns version 4's Codex credential entry. None of
+  # that is specified here. This spec adds these rows and comments only: no
+  # step definitions, product code or evidence. Slice-34's and slice-41's rows
+  # and decisions above stay unchanged.
+  # Authorities: charter milestone two step 3 ("harness state seeded where its
+  # first run would otherwise stop or call home"); decision 0030; architecture.md
+  # Slices; q-52 (decisions 0025:360 and 0029:25); the slice-54 registry entry.
+  #
+  # Request (policy versions 1, 2 and 3):
+  # - home gains an optional member harness, whose only accepted value is the
+  #   string codex. It is a separate member from slice-41's home.harnesses list.
+  #   The list keeps its rules, and harnesses: [codex] is still policy.home_harness
+  #   at /home/harnesses/0 with its existing fix. Slice-41's note that slice-35
+  #   would replace that example no longer holds. A home may carry both members:
+  #   {storage: volume, harness: codex, harnesses: [opencode]} is accepted, and
+  #   each member is disclosed and bound on its own.
+  # - harness is accepted only beside storage volume. The storage rules are
+  #   slice-34's: a home with harness but no storage is policy.required
+  #   /home/storage, and {storage: tmpfs, harness: codex} is policy.home_storage
+  #   /home/storage. Each malformed input below gives exactly one problem: exit
+  #   2, file itos-container.yaml, ok false, no policy member, and no state or
+  #   engine access:
+  #     harness: null, 7, true, [codex] or {kind: codex} -> policy.type /home/harness
+  #     harness: "", Codex, CODEX, " codex", opencode or codex-v1
+  #       -> policy.home_harness /home/harness
+  #     {harness: codex} -> policy.required /home/storage
+  #     {storage: tmpfs, harness: codex} -> policy.home_storage /home/storage
+  #     {storage: volume, harness: codex, harness: codex} -> policy.duplicate_key
+  #       /home/harness (the parser's existing rule)
+  #   policy.type keeps its existing message and version-naming fix. At
+  #   /home/harness, policy.home_harness has the message "Home harness is
+  #   unsupported" and the fix "use home.harness codex, or omit harness". At
+  #   /home/harnesses it keeps "use home.harnesses [opencode], or omit harnesses".
+  #   An input with more than one defect is not judged here; the existing
+  #   collection rules apply.
+  # - The JSON of file-only doctor (doctor --policy-only --json) is
+  #   {"schema":1,"ok":true,"scope":"policy","problems":[],"policy":P}, where P is
+  #   {"version":N,"manifest":M,"network":{"mode":"offline"},"home":H}.
+  #   H is {"storage":"volume","harness":"codex"}, plus "harnesses":["opencode"]
+  #   when that list is requested. A version 3 file without credentials has no
+  #   credentials member. Plain file-only doctor prints the line
+  #   "home.harness: codex" right after "home.storage: volume" and before any
+  #   "home.harnesses:" line.
+  #
+  # Manifest (doctor --manifest-only, ordinary doctor, approve and run share one
+  # manifest inspection):
+  # - Only when the same policy selects home.harness codex, a containerEnv key
+  #   equal to CODEX_HOME under ASCII case folding (CODEX_HOME, codex_home,
+  #   Codex_Home) is manifest.reserved at /containerEnv/<the key as written>.
+  #   The problem has exit 2, the manifest's file and the existing message
+  #   "Environment name is reserved" and fix. Run later sets CODEX_HOME itself
+  #   (slice-55). Without that selection the key is ordinary, under no home, a
+  #   plain volume home or the OpenCode list alike, and the effective
+  #   containerEnv keeps it with its value.
+  # - Only that exact name is reserved. CODEX_HOME_DIR, CODEX_SANDBOX, CODEXHOME
+  #   and MY_CODEX_HOME stay ordinary under every selection, the Codex one
+  #   included. The existing reserved names and prefixes are unchanged. Image
+  #   metadata cannot carry containerEnv (it is descriptive only), so it gains
+  #   no rule.
+  #
+  # Approval (doctor and approve):
+  # - The effective approval's home object gains the member harness, exactly
+  #   {"kind":"codex","seed":"codex-v1","target":"/home/itos/.codex"}. It is
+  #   omitted when the harness is not selected, so every approval without it
+  #   keeps its canonical bytes and fingerprint. The canonical encoding
+  #   (internal/engine/approval/canonical/json.go) sorts keys recursively, so
+  #   the home object's bytes with the harness are
+  #   {"harness":{"kind":"codex","seed":"codex-v1","target":"/home/itos/.codex"},"lifetime":"project","mode":"0700","storage":"volume","target":"/home/itos"}.
+  #   With the OpenCode list as well, "harnesses":[{"name":"opencode",
+  #   "profile":"opencode-v1"}] sits between "harness" and "lifetime". The
+  #   fingerprint is "sha256:" and the lower-hex SHA-256 of the whole canonical
+  #   settings, as for every approval. Profile names stay as slice-34 named them
+  #   (offline-home-v1 and the rest). The strict record codec accepts this exact
+  #   object and refuses any other harness value as state.invalid. codex-v1
+  #   names the seed that slice-55 specifies, so a different seed needs a new
+  #   seed ID and a new approval. An older binary's codec refuses such a
+  #   record; that downgrade lockout belongs to p2-control-state-upgrade-contract.
+  # - doctor --json gains no field. approval.effective carries the home object
+  #   above. approval.differences against an approval without the harness
+  #   holds {"path":"/home/harness","before":null,"after":<that object>}. The
+  #   existing differences are sorted by path in byte order, and when only the
+  #   harness changes this is the only entry. approval.fingerprint is the new
+  #   digest.
+  # - Plain doctor and bare approve's review print the existing shared home
+  #   disclosure (presentation homeDisclosure). When the Codex harness is
+  #   selected, these six lines follow its existing three, each a whole line,
+  #   case-sensitive, in this order, and before any OpenCode harness lines:
+  #     Codex harness: seed codex-v1 at /home/itos/.codex.
+  #     Each run sets CODEX_HOME=/home/itos/.codex and rewrites only config.toml there from the fixed codex-v1 seed.
+  #     The seed turns off Codex update checks, analytics and plugins, and Codex's own sandbox; this container is the sandbox.
+  #     Codex sessions, history and other files under /home/itos/.codex are hostile worker data kept for the next run; run does not read, reset or remove them.
+  #     CODEX_HOME is reserved: the manifest's containerEnv cannot set it.
+  #     No Codex login is delivered by this setting. The seed is no network or credential grant.
+  #   Plain doctor prints no difference lines. Only the review prints the
+  #   existing "path: before -> after" lines, so it adds
+  #   /home/harness: null -> {"kind":"codex","seed":"codex-v1","target":"/home/itos/.codex"}
+  #   in the sorted order above, before its single y/N prompt.
+  # - The harness is not a network or credential grant, and q-52's rules are
+  #   unchanged. An offline request with the harness and no credentials may
+  #   still be approved by its matching --fingerprint, and allowlist or
+  #   credential settings still need the person at a terminal. The fingerprint
+  #   route shows no review, so ID-CODEXHOME-02 shows the disclosure through
+  #   plain doctor and bare terminal approve.
+  # - Adding or removing the harness changes the fingerprint. A fingerprint
+  #   computed for the other side is stale: approve --fingerprint <stale> --json
+  #   exits 1 with exactly one problem, approve.fingerprint, with no prompt, and
+  #   leaves the approval record's bytes unchanged. The fresh fingerprint is the
+  #   fixture's own digest of the expected settings with the harness.
+  #   Inspecting or approving allocates no volume, creates no worker and reads
+  #   no host Codex file.
+  #
+  # Run gate, until slice-55 lifts it: run cannot seed yet, so it never starts a
+  # worker for a Codex selection.
+  # - Readiness inspection (internal/engine/readiness/domain/inspect.go) refuses
+  #   a valid policy that selects home.harness codex for run only, the same way
+  #   it gates version 3 (AllowVersion3, set for doctor and approve in
+  #   cmd/itos-container/main.go). Doctor and approve opt in; run does not. The
+  #   problem is policy.home_harness, exit 2, file itos-container.yaml, path
+  #   /home/harness, message "Home harness is not accepted by this command yet"
+  #   and fix "omit home.harness to run, or review what it requests with doctor
+  #   and approve". So run's stderr holds exactly
+  #     itos-container: policy.home_harness "itos-container.yaml/home/harness": Home harness is not accepted by this command yet; omit home.harness to run, or review what it requests with doctor and approve
+  #   and its stdout is empty.
+  # - Run's order is unchanged around the gate: its argv and JSON refusals,
+  #   the checkout pin, then the policy's own problems (a malformed policy
+  #   reports those and never the gate), then the version 3 gate (a version 3
+  #   file reports policy.version at /version, exit 2, with or without the
+  #   harness), then the Codex gate, then the manifest (so a CODEX_HOME key is
+  #   not reported under the gate), approval state and comparison, and the
+  #   engine. The gate does not depend on approval: with no approval, a
+  #   matching approval or an approval without the harness, run reports the
+  #   gate, exit 2, and opens no engine connection.
+  # - Removing: a request without the harness over an approval that carries it
+  #   passes the gate. Run then reports the existing local mismatch, exactly
+  #   "itos-container: run.approval-changed: run approval changed at
+  #   /home/harness; use itos container approve", exit 1, before any engine
+  #   connection. A request without the harness over no approval keeps the
+  #   existing missing-approval refusal.
+  #
+  # Architecture and libraries: the policy engine validates home.harness
+  # (port.Home gains Harness, JSON "harness" omitted when empty). The manifest
+  # engine takes the selection's extra reserved name from its caller (readiness
+  # and doctor's manifest-only inspection), so it imports no policy package.
+  # Approval canonical and presentation bind and disclose the object, and the
+  # readiness inspector gates run. No slice imports another, only cmd
+  # assembles, and porttest fakes do no I/O. No new package, dependency or
+  # service. The session codec and the run, status and stop slices are
+  # untouched, because the gate stops every Codex selection before freezing.
+  # The implementation updates docs/CONFIG.md (home.harness, codex-v1 as
+  # disclosed, the run gate), docs/CLI.md's "Implemented approval", and the
+  # home object of docs/schemas/itos-container-v1, -v2 and -v3.schema.json
+  # (harness with const "codex"). Each schema closes home with
+  # additionalProperties false. No arc42 departure is expected; if the code
+  # shows one, record a decision in the same pull request.
+  #
+  # Step handoff: every phrase in ID-CODEXHOME-01 and 02 is NEW. Reuse the
+  # helpers behind ID-HOME-25 to 27 (features/harness_home_opencode_steps_test.go):
+  # isolatePolicy, homePolicyRun and homePolicyRefused's file-only checks
+  # (that function judges w.home.policy[2:], so the new definitions keep their
+  # own slice bounds); approvalCheckout, approvalSeed, approvalOracle with
+  # approval.home set to the expected map, runDoctor, approvalTerminal,
+  # seedControlLocations, runWith and the doctor Engine API fixture's
+  # requests() and listener connection count (features/doctor_engine_test.go).
+  # Givens write temporary Git checkouts, raw policies and manifests,
+  # independently encoded approval records (never through the product codec)
+  # and host-home Codex sentinels (~/.codex/config.toml, ~/.codex/auth.json and
+  # ~/.codex/sessions/sentinel.jsonl under the isolated HOME). None calls
+  # product doctor, approve or run, and none asserts. Every product run is
+  # captured in When and judged in Then. The fixture computes both fingerprints
+  # itself and treats a non-differing pair as a fixture error. Add the
+  # definitions alone in a red test commit with @wip kept. Both rows are local:
+  # neither needs a real engine, so their red and green runs are local, and
+  # both stay out of TestHomeNativeStepDefinitions's selected IDs.
+  #
+  # Expected red, from reading main at 9743454 (predictions, not executed
+  # evidence), always at the first Then, never in a Given or When:
+  # - ID-CODEXHOME-01: file-only doctor refuses every harness input as
+  #   policy.unknown_key /home/harness, exit 2, so the accepted Codex requests
+  #   fail first. Later, CODEX_HOME is ordinary under every selection.
+  # - ID-CODEXHOME-02: ordinary doctor --json refuses the requested policy as
+  #   policy.unknown_key /home/harness, exit 2, with no approval.effective, so
+  #   the first Then fails. Later, the removing checkout's record fails the
+  #   strict decode (run.approval-invalid, not changed at /home/harness), and
+  #   the adding and matching checkouts report policy.unknown_key, not the gate.
+  #
+  # The implementer may commit freely in its own workspace; the host makes the
+  # landing commits and handles itos, submission, publication and review.
+  @slice-54 @ID-CODEXHOME-01
+  Scenario Outline: Policy selects the Codex harness only as an explicit volume home string and reserves CODEX_HOME only then
+    Given a Codex harness policy fixture using version <version> and no credential grants
+    When file-only doctor inspects the accepted Codex harness requests and the malformed Codex harness requests in JSON, and plain file-only doctor inspects the Codex request
+    And manifest-only doctor inspects each CODEX_HOME spelling and the near names under the Codex, plain volume, OpenCode and omitted home selections
+    Then each accepted Codex request succeeds with exactly its normalized home storage, harness and harnesses, and plain doctor prints home.harness codex after home.storage
+    And each malformed Codex harness request has exactly its specified rule, subject and fix without state or engine access
+    And under the Codex selection each CODEX_HOME spelling is manifest.reserved at its own containerEnv path with exit 2 and no effective manifest
+    And under every other selection each CODEX_HOME spelling stays in the effective containerEnv with its value, and the near names stay under every selection, the Codex one included
+
+    Examples:
+      | version |
+      | 1       |
+      | 2       |
+      | 3       |
+
+  # ID-CODEXHOME-01's inputs. The accepted requests are
+  # {storage: volume, harness: codex} and
+  # {storage: volume, harness: codex, harnesses: [opencode]}; the malformed ones
+  # are listed above. The manifests, each a valid pinned-image manifest whose
+  # containerEnv holds only the entries named:
+  #   {"CODEX_HOME":"/x"}, {"codex_home":"/x"}, {"Codex_Home":"/x"}, and the near
+  #   names together {"CODEX_HOME_DIR":"/x","CODEX_SANDBOX":"seatbelt",
+  #   "CODEXHOME":"/x","MY_CODEX_HOME":"/x"}.
+  # The selections are home {storage: volume, harness: codex}, {storage:
+  # volume}, {storage: volume, harnesses: [opencode]} and no home. Each of the
+  # 16 pairs runs doctor --manifest-only --json. A reserved pair has exactly one
+  # problem: manifest.reserved, exit 2, path /containerEnv/<key>, file the
+  # manifest's path, manifest.valid false and no effective member. Every other
+  # pair has ok true, no problems, and an effective containerEnv equal to the
+  # manifest's entries.
+  #
+  # ID-CODEXHOME-02's fixture. Every checkout is version 1 offline, built by
+  # "an approval checkout and isolated host state"'s helpers. The fixture
+  # seeds an approval of a volume home without the
+  # harness and requests {storage: volume, harness: codex}. Its other run
+  # checkouts, each with its own Engine API fixture, are removing (the record
+  # carries the harness, the request omits it), adding (the record omits it,
+  # the request carries it), matching (both carry it) and the no-harness
+  # control (neither does). The control must reach the readiness inspection
+  # (GET /version, GET /info and GET /images/<approved image>/json journalled,
+  # no run.approval-changed), so a gate that refuses every home cannot pass.
+  # The fixture answers every later request 403, as ID-HOME-27's does, and the
+  # control's later outcome is not judged.
+  @slice-54 @ID-CODEXHOME-02 @local-engine-fixture
+  Scenario: Doctor and approve disclose and bind the Codex harness, and run refuses it until seeding exists
+    Given a Codex harness approval fixture whose checkout requests the Codex harness over an independently seeded approval of a volume home without it, with host-home Codex sentinels
+    And Codex harness run checkouts with raw policies and independently encoded approval records for removing, adding and matching the harness and a no-harness control
+    When JSON doctor and plain doctor inspect the requested Codex harness, approve runs without a terminal as JSON with the seeded approval's fingerprint, and then bare approve runs at a terminal and receives "y" after the review
+    And the itos-container binary runs each Codex harness run checkout through its production approval preflight
+    Then JSON doctor reports the independently expected home object with the Codex harness, the single /home/harness difference from null to it and the independently calculated new fingerprint
+    And the stale fingerprint is refused with approve.fingerprint and exit 1 without a prompt and the seeded approval record is unchanged
+    And plain doctor and the review before exactly one y/N prompt both show the six Codex harness disclosure lines in order after the home disclosure, and only the review shows the /home/harness difference line
+    And terminal approval exits 0 and records the independently expected settings and new fingerprint at generation 2
+    And no home volume or worker is created and checkout and host-home Codex sentinels are unchanged
+    And the removing checkout reports changed approval at /home/harness with exit 1, the adding and matching checkouts report the Codex harness run gate with exit 2, and none of the three Engine API fixtures saw a connection
+    And the no-harness control reports no approval change and its Engine API fixture journal holds the readiness inspection of version, info and the approved image
+
   # Frozen-input and local lifetime. Red at each first Then: no home profile,
   # no home mount or no home ownership operation exists in the baseline.
   @slice-34 @ID-HOME-04 @local-engine-fixture

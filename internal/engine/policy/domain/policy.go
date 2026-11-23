@@ -89,7 +89,7 @@ func inspectHome(value port.Value, version int) (*port.Home, []port.Issue) {
 	if value.Kind != port.Object {
 		return nil, []port.Issue{{Kind: port.Type, Path: []string{"home"}, Version: version}}
 	}
-	issues := unknown(value, []string{"home"}, version, "storage", "harnesses")
+	issues := unknown(value, []string{"home"}, version, "storage", "harness", "harnesses")
 	storage, exists := value.Fields["storage"]
 	kind := port.None
 	switch {
@@ -103,12 +103,33 @@ func inspectHome(value port.Value, version int) (*port.Home, []port.Issue) {
 	if kind != port.None {
 		issues = append(issues, port.Issue{Kind: kind, Path: []string{"home", "storage"}, Version: version})
 	}
+	harness, found := inspectHarness(value, version)
+	issues = append(issues, found...)
 	harnesses, found := inspectHarnesses(value, version)
 	issues = append(issues, found...)
 	if len(issues) != 0 {
 		return nil, issues
 	}
-	return &port.Home{Storage: "volume", Harnesses: harnesses}, nil
+	return &port.Home{Storage: "volume", Harness: harness, Harnesses: harnesses}, nil
+}
+
+// inspectHarness reads the optional home.harness string, whose only accepted
+// value is "codex". It is separate from the home.harnesses list.
+func inspectHarness(home port.Value, version int) (string, []port.Issue) {
+	harness, exists := home.Fields["harness"]
+	if !exists {
+		return "", nil
+	}
+	issue := func(kind port.Failure) []port.Issue {
+		return []port.Issue{{Kind: kind, Path: []string{"home", "harness"}, Version: version}}
+	}
+	switch {
+	case harness.Kind != port.String:
+		return "", issue(port.Type)
+	case harness.Text != "codex":
+		return "", issue(port.HomeHarness)
+	}
+	return harness.Text, nil
 }
 
 // inspectHarnesses reads the optional home.harnesses list: a non-empty list of

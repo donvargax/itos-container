@@ -68,6 +68,8 @@ const (
 	CredentialSource
 	HomeStorage
 	HomeHarness
+	// HomeHarnessGated is a valid home.harness the command cannot act on yet.
+	HomeHarnessGated
 )
 
 // Issue locates one failure using decoded path components. Version is the
@@ -98,9 +100,22 @@ type Policy struct {
 	Credentials []Credential
 }
 
+// ReservedEnvironment names the containerEnv entries this request reserves for
+// itself, beyond the names every request reserves. The manifest engine takes
+// them from its caller, so it imports no policy package.
+func (p Policy) ReservedEnvironment() []string {
+	if p.Home != nil && p.Home.Harness == "codex" {
+		return []string{"CODEX_HOME"}
+	}
+	return nil
+}
+
 // Home requests persistent container-managed storage, never a host path.
 type Home struct {
 	Storage string `json:"storage"`
+	// Harness is the one explicit harness default the person selects, whose only
+	// accepted value is "codex"; empty means none was selected.
+	Harness string `json:"harness,omitempty"`
 	// Harnesses holds the requested harness names in canonical, sorted order.
 	// Only "opencode" is accepted; nil means none were requested.
 	Harnesses []string `json:"harnesses,omitempty"`

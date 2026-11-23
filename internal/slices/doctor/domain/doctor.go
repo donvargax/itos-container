@@ -38,6 +38,6 @@ func InspectManifest(policies port.Policies, manifests port.Manifests) (policy.R
 	if result.Policy == nil || len(result.Issues) != 0 {
 		return result, nil
 	}
-	validated := manifests.Inspect(result.Policy.Manifest)
+	validated := manifests.Inspect(result.Policy.Manifest, result.Policy.ReservedEnvironment()...)
 	return result, &validated
 }

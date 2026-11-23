@@ -13,6 +13,6 @@ type Manifests struct {
 }
 
 // Inspect reads only the policy-selected file and any requested workspace directory.
-func (m Manifests) Inspect(path string) port.Result {
-	return domain.Inspect(path, m.Files, m.Parser, m.References)
+func (m Manifests) Inspect(path string, reserved ...string) port.Result {
+	return domain.Inspect(path, m.Files, m.Parser, m.References, reserved...)
 }

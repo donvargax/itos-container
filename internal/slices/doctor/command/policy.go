@@ -62,6 +62,9 @@ func presentPolicy(u *cli.UI, result port.Result, withJSON bool) int {
 		}
 		if policy.Home != nil {
 			_, _ = fmt.Fprintln(u.Stdout, "home.storage:", policy.Home.Storage)
+			if policy.Home.Harness != "" {
+				_, _ = fmt.Fprintln(u.Stdout, "home.harness:", policy.Home.Harness)
+			}
 			for _, harness := range policy.Home.Harnesses {
 				_, _ = fmt.Fprintln(u.Stdout, "home.harnesses:", harness)
 			}

@@ -28,6 +28,7 @@ func (w *world) homeSteps(sc *godog.ScenarioContext) {
 	w.homeLocalSteps(sc)
 	w.homeOpenCodeSteps(sc)
 	w.homeOpenCodeNativeSteps(sc)
+	w.homeCodexSteps(sc)
 	sc.Step(`^a home policy fixture using version (\d+) and no credential grants$`, func(version int) error {
 		w.home = &homeWorld{version: version}
 		return w.isolatePolicy()

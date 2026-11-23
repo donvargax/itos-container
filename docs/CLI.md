@@ -269,6 +269,18 @@ who chooses the provider and model, which providers are reachable, and that no l
 delivered). Plain `doctor` prints no difference lines; only the review adds
 `/home/harnesses: null -> [...]`.
 
+When a home selects the Codex harness (`home: {storage: volume, harness: codex}`), `doctor --json`
+again gains no field: `approval.effective` carries the home object with
+`harness: {"kind":"codex","seed":"codex-v1","target":"/home/itos/.codex"}`, `approval.differences`
+lists `/home/harness` and `approval.fingerprint` is the new digest. Plain `doctor` and bare
+`approve`'s review print six lines after the home disclosure and before any OpenCode lines: the
+seed and its target, that each run sets `CODEX_HOME` and rewrites only `config.toml`, what the seed
+turns off, that other files under the target are hostile worker data kept for the next run, that
+`CODEX_HOME` is reserved and that no login, network or credential grant is delivered. Only the
+review adds `/home/harness: null -> {...}`. The matching `--fingerprint` shows no review. Until a run
+can seed the home, `run` refuses the selection as `policy.home_harness` (exit 2) before any engine
+connection; see [CONFIG](CONFIG.md#codex-harness-defaults).
+
 An unsandboxed agent on the host can fake a terminal; the offline fingerprint route
 also permits automation. Approval records what was approved, not who. See
 [security.md](security.md).
