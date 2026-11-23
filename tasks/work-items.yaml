@@ -463,8 +463,8 @@ items:
   - id: T-80
     title: The checkout mount is bound to the inode that passed validation
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: slice-19
