@@ -2716,7 +2716,7 @@ items:
     title: Select Codex defaults explicitly and disclose them for approval
     phase: 1
     owner: donvargax
-    status: doing
+    status: todo
     depends_on: [slice-34]
     kind: slice
     why: >
