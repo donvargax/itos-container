@@ -3,7 +3,6 @@ phases:
   1: null
 queue:
   - slice-28
-  - slice-35
   - slice-40
   - slice-31
   - slice-36
@@ -1990,17 +1989,9 @@ items:
     title: Codex starts with isolated state and unwanted startup services disabled
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: [slice-34]
     kind: slice
-    why: >
-      Was p1-harness-codex-home-seeding.
-      Seed the container-owned home with Codex update checks, analytics, plugins and its own sandbox
-      disabled, as the charter requires. Specify initialization and repeat-run behavior without
-      changing literal workload argv or executing checkout code on the host. Keep authentication
-      delivery in slice-32 and follow the charter's dedicated-directory decision rather than that
-      item's stale single-file wording. Prove settings and startup behavior with black-box scenarios
-      and controlled endpoints, without real accounts or credentials. Broken down from null.
   - id: slice-36
     title: Claude starts with isolated state and onboarding already completed
     phase: 1
