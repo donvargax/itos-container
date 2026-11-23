@@ -2324,8 +2324,8 @@ items:
   - id: slice-43
     title: Bind the checkout socket backend to approval
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [T-64]
     kind: slice
     why: >
