@@ -2854,6 +2854,6 @@ items:
     title: Bump go.opentelemetry.io/otel to v1.47.0 for GO-2026-6974
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
