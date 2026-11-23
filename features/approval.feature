@@ -1000,14 +1000,17 @@ Feature: Review and record approval of exact settings
   # such a candidate keeps approve.confirmation-required, whose fix names only the terminal form.
   # The same answer assigned the ten IDs ID-APPROVAL-61 to 70 to this block, in file order.
   #
-  # Ordering: this slice reuses slice-42's shared detection and its doctor.sockets.* rules, so it
-  # is implemented after slice-42 lands. Approval reads the selection from the same readiness
-  # inspection doctor reports, one detection per inspection: T-64's Detector, assembled in cmd for
-  # doctor and approve, never a second detector. Approve's re-inspection after consent detects
-  # again. File-only modes (doctor --policy-only and the like) never detect. A detection that does
-  # not confirm a selection is slice-42's readiness problem, which approve reports before any
-  # review or prompt, as it reports doctor.image.missing; approval adds no rule of its own and
-  # never treats a failure as "neither".
+  # Ordering: this slice reuses slice-42's shared detection and its doctor.sockets.* rules, so
+  # slice-42 is a prerequisite: slice-43 is taken only after slice-42 lands, and its depends_on
+  # must name slice-42 beside T-64 (the coordinator records that through itos). When slice-42's
+  # spec lands, the "doctor.sockets." prefix and the readiness placement below are checked against
+  # it; this slice adopts slice-42's rules as written there. Approval reads the selection from
+  # the same readiness inspection doctor reports, one detection per inspection: T-64's Detector,
+  # assembled in cmd for doctor and approve, never a second detector. Approve's re-inspection
+  # after consent detects again. File-only modes (doctor --policy-only and the like) never
+  # detect. A detection that does not confirm a selection is slice-42's readiness problem, which
+  # approve reports before any review or prompt, as it reports doctor.image.missing; approval
+  # adds no rule of its own and never treats a failure as "neither".
   #
   # Canonical settings v1 gain one member under every profile, offline-v1, allowlist-v1 and their
   # credential and home forms alike; no profile is renamed and schema stays 1:
@@ -1093,6 +1096,8 @@ Feature: Review and record approval of exact settings
   #   JSON" reads the text between "member " and " and doctor" as literal JSON, unquoted since the
   #   rows hold quotes, sets it as the record's checkout_sockets, recomputes the fingerprint,
   #   recaptures the tree and runs doctor --json.
+  # - "its guidance does not name "<text>"" fails when stdout or stderr contains the text, the
+  #   same streams "its guidance names" reads; in JSON mode those hold the problem and its fix.
   # approvalEdit gains "the kernel's Landlock answer to <answer>" (re-pins, as T-66 allows while
   # an invocation runs) and "the runtime inventory to <inventory>"; each acts while the review is
   # shown, and the oracle keeps the reviewed candidate.
@@ -1187,6 +1192,8 @@ Feature: Review and record approval of exact settings
       | matching | --json                |
       | changed  | --json                |
 
+  # Today's confirmation-required fix offers "--fingerprint <value>"; for a candidate with neither
+  # backend it names only the terminal form, as it does for network and credential grants.
   @wip @slice-43 @ID-APPROVAL-65 @local-engine-fixture
   Scenario Outline: Approval of late host sockets reachable without both review terminals names only the terminal route
     Given an approval checkout and isolated host state
@@ -1194,6 +1201,7 @@ Feature: Review and record approval of exact settings
     When approve runs at a terminal in "<mode>" with streams "<streams>"
     Then it reports approval problem "approve.confirmation-required" with exit 1
     And its guidance names "itos container approve" and "terminal"
+    And its guidance does not name "--fingerprint"
     And it never prompts or records approval
     And the approval checkout and host state are unchanged
 
