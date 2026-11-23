@@ -2756,3 +2756,21 @@ items:
       CODEXHOME-10, using the existing shared fixture image only. The spec states that the
       implementer may commit freely in its workspace and that the host makes the landing commits.
       Broken down from slice-35.
+  - id: codex-home-readback-contract
+    title: Incomplete or unverifiable seeding never authorizes a worker start
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [codex-home-seed-every-run, codex-home-unsafe-path-refusal]
+    kind: idea
+    why: >
+      This child owns the classification of readback and publication faults, from the current
+      CODEXHOME-06 and CODEXHOME-07. That covers partial, lost or failed publication; truncated,
+      missing or extra end-of-archive blocks; a wrong name, an extra entry, an oversize stream and
+      timeout precedence; and confirmed wrong seeds as run.isolation-unverified. The round-7 P2
+      belongs here: an otherwise correct archive with both terminator blocks and a nonzero byte
+      afterward must give a delivered readback fault, run.home-unavailable (75), and no start. It is
+      local-only orchestration evidence. It depends on the refusal child because its
+      retained-partial rows (a root-owned partial file is refused) reuse that child's pre-write
+      inspection. The spec states that the implementer may commit freely in its workspace and that
+      the host makes the landing commits. Broken down from slice-35.
