@@ -2552,8 +2552,8 @@ items:
   - id: T-75
     title: docs/ORCHESTRATING.md states the implemented CI and push policy
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
     kind: task
   - id: p2-engine-fixture-bash3-lowercase

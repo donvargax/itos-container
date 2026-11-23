@@ -16,13 +16,15 @@
 - This is one project on `main` and work branches. [cmd/itos-container/main.go](../cmd/itos-container/main.go)
   exposes count, version and completion; [features/README.md](../features/README.md) documents
   the godog runner. The planned `itos container` commands and isolation are unimplemented.
-- [CI](../.github/workflows/ci.yml) has no stack/feature branch filters. T-25 enables
-  [releases](../.github/workflows/release.yml) only when `ci`, `engine` and automatic Linux
-  `platform` all succeed at the pushed `main` SHA. Manual macOS/Windows jobs are not
-  prerequisites; pull requests and manual dispatch never publish. The five archives are
-  distribution targets, not container-host support. Before the first real tag, require
-  the [version/notes dry run](upgrading.md#binary-releases-t-25), then verify the pushed
-  main run and assets. Preserve the helpers' itos-template/itos attribution.
+- Each item reaches `main` through one pull request (itos.yaml's `push`): a draft, which
+  runs no CI job, until the loop marks it ready, then merged once its checks pass and
+  Cursor Bugbot has reviewed it; Codex is still asked, best effort. Docs-only commits
+  outside `features/` go straight to `main`. The loop makes every push.
+- [CI](../.github/workflows/ci.yml) runs on ready pull requests, pushes to `main` and manual
+  dispatch; macOS/Windows jobs run only on dispatch. [Releases](../.github/workflows/release.yml)
+  need `ci`, `engine` and Linux `platform` green at the pushed `main` SHA; pull requests
+  and dispatch never publish. The five archives are distribution targets, not
+  container-host support.
 - Preserve the counting example's standard-library Unicode whitespace and logical lines;
   its additive property uses newline-terminated pieces, not arbitrary concatenation.
   Preserve attribution to donvargax and infrastructure provenance from itos and itos-template

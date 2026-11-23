@@ -9362,8 +9362,83 @@
     wording that suggests an unrestricted push or automatic three-platform runs. Leave the egress
     and credential deferral lines to p1-docs-admit-milestone-two-egress. Stay within the file's
     doc-caps cap. Broken down from p1-refresh-remaining-template-guidance.
-  done_when:
-    - run: grep -qi 'bugbot' docs/ORCHESTRATING.md && grep -qi 'draft' docs/ORCHESTRATING.md && tools/bin/doc-caps
+
+    The problem today. In docs/ORCHESTRATING.md the only text on CI and pushes is the bullet in
+    "## Start of a session" that begins "- [CI](../.github/workflows/ci.yml) has no stack/feature
+    branch filters." and ends "Preserve the helpers' itos-template/itos attribution." It covers
+    releases and the manual macOS/Windows jobs. It says nothing of pull requests, drafts, review
+    or direct pushes, and never names Bugbot. One sentence in it is stale: "Before the first real
+    tag, require the version/notes dry run ...". v0.1.0 was published on 2026-11-08
+    (docs/charter.md:49), and the dry-run procedure stays in docs/upgrading.md.
+
+    The source of each fact, and which wins. The section states what the configuration at the
+    implementer's base sets, read by key and not by line number. The keys are itos.yaml's `push:`
+    block (mode, pr.draft, pr.review_by, pr.reviewers and pr.direct's types and except) and ci.yml's
+    `on:` triggers, each job's `if:` and the release job's `needs`. The facts listed below are
+    what those keys set on main at 305d971: mode pr; draft true; review_by [cursor]; reviewers
+    Codex (kind codex) and cursor (kind bugbot); direct types [docs] except features/**; ci,
+    engine-shard, engine and platform all skip a draft pull request; platform's matrix is
+    ubuntu-latest alone, while platform-macos and platform-windows run only on workflow_dispatch;
+    release needs ci, engine and platform and runs only on a push to main. "Codex is still asked,
+    best effort" is how docs/decisions/STANDING.md:40 reads the fact that Codex is in reviewers but
+    not in review_by. If a key at the implementer's base differs from this list, the configuration
+    wins: write what it sets and report the difference. Never write a fact no key sets. For that
+    reason the section does not say that Codex's review threads must be resolved before merge
+    (T-67's note), since no key in `push:` sets it. T-46 was dropped and changes nothing.
+
+    Who acts. The text names the loop as the one that marks a pull request ready and that makes
+    every push, direct docs commits included (STANDING.md:79). Nothing may suggest that an agent
+    pushes. The merge stays passive ("merged once ..."), because no record here says who performs
+    it. "## Responsibility at handoff" is left as it is.
+
+    The rule. Replace that one bullet, in place under "## Start of a session", with exactly two
+    bullets. Add no heading. Change no other line in the file. The budget is the old bullet's 604
+    bytes plus the 133 bytes left under the 6144-byte cap (the file is 6011 bytes at 305d971), so the
+    two bullets together take at most 737 bytes, newlines included. The first bullet states how
+    work reaches main. The second states CI and releases. The facts are mandatory, in this order:
+    (1) each item reaches main through one pull request, a draft until the loop marks it ready,
+    then merged once its checks pass and Cursor Bugbot has reviewed it; (2) Codex is still asked,
+    best effort; (3) docs-only commits outside features/ go straight to main, and the loop makes
+    every push; (4) CI runs on ready pull requests, pushes to main and manual dispatch; (5) the
+    macOS and Windows jobs run only on dispatch; (6) releases need ci, engine and Linux platform
+    green at the pushed main SHA, and pull requests and dispatch never publish; (7) the five
+    archives are distribution targets, not container-host support. Keep the link to ci.yml. If the
+    budget runs short, drop optional words first, in this order: the link to release.yml, then the
+    clause that a draft runs no CI job (fact 4's "ready" already implies it). The old bullet's other
+    sentences go: "no stack/feature branch filters" (fact 4 lists the triggers), "T-25 enables",
+    the stale first-tag sentence, and the helpers' attribution sentence, which the next bullet
+    already covers ("Preserve attribution to donvargax and infrastructure provenance from itos and
+    itos-template"). This wording was measured at 717 bytes, leaving the file at 6124 bytes. The
+    implementer may reword it, but must keep its facts and stay within the budget:
+      - Each item reaches `main` through one pull request (itos.yaml's `push`): a draft, which
+        runs no CI job, until the loop marks it ready, then merged once its checks pass and
+        Cursor Bugbot has reviewed it; Codex is still asked, best effort. Docs-only commits
+        outside `features/` go straight to `main`. The loop makes every push.
+      - [CI](../.github/workflows/ci.yml) runs on ready pull requests, pushes to `main` and manual
+        dispatch; macOS/Windows jobs run only on dispatch. [Releases](../.github/workflows/release.yml)
+        need `ci`, `engine` and Linux `platform` green at the pushed `main` SHA; pull requests
+        and dispatch never publish. The five archives are distribution targets, not
+        container-host support.
+
+    Bounds. Change docs/ORCHESTRATING.md only. Leave the egress and credential line ("Egress,
+    credentials, network Git ... stay deferred") to p1-docs-admit-milestone-two-egress, and the
+    other stale lines (the unimplemented-commands sentence among them) as they are. Leave
+    tools/bin/doc-caps and its cap unchanged: raising a cap is a decision, not a fix. No workflow,
+    itos.yaml, code or scenario changes. Nothing touches a proof.code path, so there is no mutation
+    proof, and none is fabricated.
+
+    Commits and proof. One docs commit with Item: T-75 carries docs/ORCHESTRATING.md alone. The
+    implementer may commit freely in its workspace. The host makes the landing commits and runs
+    itos, submission, publication and review. The range is prose-only (docs/** and tasks/** are
+    ci.prose.paths), and on such a range CI keeps only a task's static checks and those declaring
+    prose: true, while itos work done runs no late check. So the check declares prose: true. It
+    uses only POSIX sh and grep, as on ubuntu-latest.
+
+    How the check fails today. Its first grep exits 1, because docs/ORCHESTRATING.md never says
+    Bugbot. Its second grep already matches today, through "drafter", so it adds nothing before
+    the work. doc-caps passes today at 6011 bytes, and fails if the new bullets push the file past
+    6144 bytes. The check cannot tell whether the facts are right or whether the old bullet went.
+    Review of the diff against this entry and the configuration's keys judges that.
 - id: T-76
   type: docs
   title: Decision 0032 settles lock binding, credential-set aliases, version-4 home and delivery forms, the session record and metadata fixtures
