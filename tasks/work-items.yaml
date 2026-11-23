@@ -2738,14 +2738,15 @@ items:
       claim that runtime startup traffic is absent, which the native startup child owns. The spec
       states that the implementer may commit freely in its workspace and that the host makes the
       landing commits. Broken down from slice-35.
-  - id: codex-home-unsafe-path-refusal
+  - id: slice-56
     title: Refuse unsafe retained Codex seed paths before any write or start
     phase: 1
     owner: null
     status: todo
     depends_on: [slice-55]
-    kind: idea
+    kind: slice
     why: >
+      Was codex-home-unsafe-path-refusal.
       This child owns pre-write path safety and round 7's first P1. Docker's archive GET and HEAD
       call Stat, which uses Lstat for the mode but then follows the link chain to fill LinkTarget. A
       self-referential link can therefore fail before the controller sees a mode. The spec must
@@ -2763,7 +2764,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [slice-55, codex-home-unsafe-path-refusal]
+    depends_on: [slice-55, slice-56]
     kind: idea
     why: >
       This child owns the classification of readback and publication faults, from the current
