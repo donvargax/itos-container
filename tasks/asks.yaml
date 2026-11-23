@@ -353,6 +353,7 @@ questions:
   - id: q-88
     item: "slice-42"
     question: "slice-42: the drafter (attempt 24) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-42-drafter-24.result.json"
+    answer: "Option a. Five scenario IDs were claimed outside the sandbox on 2026-11-22 with itos tests next-id scenario ID-SOCKETS --count 5: @ID-SOCKETS-04, @ID-SOCKETS-05, @ID-SOCKETS-06, @ID-SOCKETS-07 and @ID-SOCKETS-08. Put one after @slice-42 on each of the five @wip @slice-42 tag lines, in file order."
   - id: q-89
     item: "slice-43"
     question: "slice-43: the drafter (attempt 1) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-43-drafter-1.result.json"
