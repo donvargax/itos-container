@@ -207,6 +207,21 @@ func harnessLines(effective any) []string {
 	return lines
 }
 
+// codexLines state what the approved Codex default binds, from the validated
+// candidate: the seed and where it lands, what it sets, what it leaves to the
+// worker, the reserved name and what it does not deliver.
+func codexLines(codex map[string]any) []string {
+	seed, target := terminalText(fmt.Sprint(codex["seed"])), terminalText(fmt.Sprint(codex["target"]))
+	return []string{
+		fmt.Sprintf("Codex harness: seed %s at %s.", seed, target),
+		fmt.Sprintf("Each run sets CODEX_HOME=%s and rewrites only config.toml there from the fixed %s seed.", target, seed),
+		"The seed turns off Codex update checks, analytics and plugins, and Codex's own sandbox; this container is the sandbox.",
+		fmt.Sprintf("Codex sessions, history and other files under %s are hostile worker data kept for the next run; run does not read, reset or remove them.", target),
+		"CODEX_HOME is reserved: the manifest's containerEnv cannot set it.",
+		"No Codex login is delivered by this setting. The seed is no network or credential grant.",
+	}
+}
+
 func networkMode(s map[string]any) any {
 	p, _ := s["policy"].(map[string]any)
 	n, _ := p["network"].(map[string]any)
@@ -224,3 +239,7 @@ func (u UI) networkDisclosure(effective any) {
 	_, _ = fmt.Fprintln(u.Out, "Clients that omit SNI or send ECH, and SSH over 443, are refused.")
 	_, _ = fmt.Fprintln(u.Out, "The proxy logs each refusal, but a stored log is no proof that every refusal was kept: a log that ends early reads as a complete one.")
 }
+
+var (
+	_ = codexLines
+)

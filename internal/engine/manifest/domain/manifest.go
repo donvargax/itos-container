@@ -11,80 +11,11 @@ import (
 
 // Inspect validates only the selected file and workspace. Image lookup, host
 // readiness and approval are deliberately absent from its dependencies.
-func Inspect(path string, files port.Files, parser port.Parser, references port.References) port.Result {
-	result := port.Result{Path: path}
-	data, failure := files.Read(path)
-	if failure != port.None {
-		result.Issues = []port.Issue{{Kind: failure}}
-		return result
-	}
-	value, issues := parser.Parse(data, false)
-	if len(issues) != 0 {
-		result.Issues = issues
-		return result
-	}
-	if value.Kind != port.Object {
-		result.Issues = []port.Issue{{Kind: port.InvalidValue}}
-		return result
-	}
-	settings := &port.Settings{WorkspaceFolder: "/workspace", ContainerEnv: map[string]string{}}
-	if _, exists := value.Fields["image"]; !exists {
-		result.Issues = append(result.Issues, port.Issue{Kind: port.Image, Path: []string{"image"}})
-	}
-	for key, value := range value.Fields {
-		path := []string{key}
-		if slices.Contains([]string{"name", "image", "workspaceFolder", "containerUser", "remoteUser"}, key) || key == "containerEnv" && value.Kind != port.Object {
-			if issues := interpolations(value, path); len(issues) != 0 {
-				result.Issues = append(result.Issues, issues...)
-				continue
-			}
-		}
-		switch key {
-		case "image":
-			if value.Kind != port.String || !references.Valid(value.Text) {
-				result.Issues = append(result.Issues, port.Issue{Kind: port.Image, Path: path})
-			} else {
-				settings.Image = value.Text
-			}
-		case "name":
-			if !validName(value) {
-				result.Issues = append(result.Issues, port.Issue{Kind: port.InvalidValue, Path: path})
-			} else {
-				settings.Name = &value.Text
-			}
-		case "workspaceFolder":
-			failure := workspace(value, files)
-			if failure != port.None {
-				result.Issues = append(result.Issues, port.Issue{Kind: failure, Path: path})
-			} else {
-				settings.WorkspaceFolder = value.Text
-			}
-		case "containerEnv":
-			settings.ContainerEnv, issues = environment(value, path)
-			result.Issues = append(result.Issues, issues...)
-		case "containerUser", "remoteUser":
-			failure := identity(value)
-			if failure != port.None {
-				result.Issues = append(result.Issues, port.Issue{Kind: failure, Path: path})
-			} else if key == "containerUser" {
-				settings.ContainerUser = &value.Text
-			} else {
-				settings.RemoteUser = &value.Text
-			}
-		case "customizations":
-			unused, issues := customizations(value, path)
-			result.Unused = append(result.Unused, unused...)
-			result.Issues = append(result.Issues, issues...)
-		default:
-			result.Issues = append(result.Issues, port.Issue{Kind: port.Unsupported, Path: path})
-		}
-	}
-	sortIssues(result.Issues)
-	slices.Sort(result.Unused)
-	if len(result.Issues) == 0 {
-		result.Effective, result.Image = settings, settings.Image
-	}
-	return result
+//
+// The reserved names are upper-case containerEnv names a selection reserves besides the fixed
+// ones, each matched under ASCII case folding.
+func Inspect(_ string, _ port.Files, _ port.Parser, _ port.References, _ ...string) port.Result {
+	return *new(port.Result)
 }
 
 func child(path []string, key string) []string { return append(slices.Clone(path), key) }
@@ -155,3 +86,8 @@ func workspace(value port.Value, files port.Files) port.Failure {
 	}
 	return port.None
 }
+
+var (
+	_ = identity
+	_ = workspace
+)

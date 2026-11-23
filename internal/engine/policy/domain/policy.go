@@ -111,6 +111,25 @@ func inspectHome(value port.Value, version int) (*port.Home, []port.Issue) {
 	return &port.Home{Storage: "volume", Harnesses: harnesses}, nil
 }
 
+// inspectHarness reads the optional home.harness string, whose only accepted
+// value is "codex". It is separate from the home.harnesses list.
+func inspectHarness(home port.Value, version int) (string, []port.Issue) {
+	harness, exists := home.Fields["harness"]
+	if !exists {
+		return "", nil
+	}
+	issue := func(kind port.Failure) []port.Issue {
+		return []port.Issue{{Kind: kind, Path: []string{"home", "harness"}, Version: version}}
+	}
+	switch {
+	case harness.Kind != port.String:
+		return "", issue(port.Type)
+	case harness.Text != "codex":
+		return "", issue(port.HomeHarness)
+	}
+	return harness.Text, nil
+}
+
 // inspectHarnesses reads the optional home.harnesses list: a non-empty list of
 // unique names, of which only "opencode" is accepted. A missing member requests
 // none. With one accepted name the list order is already the canonical sorted order.
@@ -203,3 +222,7 @@ func validPath(path string) bool {
 	}
 	return true
 }
+
+var (
+	_ = inspectHarness
+)

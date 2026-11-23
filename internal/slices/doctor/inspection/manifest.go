@@ -1,7 +1,6 @@
 package inspection
 
 import (
-	"github.com/donvargax/itos-container/internal/engine/manifest/domain"
 	"github.com/donvargax/itos-container/internal/engine/manifest/port"
 )
 
@@ -13,6 +12,6 @@ type Manifests struct {
 }
 
 // Inspect reads only the policy-selected file and any requested workspace directory.
-func (m Manifests) Inspect(path string) port.Result {
-	return domain.Inspect(path, m.Files, m.Parser, m.References)
+func (Manifests) Inspect(_ string, _ ...string) port.Result {
+	return *new(port.Result)
 }

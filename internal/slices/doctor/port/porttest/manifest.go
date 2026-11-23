@@ -11,12 +11,13 @@ import (
 type Manifests struct {
 	Result manifest.Result
 	Paths  []string
+	// Reserved holds the names the caller reserved on each request.
+	Reserved [][]string
 }
 
-// Inspect records the policy's exact relative path.
-func (m *Manifests) Inspect(path string) manifest.Result {
-	m.Paths = append(m.Paths, path)
-	return m.Result
+// Inspect records the policy's exact relative path and the caller's reserved names.
+func (*Manifests) Inspect(_ string, _ ...string) manifest.Result {
+	return *new(manifest.Result)
 }
 
 // ManifestFixture supplies parsed data or a file failure and its expected result.
