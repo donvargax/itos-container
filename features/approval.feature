@@ -982,6 +982,309 @@ Feature: Review and record approval of exact settings
       | an allowlist of 2037 generated host names  |
       | an allowlist of one host name of 253 bytes |
 
+  # Slice-43: approval binds the checkout socket backend the host offers (charter, second
+  # milestone, step 5: "Doctor names the backend a run will use, and the approval binds it";
+  # with neither backend, run only on an approval that records "late host sockets reachable",
+  # shown at approval). T-64 built the detector (internal/engine/checkoutsockets) and T-66 the
+  # harness fixture that pins the kernel's Landlock answer and the fixture daemon's runtime
+  # inventory. Slice-42 owns doctor's own report of the backend (its checkout_sockets member, its
+  # plain backend line and the doctor.sockets.* rules with their exits); slice-44 owns run's
+  # comparison and the session record; slice-45 status; slice-46 and slice-47 enforcement.
+  # The implementer may commit freely in its own workspace; the host makes the landing commits.
+  #
+  # Settled by the person in q-89 (2026-11-22), not to be re-decided: when the host offers no
+  # checkout socket backend, only the person at a real terminal may consent to "late host sockets
+  # reachable". Every --fingerprint approval of such a candidate is refused with
+  # approve.terminal-required, exactly as for network and credential grants, and that refusal
+  # precedes the fingerprint format and mismatch checks. Bare non-terminal or JSON approval of
+  # such a candidate keeps approve.confirmation-required, whose fix names only the terminal form.
+  # The same answer assigned the ten IDs ID-APPROVAL-61 to 70 to this block, in file order.
+  #
+  # Ordering: this slice reuses slice-42's shared detection and its doctor.sockets.* rules, so it
+  # is implemented after slice-42 lands. Approval reads the selection from the same readiness
+  # inspection doctor reports, one detection per inspection: T-64's Detector, assembled in cmd for
+  # doctor and approve, never a second detector. Approve's re-inspection after consent detects
+  # again. File-only modes (doctor --policy-only and the like) never detect. A detection that does
+  # not confirm a selection is slice-42's readiness problem, which approve reports before any
+  # review or prompt, as it reports doctor.image.missing; approval adds no rule of its own and
+  # never treats a failure as "neither".
+  #
+  # Canonical settings v1 gain one member under every profile, offline-v1, allowlist-v1 and their
+  # credential and home forms alike; no profile is renamed and schema stays 1:
+  #   checkout_sockets:{backend:"landlock"}
+  #   checkout_sockets:{backend:"gvisor"}
+  #   checkout_sockets:{backend:"neither",late_host_sockets:"reachable"}
+  # one per confirmed Selection (port.Landlock, port.GVisor, port.Neither). The neither form
+  # records the charter's words literally, so slice-44 and slice-45 read them from the record.
+  # Every candidate this binary forms carries the member. A stored record is valid with one of
+  # those three values or with no member at all, the last being an approval recorded before this
+  # slice; anything else, including an empty object, another backend, any other spelling, a
+  # late_host_sockets member beside landlock or gvisor, neither without it, or another member,
+  # is approval.state.invalid (valid() in internal/engine/approval/canonical/json.go). A record
+  # without the member never matches a candidate: it reads as changed, never as invalid, so the
+  # person reviews the binding once. An older binary refuses a record with the member as
+  # approval.state.invalid, which fails closed; downgrade stays with
+  # p2-control-state-upgrade-contract. The differences walk compares /checkout_sockets as one
+  # value, as it does containerEnv: any change is one difference at /checkout_sockets holding the
+  # whole old and new objects, null where a side has none.
+  #
+  # Run in this slice does not observe the selection: its local and post-inspection candidates take
+  # /checkout_sockets from the active record as it stands, absence included, before the exact
+  # comparisons. So the member neither admits nor refuses a run, run's diagnostics never name it,
+  # and the session snapshot freezes the approved value. Slice-44 replaces this with the host's
+  # current selection and its own refusal. Nothing here mounts an init or selects runsc.
+  #
+  # RequiresTerminal also holds for a candidate whose selection is Neither. approve.terminal-required
+  # then says "Network or credential grants, and late host sockets reachable, require the person at
+  # a terminal", with today's fix. Matching terminal approval still neither prompts nor rewrites.
+  #
+  # Bare approve's review prints these lines after the profile, network, credential and home
+  # disclosures and before the unused fields, the differences and the y/N prompt. Plain approve
+  # status prints the same lines after its grant lines and before "Review with itos container
+  # approve", so an unchanged approval says them too. JSON gains nothing: effective already
+  # carries the member. Only the candidate's value is read, never the record's.
+  #   landlock:
+  #     Checkout socket backend: landlock
+  #     This approval binds Landlock ABI 9 or later as the mechanism that is to keep host Unix sockets created in the checkout after startup away from the worker.
+  #     Run does not enforce it yet: until it does, the startup scan is the only protection, and a host Unix socket created or swapped into the checkout after startup stays reachable.
+  #   gvisor: the same three lines, with "gvisor" and "gVisor, the daemon's runsc runtime with
+  #     host-uds none," in place of "landlock" and "Landlock ABI 9 or later".
+  #   neither:
+  #     Checkout socket backend: neither
+  #     late host sockets reachable: this host offers neither Landlock ABI 9 or later nor gVisor.
+  #     The startup scan refuses host Unix sockets already in the checkout, but a host Unix socket created or swapped into the checkout after startup stays reachable from the worker.
+  #     Approving records late host sockets reachable, and only the person at a terminal can give that consent.
+  # The third landlock and gvisor line is an honest interim: slice-46 and slice-47 each remove it
+  # for their backend once run enforces it with runtime evidence. The words are ASCII and the
+  # value is a validated constant, so they need no escaping.
+  #
+  # docs/CLI.md (approve), docs/CONFIG.md (the record's member and its validity), docs/security.md
+  # (what approval binds, terminal-only consent to the weaker mode, no enforcement yet) and arc42's
+  # checkoutsockets row ("bound to doctor by slice-42 and to approval by slice-43") say the same.
+  # The implementing commit also adds unit tests for what no scenario here sees: canonical's
+  # valid() and candidate rows for each selection, the one-value difference, run's adoption of the
+  # record's member, presentation_test.go's lines for each backend, and the approve domain's
+  # terminal-required before format and mismatch for a Neither candidate.
+  #
+  # Harness. The oracle (approvalOracle) adds checkout_sockets from the selection the world's host
+  # offers, computed by T-64's rules from fixture inputs alone, never from product output: the
+  # kernel answer the world pins, else the harness's own version query; then, below ABI 9 or on
+  # ENOSYS or EOPNOTSUPP, the world's runtime inventory (the fixture daemon's chosen one, or on the
+  # real engine what the harness's own GET /info reports). Any other answer is a fixture error
+  # naming the host. "an approval checkout and isolated host state" pins nothing and chooses
+  # "runc and runsc" on every fixture daemon its world starts, replacement daemons included, so
+  # existing approval scenarios see Landlock on an ABI 9 host and gVisor below it, and their
+  # fingerprint approvals keep working. Approve's terminal routes and the streams route adopt
+  # T-66's wrapper here; runEnv already has it. New steps, each only fixture setup or a reading
+  # of actual output or records:
+  # - "the approval host (then )offers checkout sockets through kernel answer "<answer>" and
+  #   runtime inventory "<inventory>"" pins the answer and chooses the inventory with T-66's
+  #   helpers, recomputes the oracle and recaptures the tree.
+  # - "a seeded matching approval at generation "<g>" that bound checkout sockets "<binding>""
+  #   seeds the oracle's settings with that binding: landlock, gvisor, neither (with
+  #   late_host_sockets reachable) or nothing (no member), its fingerprint recomputed.
+  # - "its approval effective settings bind checkout sockets "<binding>"" reads the last JSON's
+  #   approval.effective.checkout_sockets against that same mapping.
+  # - "it reports a checkout socket prerequisite problem without showing a review or prompting"
+  #   reads the terminal transcript and error output: no y/N prompt, no "Effective" or "Checkout
+  #   socket backend:" line, no "late host sockets reachable", exactly one problem whose rule
+  #   begins "doctor.sockets.", and a nonzero exit.
+  # - "the fixture gives the active approval the checkout socket member <member> and doctor runs as
+  #   JSON" reads the text between "member " and " and doctor" as literal JSON, unquoted since the
+  #   rows hold quotes, sets it as the record's checkout_sockets, recomputes the fingerprint,
+  #   recaptures the tree and runs doctor --json.
+  # approvalEdit gains "the kernel's Landlock answer to <answer>" (re-pins, as T-66 allows while
+  # an invocation runs) and "the runtime inventory to <inventory>"; each acts while the review is
+  # shown, and the oracle keeps the reviewed candidate.
+  # Red first: today no command detects, so every candidate lacks the member the oracle carries,
+  # and every record holding it is refused as an unknown member, approval.state.invalid.
+
+  @wip @slice-43 @ID-APPROVAL-61 @local-engine-fixture
+  Scenario Outline: Doctor's approval candidate binds the checkout socket backend the host offers
+    Given an approval checkout and isolated host state
+    And the approval host offers checkout sockets through kernel answer "<answer>" and runtime inventory "<inventory>"
+    When itos-container runs with "doctor --json"
+    Then doctor reports the independently calculated fingerprint and complete effective settings
+    And its approval effective settings bind checkout sockets "<binding>"
+    And doctor reports approval "missing" and names "itos container approve"
+    And it exits with code 0
+    And the approval checkout and host state are unchanged
+
+    # Landlock settles detection even where runsc is registered; the last rows confirm absence.
+    Examples:
+      | answer     | inventory      | binding  |
+      | ABI 9      | runc only      | landlock |
+      | ABI 12     | runc and runsc | landlock |
+      | ABI 8      | runc and runsc | gvisor   |
+      | ENOSYS     | runc and runsc | gvisor   |
+      | ABI 8      | runc only      | neither  |
+      | EOPNOTSUPP | runc only      | neither  |
+
+  @wip @slice-43 @ID-APPROVAL-62 @local-engine-fixture
+  Scenario Outline: Review names the bound checkout socket backend before a yes records it
+    Given an approval checkout and isolated host state
+    And the approval host offers checkout sockets through kernel answer "<answer>" and runtime inventory "<inventory>"
+    When bare approve runs at a terminal and receives "y" after the review
+    Then the transcript shows all effective settings and offline restrictions before exactly one y/N prompt
+    And the review before its prompt says, in this order:
+      | text |
+      | Checkout socket backend: <backend> |
+      | This approval binds <mechanism> as the mechanism that is to keep host Unix sockets created in the checkout after startup away from the worker. |
+      | Run does not enforce it yet: until it does, the startup scan is the only protection, and a host Unix socket created or swapped into the checkout after startup stays reachable. |
+    And the review before its prompt does not say "late host sockets reachable"
+    And it exits with code 0
+    And the sole active approval is the exact candidate at generation "1" in protected host state
+    And the checkout is unchanged and only approval state was written
+    And no engine mutation or image acquisition was attempted
+
+    Examples:
+      | answer | inventory      | backend  | mechanism                                                |
+      | ABI 9  | runc only      | landlock | Landlock ABI 9 or later                                  |
+      | ABI 8  | runc and runsc | gvisor   | gVisor, the daemon's runsc runtime with host-uds none,   |
+
+  # The status that follows the yes on the same terminal repeats the disclosure, so the second
+  # table reads past the prompt.
+  @wip @slice-43 @ID-APPROVAL-63 @local-engine-fixture
+  Scenario: With neither backend, the review asks consent to late host sockets reachable and a yes records it
+    Given an approval checkout and isolated host state
+    And the approval host offers checkout sockets through kernel answer "ENOSYS" and runtime inventory "runc only"
+    When bare approve runs at a terminal and receives "y" after the review
+    Then the transcript shows all effective settings and offline restrictions before exactly one y/N prompt
+    And the review before its prompt says, in this order:
+      | text |
+      | Checkout socket backend: neither |
+      | late host sockets reachable: this host offers neither Landlock ABI 9 or later nor gVisor. |
+      | The startup scan refuses host Unix sockets already in the checkout, but a host Unix socket created or swapped into the checkout after startup stays reachable from the worker. |
+      | Approving records late host sockets reachable, and only the person at a terminal can give that consent. |
+    And its standard output says, in this order:
+      | text |
+      | Approve these settings? y/N: |
+      | approval matching |
+      | Checkout socket backend: neither |
+      | late host sockets reachable: this host offers neither Landlock ABI 9 or later nor gVisor. |
+    And it exits with code 0
+    And the sole active approval is the exact candidate at generation "1" in protected host state
+    And the checkout is unchanged and only approval state was written
+
+  # q-89: no fingerprint route consents to the weaker mode, whatever the approval state.
+  @wip @slice-43 @ID-APPROVAL-64 @local-engine-fixture
+  Scenario Outline: No fingerprint can consent to late host sockets reachable
+    Given an approval checkout and isolated host state
+    And the approval host offers checkout sockets through kernel answer "ENOSYS" and runtime inventory "runc only"
+    And approval state is "<state>"
+    When approve runs without a terminal with the independently calculated exact fingerprint and "<mode>"
+    Then it reports approval problem "approve.terminal-required" with exit 1
+    And its guidance names "itos container approve" and "terminal"
+    And it never prompts or records approval
+    And the approval checkout and host state are unchanged
+    And no engine mutation or image acquisition was attempted
+
+    Examples:
+      | state    | mode                  |
+      | missing  | plain                 |
+      | missing  | --json                |
+      | missing  | inherited ITOS_JSON=1 |
+      | matching | --json                |
+      | changed  | --json                |
+
+  @wip @slice-43 @ID-APPROVAL-65 @local-engine-fixture
+  Scenario Outline: Approval of late host sockets reachable without both review terminals names only the terminal route
+    Given an approval checkout and isolated host state
+    And the approval host offers checkout sockets through kernel answer "ABI 8" and runtime inventory "runc only"
+    When approve runs at a terminal in "<mode>" with streams "<streams>"
+    Then it reports approval problem "approve.confirmation-required" with exit 1
+    And its guidance names "itos container approve" and "terminal"
+    And it never prompts or records approval
+    And the approval checkout and host state are unchanged
+
+    Examples:
+      | mode                  | streams                           |
+      | plain                 | redirected stdin and stdout       |
+      | plain                 | terminal stdin, redirected stdout |
+      | --json                | terminal stdin and stdout         |
+      | inherited ITOS_JSON=1 | terminal stdin and stdout         |
+
+  # The host can lose or gain a backend while the person reads. The fresh inspection after the
+  # yes detects again; a selection that changed, or a detection that now fails, publishes nothing.
+  @wip @slice-43 @ID-APPROVAL-66 @local-engine-fixture
+  Scenario Outline: Consent cannot approve a checkout socket selection that changed while the review was visible
+    Given an approval checkout and isolated host state
+    And the approval host offers checkout sockets through kernel answer "<answer>" and runtime inventory "<inventory>"
+    When terminal approve shows its review, the fixture changes "<change>", and then answers yes
+    Then it reports terminal approval refusal "approve.changed" with exit 1
+    And no approval record or frozen input is produced
+    And the approval checkout and host state are unchanged
+
+    Examples:
+      | answer | inventory      | change                                                                    |
+      | ABI 9  | runc and runsc | the kernel's Landlock answer to ABI 8                                     |
+      | ABI 9  | runc only      | the kernel's Landlock answer to ENOSYS                                    |
+      | ABI 8  | runc and runsc | the runtime inventory to runc only                                        |
+      | ABI 8  | runc only      | the kernel's Landlock answer to ABI 9                                     |
+      | ABI 9  | runc only      | the kernel's Landlock answer to EPERM                                     |
+
+  # "nothing" is an approval recorded before this slice. Its last row is the older approval that
+  # slice-44's run comparison builds on.
+  @wip @slice-43 @ID-APPROVAL-67 @local-engine-fixture
+  Scenario Outline: A changed checkout socket selection, or an approval that bound none, needs a new approval
+    Given an approval checkout and isolated host state
+    And a seeded matching approval at generation "1" that bound checkout sockets "<prior>"
+    And the approval host then offers checkout sockets through kernel answer "<answer>" and runtime inventory "<inventory>"
+    When itos-container runs with "doctor --json"
+    Then doctor reports the independently calculated fingerprint and complete effective settings
+    And doctor reports approval "changed" and names "itos container approve"
+    And its approval differences are exactly "/checkout_sockets" with the prior and current values
+    And it exits with code 0
+    And the active approval bytes and generation are unchanged
+
+    Examples:
+      | prior    | answer | inventory      |
+      | landlock | ABI 8  | runc and runsc |
+      | landlock | ENOSYS | runc only      |
+      | gvisor   | ABI 9  | runc only      |
+      | neither  | ABI 8  | runc and runsc |
+      | nothing  | ABI 9  | runc only      |
+      | nothing  | ENOSYS | runc only      |
+
+  @wip @slice-43 @ID-APPROVAL-68 @local-engine-fixture
+  Scenario Outline: Re-approval reviews the old and new checkout socket binding before replacing the active record
+    Given an approval checkout and isolated host state
+    And a seeded matching approval at generation "7" that bound checkout sockets "<prior>"
+    And the approval host then offers checkout sockets through kernel answer "<answer>" and runtime inventory "<inventory>"
+    When bare approve runs at a terminal and receives " YES " after the review
+    Then the transcript shows differences "/checkout_sockets" with old and new values before exactly one y/N prompt
+    And the review before its prompt says, in this order:
+      | text |
+      | Checkout socket backend: <current> |
+    And the sole active approval is the exact candidate at generation "8" in protected host state
+    And it exits with code 0
+
+    Examples:
+      | prior    | answer | inventory      | current  |
+      | landlock | ENOSYS | runc only      | neither  |
+      | gvisor   | ABI 9  | runc only      | landlock |
+      | nothing  | ABI 8  | runc and runsc | gvisor   |
+
+  # A failed detection carries no backend (T-64), so it can neither be shown as one nor become
+  # consent to the weaker mode. Each row would read as neither or gvisor if a failure were taken
+  # for an answer: the first stops even with runsc registered.
+  @wip @slice-43 @ID-APPROVAL-69 @local-engine-fixture
+  Scenario Outline: A checkout socket detection that fails never reaches review or consent
+    Given an approval checkout and isolated host state
+    And the approval host offers checkout sockets through kernel answer "<answer>" and runtime inventory "<inventory>"
+    When bare approve runs at a terminal and receives "y" after the review
+    Then it reports a checkout socket prerequisite problem without showing a review or prompting
+    And no approval record or frozen input is produced
+    And the approval checkout and host state are unchanged
+
+    Examples:
+      | answer     | inventory                     |
+      | EPERM      | runc and runsc                |
+      | ABI 0      | runc and runsc                |
+      | ABI 8      | unidentified runsc            |
+      | ENOSYS     | runsc permitting host sockets |
+      | EOPNOTSUPP | missing inventory             |
+
   # Protected storage, project separation and supersession.
   @slice-4 @ID-APPROVAL-16 @local-engine-fixture
   Scenario Outline: A different checkout cannot borrow another project's approval
@@ -1068,6 +1371,32 @@ Feature: Review and record approval of exact settings
       | an allowlist under offline-v1           |
       | a proxy image under offline-v1          |
       | an unknown network profile              |
+
+  # Slice-43's record rules (the block above ID-APPROVAL-61). Each defect keeps the record
+  # self-consistent, its fingerprint recomputed, so only valid() can catch it. The first inspection
+  # reads a record this binary would write, and fails today, when the member itself is unknown.
+  @wip @slice-43 @ID-APPROVAL-70 @local-engine-fixture
+  Scenario Outline: A self-consistent record with a checkout socket binding no approval writes fails closed
+    Given an approval checkout and isolated host state
+    And the approval host offers checkout sockets through kernel answer "ENOSYS" and runtime inventory "runc only"
+    And a seeded matching approval at generation "1"
+    When itos-container runs with "doctor --json"
+    Then its approval status is "matching"
+    When the fixture gives the active approval the checkout socket member <member> and doctor runs as JSON
+    Then it reports approval problem "approval.state.invalid" with exit 1
+    And the active approval bytes and generation are unchanged
+
+    Examples:
+      | member                                                    |
+      | {"backend":"seccomp"}                                     |
+      | {"backend":"Landlock"}                                    |
+      | {"backend":"neither"}                                     |
+      | {"backend":"neither","late_host_sockets":"unreachable"}   |
+      | {"backend":"landlock","late_host_sockets":"reachable"}    |
+      | {"backend":"gvisor","late_host_sockets":"reachable"}      |
+      | {"backend":"landlock","abi":"9"}                          |
+      | {}                                                        |
+      | "landlock"                                                |
 
   @slice-4 @ID-APPROVAL-19 @local-engine-fixture
   Scenario Outline: Approval storage refuses unsafe paths without repairing or following them
