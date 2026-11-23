@@ -18,5 +18,8 @@ type Sockets struct {
 
 // Detect supplies the configured selection rather than observing a host.
 func (s *Sockets) Detect(ctx context.Context, checkout string) sockets.Selection {
-	return sockets.Selection{}
+	s.Checkouts = append(s.Checkouts, checkout)
+	s.Ended = append(s.Ended, ctx.Err() != nil)
+	_, s.Deadline = ctx.Deadline()
+	return s.Selection
 }

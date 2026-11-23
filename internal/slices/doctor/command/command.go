@@ -27,17 +27,58 @@ type CLI struct {
 
 // Help documents the implemented inspection scope and machine contract.
 func (CLI) Help() string {
-	return ""
+	return "\nUse --policy-only to validate itos-container.yaml in the effective working directory.\n" +
+		"Use --manifest-only to validate the selected manifest and checkout workspace.\n" +
+		"Image metadata, host readiness and approval were not checked by these modes.\n\n" +
+		"    --credentials-only inspects metadata without reading credential contents.\n" +
+		"    This does not approve; manifest, engine and approval are not checked.\n\n" +
+		"    Ordinary doctor inspects the checkout, local engine and exact cached image.\n" +
+		"    --json prints schema 1, ok, problems, effective data and inspection facts.\n" +
+		"    File-only modes identify their scope as policy or manifest.\n" +
+		"    Ordinary inspection reports the fingerprint and current approval status; runtime isolation remains unproven.\n" +
+		"    It also names the checkout socket backend the host offers (landlock, gvisor or neither);\n" +
+		"    naming a backend is not enforcement.\n" +
+		"    Exit codes:\n" +
+		"      0  policy validation succeeded; other requested inspections also succeeded\n" +
+		"      1  unsupported or changed checkout, host, engine or image, or control state that is\n" +
+		"         unsafe, invalid or exposed to a worker checkout; unsafe credential source metadata or location;\n" +
+		"         a runsc runtime that cannot be identified as gVisor keeping host sockets unreachable\n" +
+		"      2  invalid policy or command line, or invalid selected manifest, or a state location that\n" +
+		"         is relative or not valid UTF-8 (approval.state.location)\n" +
+		"      3  policy cannot be read, or another required local resource is unavailable,\n" +
+		"         including the account home or retained control state;\n" +
+		"         missing credential source or unavailable credential evidence\n" +
+		"      75 engine inspection failed or exceeded five seconds, backend detection included (the\n" +
+		"         kernel's Landlock ABI or the engine's runtime inventory could not be read), or the control-state lock\n" +
+		"         was still held after ten seconds (approval.state.busy; retry the same command)\n"
 }
 
 // Run reports the domain's inspection result through the UI.
 func (c CLI) Run(ui *cli.UI) int {
-	return 0
+	if c.PolicyOnly && c.ManifestOnly || c.CredentialsOnly && (c.PolicyOnly || c.ManifestOnly) {
+		return ui.Usage("doctor", fmt.Errorf("--manifest-only, --policy-only and --credentials-only cannot be combined"), c.JSON)
+	}
+	if c.PolicyOnly {
+		return presentPolicy(ui, domain.Inspect(c.Policies), c.JSON)
+	}
+	if c.CredentialsOnly {
+		policy, result := domain.InspectCredentials(c.RootPolicies, c.Credentials)
+		if result == nil {
+			return presentPolicy(ui, policy, c.JSON)
+		}
+		return presentCredentials(ui, requestedCredentials(policy), *result, c.JSON)
+	}
+	if !c.ManifestOnly {
+		if c.Approval != nil {
+			view := c.Approval.Inspect()
+			return presentApprovalReadiness(ui, view, c.Presentation, c.JSON, c.detectSockets(view.Inspection))
+		}
+		result := domain.InspectReadiness(c.Readiness)
+		return presentReadiness(ui, result, c.JSON, c.detectSockets(result))
+	}
+	policy, manifest := domain.InspectManifest(c.Policies, c.Manifests)
+	if manifest == nil {
+		return presentPolicy(ui, policy, c.JSON)
+	}
+	return PresentManifest(ui, *manifest, c.JSON)
 }
-
-// Blank references keep the declarations used while the bodies are stubs.
-var (
-	_ = fmt.Errorf
-	_ = domain.Inspect
-	_ = requestedCredentials
-)

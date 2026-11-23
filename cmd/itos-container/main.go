@@ -34,6 +34,9 @@ import (
 	approvalhost "github.com/donvargax/itos-container/internal/engine/approval/host"
 	approvalport "github.com/donvargax/itos-container/internal/engine/approval/port"
 	approvalpresentation "github.com/donvargax/itos-container/internal/engine/approval/presentation"
+	socketsdocker "github.com/donvargax/itos-container/internal/engine/checkoutsockets/docker"
+	socketsnative "github.com/donvargax/itos-container/internal/engine/checkoutsockets/native"
+	socketsport "github.com/donvargax/itos-container/internal/engine/checkoutsockets/port"
 	egresstcp "github.com/donvargax/itos-container/internal/engine/egress/tcp"
 	manifestdisk "github.com/donvargax/itos-container/internal/engine/manifest/disk"
 	"github.com/donvargax/itos-container/internal/engine/manifest/jsonc"
@@ -149,6 +152,7 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 		service, presentation := approvalServices(command, in, stdout, stderr)
 		c.Doctor.Readiness = service.Readiness
 		c.Doctor.Approval = service
+		c.Doctor.Sockets = doctorSockets(service.Readiness.(inspection.Readiness).Input)
 		c.Doctor.Presentation = presentation
 		root := os.Getenv("ITOS_ROOT")
 		if root == "" {
@@ -347,6 +351,19 @@ func approvalServices(command string, in io.Reader, out, errout io.Writer) (appr
 	service := approvaldomain.Service{Readiness: source, Host: approvalhost.Process{}, Codec: codec, Store: approvaldisk.Store{StateHome: os.Getenv("XDG_STATE_HOME"), Home: os.Getenv("HOME"), Records: codec}}
 	service = coordinatedApproval(service, accountLookup)
 	return service, approvalpresentation.UI{In: in, Out: out, Err: errout}
+}
+
+// doctorSockets binds doctor's backend detection to the kernel's own Landlock
+// query and the runtime lookup of the engine selection doctor validated. Both
+// observe afresh on every call; nothing is configurable or persisted.
+func doctorSockets(input readinessport.Input) inspection.Sockets {
+	return inspection.Sockets{
+		Platform: socketsport.Platform{OS: input.OS, Architecture: input.Architecture},
+		Kernel:   socketsnative.New(),
+		Runtimes: func(checkout string) socketsport.Runtimes {
+			return socketsdocker.Runtimes{Readiness: docker.Engine{}, Selection: input.Host, Checkout: checkout}
+		},
+	}
 }
 
 func doctorPolicies() inspection.Policies {

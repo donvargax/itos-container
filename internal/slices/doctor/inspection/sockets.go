@@ -19,8 +19,9 @@ type Sockets struct {
 // Detect selects the backend the host offers. A missing lookup is a detector
 // without its observations, which confirms nothing.
 func (s Sockets) Detect(ctx context.Context, checkout string) port.Selection {
-	return port.Selection{}
+	detector := domain.Detector{Kernel: s.Kernel}
+	if s.Runtimes != nil {
+		detector.Runtimes = s.Runtimes(checkout)
+	}
+	return detector.Detect(ctx, s.Platform)
 }
-
-// Blank reference keeps the domain import used while the body is a stub.
-var _ domain.Detector

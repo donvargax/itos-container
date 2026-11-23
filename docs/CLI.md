@@ -280,6 +280,38 @@ workspace directory. Ordinary doctor currently performs these same file checks.
 Both refuse missing manifests rather than searching conventional locations or
 choosing a worker. `--policy-only`, `--manifest-only` and `--credentials-only` are mutually exclusive.
 
+## Checkout socket backend
+
+Ordinary doctor (not `--policy-only`, `--manifest-only` or `--credentials-only`, which make no
+Landlock query and no runtime lookup) names the checkout socket backend the host offers, so
+the person sees it before approving. It runs once the checkout and engine inspections have
+succeeded, whatever the image outcome, within the five-second engine inspection bound, and
+observes afresh on every invocation; a checkout, host or engine refusal leaves no query and no
+member. Landlock ABI 9 or later is chosen without consulting the engine; below that, or where
+Landlock is absent (ENOSYS, EOPNOTSUPP), a path-based `runsc` runtime with the default host
+socket policy selects gVisor. Doctor persists nothing about the selection.
+
+JSON success adds `/inspection/checkout_sockets`, exactly `{"backend":"landlock"}`,
+`{"backend":"gvisor"}` or `{"backend":"neither"}`. Neither is a confirmed outcome, not a problem:
+`ok` and `inspection.ready` stay true and the exit stays 0. Plain output adds one line after the
+image line, `checkout socket backend: landlock`, `checkout socket backend: gvisor` or
+`checkout socket backend: neither; late host sockets reachable`, and still says
+"runtime isolation is not established".
+
+A typed detection failure omits the member, sets `ok` and `inspection.ready` false and adds one
+problem after any image problems; the exit is the highest problem exit. Each has `rule`, `exit`, `message`, `fix`
+and a flat string `field`:
+
+| Failure | rule | exit | field |
+| --- | --- | --- | --- |
+| kernel ABI query failed or invalid | `doctor.sockets.kernel` | 75 | `landlock_abi` |
+| runtime inventory unreadable | `doctor.sockets.runtimes` | 75 | `runtimes` |
+| `runsc` permits host sockets or cannot be identified | `doctor.sockets.runsc` | 1 | `runtimes.runsc` |
+
+A detection that the five-second bound cancels reports `doctor.engine.timeout` (75). Messages carry
+no errno text, daemon text or runtime arguments. Naming a backend is not enforcement: approve,
+run and status do not use it yet, and it enters no fingerprint or approval record.
+
 JSON success has `schema: 1`, `scope: "manifest"`, `ok: true`, `problems: []` and
 `manifest` containing `valid`, `path`, all six `effective` fields, sorted `unused`
 JSON pointers and `image_metadata`. File-only inspection reports metadata as

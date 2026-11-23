@@ -124,7 +124,7 @@ Feature: Checkout Unix sockets have an explicit milestone boundary
   # row fails at its first Then, as the commit body names, because doctor
   # reads neither the kernel nor /info's Runtimes. The implementer may commit
   # freely in its workspace; the host makes the landing commits.
-  @wip @slice-42 @ID-SOCKETS-04 @local-engine-fixture
+  @slice-42 @ID-SOCKETS-04 @local-engine-fixture
   Scenario Outline: Doctor reports the checkout socket backend the host offers
     Given a doctor checkout
     And a local Engine API fixture
@@ -154,7 +154,7 @@ Feature: Checkout Unix sockets have an explicit milestone boundary
       | ENOSYS     | runc only         | neither  |
       | EOPNOTSUPP | runc only         | neither  |
 
-  @wip @slice-42 @ID-SOCKETS-05 @local-engine-fixture
+  @slice-42 @ID-SOCKETS-05 @local-engine-fixture
   Scenario Outline: Plain doctor names the backend and says when late host sockets stay reachable
     Given a doctor checkout
     And a local Engine API fixture
@@ -173,7 +173,7 @@ Feature: Checkout Unix sockets have an explicit milestone boundary
 
   # A failure never carries a backend. EPERM with runsc registered shows a
   # kernel failure stops detection before the fallback could choose gVisor.
-  @wip @slice-42 @ID-SOCKETS-06 @local-engine-fixture
+  @slice-42 @ID-SOCKETS-06 @local-engine-fixture
   Scenario Outline: Doctor refuses to name a backend it could not detect
     Given a doctor checkout
     And a local Engine API fixture

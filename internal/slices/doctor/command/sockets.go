@@ -42,26 +42,50 @@ var socketsProblems = map[sockets.Failure]readinessProblem{
 // inspections have succeeded, whatever the image outcome. A refusal earlier
 // leaves no kernel query and no outcome. Naming a backend is not enforcement.
 func (c CLI) detectSockets(result port.Result) *socketsOutcome {
-	return nil
+	if c.Sockets == nil || !detectable(result) {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), socketsBound)
+	defer cancel()
+	selection := c.Sockets.Detect(ctx, result.Checkout.Root)
+	if selection.Confirmed() {
+		return confirmed(selection.Backend)
+	}
+	if selection.Failure == sockets.Cancelled {
+		p := readinessDiagnostic(port.Issue{Kind: port.EngineTimeout, Subject: "DOCKER_HOST"})
+		return &socketsOutcome{problem: &p}
+	}
+	// Unsupported, NoProbe, ABIInvalid and a zero selection cannot reach a
+	// correctly assembled doctor; each is an unreadable kernel answer.
+	p, known := socketsProblems[selection.Failure]
+	if !known {
+		p = socketsProblems[sockets.ABIQuery]
+	}
+	return &socketsOutcome{problem: &p}
 }
 
 func confirmed(backend sockets.Backend) *socketsOutcome {
-	return nil
+	switch backend {
+	case sockets.Landlock:
+		return &socketsOutcome{report: &socketsReport{"landlock"}, line: "checkout socket backend: landlock"}
+	case sockets.GVisor:
+		return &socketsOutcome{report: &socketsReport{"gvisor"}, line: "checkout socket backend: gvisor"}
+	}
+	return &socketsOutcome{report: &socketsReport{"neither"}, line: "checkout socket backend: neither; late host sockets reachable"}
 }
 
 // detectable requires a validated checkout and engine and no later checkout,
 // host or engine refusal: only image outcomes may remain.
 func detectable(result port.Result) bool {
-	return false
+	if result.Checkout == nil || result.Engine == nil {
+		return false
+	}
+	for _, issue := range result.Issues {
+		switch issue.Kind {
+		case port.ImageMissing, port.ImageInspect, port.ImageDigest, port.ImagePlatform, port.ImageUser, port.EgressImage, port.EgressImageMissing:
+		default:
+			return false
+		}
+	}
+	return true
 }
-
-// Blank references keep the declarations used while the bodies are stubs.
-var (
-	_ = context.Background
-	_ = socketsBound
-	_ = socketsProblems
-	_ = CLI.detectSockets
-	_ = confirmed
-	_ = detectable
-	_ = func(o socketsOutcome) { _, _, _ = o.report, o.line, o.problem }
-)
