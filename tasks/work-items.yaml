@@ -2785,14 +2785,15 @@ items:
     status: todo
     depends_on: []
     kind: task
-  - id: codex-pinned-startup-traffic
+  - id: slice-58
     title: Pinned Codex 0.167.0 starts and resumes from seeded settings without unwanted startup traffic
     phase: 1
     owner: null
     status: todo
     depends_on: [slice-55, T-81]
-    kind: idea
+    kind: slice
     why: >
+      Was codex-pinned-startup-traffic.
       This is the native real-Codex scenario, the current CODEXHOME-09, in the existing offline
       engine shard. It reads the image task's handoff records and independently verifies the image
       identity and `codex --version`. It covers round 7's second and third P1s. First, the relay
