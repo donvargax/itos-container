@@ -2716,3 +2716,23 @@ items:
       CODEXHOME-01 and CODEXHOME-02. It keeps its parent's prerequisite, slice-34. Version 4's Codex
       credential entry stays with slice-48. The spec states that the implementer may commit freely
       in its workspace and that the host makes the landing commits. Broken down from slice-35.
+  - id: codex-home-seed-every-run
+    title: Every selected run regenerates only config.toml before the literal workload starts
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [codex-home-selection-consent]
+    kind: idea
+    why: >
+      This is the core behavior. Its spec defines the selection it reads, so it relies on no draft
+      header. After durable home ownership and before any start, run sets
+      CODEX_HOME=/home/itos/.codex. It creates .codex (0700) if missing and publishes the fixed
+      codex-v1 config.toml (0600) through slice-34's archive seam on every invocation. The seed
+      turns off update checks, analytics, plugins and Codex's own sandbox. The run then confirms a
+      successful readback. The frozen selection survives request edits. Literal argv, sessions,
+      history and auth paths stay untouched. It owns the current CODEXHOME-03 and CODEXHOME-04
+      locally, and the first-instruction native evidence of CODEXHOME-08 in the existing shared
+      fixture image and offline shard. It proves the seeded settings byte for byte and must not
+      claim that runtime startup traffic is absent, which the native startup child owns. The spec
+      states that the implementer may commit freely in its workspace and that the host makes the
+      landing commits. Broken down from slice-35.
