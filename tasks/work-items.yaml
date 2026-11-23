@@ -449,7 +449,7 @@ items:
   - id: T-79
     title: "Architecture drift: reconcile session and runtime evidence status"
     phase: 1
-    owner: null
+    owner: donvargax
     status: todo
     depends_on: []
     kind: task
@@ -460,22 +460,13 @@ items:
     status: done
     depends_on: [slice-12, slice-14]
     kind: slice
-  - id: p1-mount-bound-to-validated-inode
+  - id: T-80
     title: The checkout mount is bound to the inode that passed validation
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
-    kind: idea
-    why: >
-      Isolation, this milestone. A read-only security audit of main at 7236d68 (Codex, 2026-11-06),
-      static, no Docker run; confirm with a scenario before building. Docker receives the checkout
-      as a pathname (internal/engine/session/docker/run.go:68; registered_run.go:179), so after the
-      final identity checks and before ContainerStart a worker whose checkout contains another
-      approved checkout can rename the inner one and put a symlink to the host home in its place;
-      the second worker then mounts an unapproved host directory. Fix: hand Docker an inode-bound
-      source through a protected mount anchor held through startup and recovery, and refuse
-      overlapping worker checkouts.
+    kind: task
   - id: slice-19
     title: Host Unix sockets under the checkout are not reachable from the worker
     phase: 1
@@ -2303,7 +2294,7 @@ items:
     title: Report the checkout socket backend in doctor
     phase: 1
     owner: donvargax
-    status: doing
+    status: todo
     depends_on: [T-64]
     kind: slice
     why: >
@@ -2315,7 +2306,7 @@ items:
     title: Bind the checkout socket backend to approval
     phase: 1
     owner: donvargax
-    status: doing
+    status: todo
     depends_on: [T-64]
     kind: slice
     why: >
