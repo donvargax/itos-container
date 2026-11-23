@@ -2736,3 +2736,23 @@ items:
       claim that runtime startup traffic is absent, which the native startup child owns. The spec
       states that the implementer may commit freely in its workspace and that the host makes the
       landing commits. Broken down from slice-35.
+  - id: codex-home-unsafe-path-refusal
+    title: Refuse unsafe retained Codex seed paths before any write or start
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [codex-home-seed-every-run]
+    kind: idea
+    why: >
+      This child owns pre-write path safety and round 7's first P1. Docker's archive GET and HEAD
+      call Stat, which uses Lstat for the mode but then follows the link chain to fill LinkTarget. A
+      self-referential link can therefore fail before the controller sees a mode. The spec must
+      state whether no-follow is promised only at the controller or also at the daemon. If
+      daemon-side no-follow is required, it must name an engine operation that provides it. It must
+      classify an engine that returns no metadata, and add a native symlink-loop row that asserts
+      the chosen diagnostic with zero publication and zero start. It also covers the symlink, FIFO,
+      directory, owner and mode refusals (run.home-refused, with fixed-path guidance) and the native
+      hard-link replacement that preserves the sentinel. That is the current CODEXHOME-05 and
+      CODEXHOME-10, using the existing shared fixture image only. The spec states that the
+      implementer may commit freely in its workspace and that the host makes the landing commits.
+      Broken down from slice-35.
