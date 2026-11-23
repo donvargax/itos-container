@@ -3,7 +3,6 @@ phases:
   1: null
 queue:
   - slice-28
-  - slice-35
   - slice-40
   - slice-31
   - slice-36
@@ -446,23 +445,13 @@ items:
     status: done
     depends_on: [slice-13]
     kind: slice
-  - id: p2-architecture-session-runtime-status
+  - id: T-79
     title: "Architecture drift: reconcile session and runtime evidence status"
     phase: 1
-    owner: null
+    owner: donvargax
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      Reconcile arc42 with merged slice-9 ownership work and live engine scenarios, preserving the
-      distinction between implemented ownership, pending recovery and unproven runtime isolation.
-      This first-milestone documentation follow-up does not block the current offline owned-run
-      step.
-
-      Include the q-11 ownership correction in this existing architecture-drift follow-up. Update
-      recovery.feature and arc42 to identify slice-14's native isolation proof and slice-15's
-      retained-isolation proof (ID-LIFECYCLE-15), which depends on slice-12 and slice-14. Preserve
-      slice-12's budgets, cancellation and loss scope so future briefs follow the settled order.
+    kind: task
   - id: slice-15
     title: Isolation retained through controller loss
     phase: 1
@@ -470,22 +459,13 @@ items:
     status: done
     depends_on: [slice-12, slice-14]
     kind: slice
-  - id: p1-mount-bound-to-validated-inode
+  - id: T-80
     title: The checkout mount is bound to the inode that passed validation
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
-    kind: idea
-    why: >
-      Isolation, this milestone. A read-only security audit of main at 7236d68 (Codex, 2026-11-06),
-      static, no Docker run; confirm with a scenario before building. Docker receives the checkout
-      as a pathname (internal/engine/session/docker/run.go:68; registered_run.go:179), so after the
-      final identity checks and before ContainerStart a worker whose checkout contains another
-      approved checkout can rename the inner one and put a symlink to the host home in its place;
-      the second worker then mounts an unapproved host directory. Fix: hand Docker an inode-bound
-      source through a protected mount anchor held through startup and recovery, and refuse
-      overlapping worker checkouts.
+    kind: task
   - id: slice-19
     title: Host Unix sockets under the checkout are not reachable from the worker
     phase: 1
@@ -1483,6 +1463,15 @@ items:
       provider can use, since those share no filesystem with the host. Costs: sync time on large
       repositories, no live view in the host editor, and divergence when the person edits the
       checkout meanwhile (commits merge; uncommitted edits don't).
+
+      Discobox (github.com/discobox-ai/discobox at 97b2281, Apache-2.0) builds this mode, read
+      2026-11-23. Its box clones from a read-only origin the pool serves over authenticated git HTTP
+      at a reserved host name, with a day-long token scoped to fetch and bound to one sandbox;
+      uncommitted changes come along only on request (--include-dirty), the agent commits inside the
+      box, and the host fetches the commits back. That fits the rule that pushes stay on the host,
+      and would let decisions 0013, 0019 and 0020 shrink; it changes the contract's
+      checkout-is-the-only-mount line, so it stays the person's call. Read docs/adr/26-10-08-561 in
+      that repository first.
   - id: p1-engine-timing-notice-every-run
     title: Every engine job run publishes its slowest scenario timings and the runner's identity as a ::notice annotation, green runs included
     phase: 1
@@ -1663,6 +1652,10 @@ items:
       scope here and no scenario reaches a real host. It reuses the token path of the Claude slice.
       Whether the GitHub token shares a grant with Claude's is not assumed, since each is its own
       approved grant. Broken down from p1-credentials-passed-in.
+    deferred: >
+      GitHub pushes stay on the host (the person, 2026-11-17; docs/decisions/STANDING.md:30): the
+      worker holds no GitHub token, so nothing needs this delivery yet. Resume when an agent needs
+      GitHub from inside the box.
   - id: T-51
     title: "A disk adapter for the RefusalLog port streams the proxy's log into egress-refusals.jsonl: private, fsynced, renamed"
     phase: 1
@@ -2009,17 +2002,9 @@ items:
     title: Codex starts with isolated state and unwanted startup services disabled
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: [slice-34]
     kind: slice
-    why: >
-      Was p1-harness-codex-home-seeding.
-      Seed the container-owned home with Codex update checks, analytics, plugins and its own sandbox
-      disabled, as the charter requires. Specify initialization and repeat-run behavior without
-      changing literal workload argv or executing checkout code on the host. Keep authentication
-      delivery in slice-32 and follow the charter's dedicated-directory decision rather than that
-      item's stale single-file wording. Prove settings and startup behavior with black-box scenarios
-      and controlled endpoints, without real accounts or credentials. Broken down from null.
   - id: slice-36
     title: Claude starts with isolated state and onboarding already completed
     phase: 1
@@ -2313,7 +2298,7 @@ items:
     title: Report the checkout socket backend in doctor
     phase: 1
     owner: donvargax
-    status: doing
+    status: todo
     depends_on: [T-64]
     kind: slice
     why: >
@@ -2324,7 +2309,7 @@ items:
   - id: slice-43
     title: Bind the checkout socket backend to approval
     phase: 1
-    owner: null
+    owner: donvargax
     status: todo
     depends_on: [T-64]
     kind: slice
@@ -2497,6 +2482,16 @@ items:
       The person corrected the Codex part of q-90 on 2026-11-20: Codex defaults to a sandbox-only
       ChatGPT login in the harness home (device login, never the host auth.json), with an API key
       only as the fallback when a weekly limit is reached. The design is amended to match.
+
+      Discobox's design (github.com/discobox-ai/discobox at 97b2281, proxy/DESIGN.md, read
+      2026-11-23) is the reference for a sentinel-swap broker, built as a separate project because
+      it holds a CA and intercepts TLS: the box holds only sentinels shaped like the real keys; the
+      proxy swaps a sentinel for the real value only on an authorized route, matching the exact set,
+      never a prefix; every request is authorized before any secret is decrypted; values are
+      redacted from the audit; an outage answers 503 and never forwards the real value; grants
+      expire. Unlike slice-31's staged file, the real token never enters the box. Routes finer than
+      a host (method, path, tool) would sit beside the rule against exact-match allowlists of agent
+      actions, so that is for the person to weigh.
     deferred: >
       Deferred until remote sandboxes (microVMs on cloud providers) exist, by the person's direction
       of 2026-11-20 (q-90). Locally run sandboxes share the host's own logins, so the local case
@@ -2712,6 +2707,151 @@ items:
     kind: task
   - id: T-78
     title: claude-home.feature joins the other engine shard, as slice-36's branch places it, before slice-36 lands
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: slice-54
+    title: Select Codex defaults explicitly and disclose them for approval
+    phase: 1
+    owner: donvargax
+    status: todo
+    depends_on: [slice-34]
+    kind: slice
+    why: >
+      Was codex-home-selection-consent.
+      This is the smallest observable rule and has no seeding, engine or native dependency. Policy
+      versions 1–3 accept an optional home `harness: codex`, as a literal string and only beside
+      `storage: volume`. Malformed values report policy.type or policy.home_harness at
+      /home/harness. Only under that selection, CODEX_HOME in containerEnv (compared ASCII
+      case-insensitively) is manifest.reserved; omitted and plain homes keep the variable. Doctor
+      and approve disclose and fingerprint harness {kind codex, seed codex-v1, target
+      /home/itos/.codex}, and adding or removing it needs new consent. It owns the current
+      CODEXHOME-01 and CODEXHOME-02. It keeps its parent's prerequisite, slice-34. Version 4's Codex
+      credential entry stays with slice-48. The spec states that the implementer may commit freely
+      in its workspace and that the host makes the landing commits. Broken down from slice-35.
+  - id: slice-55
+    title: Every selected run regenerates only config.toml before the literal workload starts
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-54]
+    kind: slice
+    why: >
+      Was codex-home-seed-every-run.
+      This is the core behavior. Its spec defines the selection it reads, so it relies on no draft
+      header. After durable home ownership and before any start, run sets
+      CODEX_HOME=/home/itos/.codex. It creates .codex (0700) if missing and publishes the fixed
+      codex-v1 config.toml (0600) through slice-34's archive seam on every invocation. The seed
+      turns off update checks, analytics, plugins and Codex's own sandbox. The run then confirms a
+      successful readback. The frozen selection survives request edits. Literal argv, sessions,
+      history and auth paths stay untouched. It owns the current CODEXHOME-03 and CODEXHOME-04
+      locally, and the first-instruction native evidence of CODEXHOME-08 in the existing shared
+      fixture image and offline shard. It proves the seeded settings byte for byte and must not
+      claim that runtime startup traffic is absent, which the native startup child owns. The spec
+      states that the implementer may commit freely in its workspace and that the host makes the
+      landing commits. Broken down from slice-35.
+  - id: slice-56
+    title: Refuse unsafe retained Codex seed paths before any write or start
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-55]
+    kind: slice
+    why: >
+      Was codex-home-unsafe-path-refusal.
+      This child owns pre-write path safety and round 7's first P1. Docker's archive GET and HEAD
+      call Stat, which uses Lstat for the mode but then follows the link chain to fill LinkTarget. A
+      self-referential link can therefore fail before the controller sees a mode. The spec must
+      state whether no-follow is promised only at the controller or also at the daemon. If
+      daemon-side no-follow is required, it must name an engine operation that provides it. It must
+      classify an engine that returns no metadata, and add a native symlink-loop row that asserts
+      the chosen diagnostic with zero publication and zero start. It also covers the symlink, FIFO,
+      directory, owner and mode refusals (run.home-refused, with fixed-path guidance) and the native
+      hard-link replacement that preserves the sentinel. That is the current CODEXHOME-05 and
+      CODEXHOME-10, using the existing shared fixture image only. The spec states that the
+      implementer may commit freely in its workspace and that the host makes the landing commits.
+      Broken down from slice-35.
+  - id: slice-57
+    title: Incomplete or unverifiable seeding never authorizes a worker start
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-55, slice-56]
+    kind: slice
+    why: >
+      Was codex-home-readback-contract.
+      This child owns the classification of readback and publication faults, from the current
+      CODEXHOME-06 and CODEXHOME-07. That covers partial, lost or failed publication; truncated,
+      missing or extra end-of-archive blocks; a wrong name, an extra entry, an oversize stream and
+      timeout precedence; and confirmed wrong seeds as run.isolation-unverified. The round-7 P2
+      belongs here: an otherwise correct archive with both terminator blocks and a nonzero byte
+      afterward must give a delivered readback fault, run.home-unavailable (75), and no start. It is
+      local-only orchestration evidence. It depends on the refusal child because its
+      retained-partial rows (a root-owned partial file is refused) reuse that child's pre-write
+      inspection. The spec states that the implementer may commit freely in its workspace and that
+      the host makes the landing commits. Broken down from slice-35.
+  - id: T-81
+    title: engine-fixture prepares, hands off and cleans up a verified pinned Codex 0.167.0 fixture image
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
+  - id: slice-58
+    title: Pinned Codex 0.167.0 starts and resumes from seeded settings without unwanted startup traffic
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-55, T-81]
+    kind: slice
+    why: >
+      Was codex-pinned-startup-traffic.
+      This is the native real-Codex scenario, the current CODEXHOME-09, in the existing offline
+      engine shard. It reads the image task's handoff records and independently verifies the image
+      identity and `codex --version`. It covers round 7's second and third P1s. First, the relay
+      must account for each accepted client connection before its upstream dial, drain or fail on
+      pending relay work, and treat failed forwarding as evidence. A control must pause an accepted
+      connection before its upstream dial until the Codex child exits. Second, the layered config
+      report stays for provenance and the shell turns stay for execution and resume. Runtime
+      approvalPolicy and sandbox evidence must come from a separate app-server thread/start with
+      those overrides omitted, plus an independent control with different user-layer values, because
+      `codex exec` supplies Never itself. The fixture's closed-port canary stays. It depends on
+      seeding for the seeded user layer and on the image task for the pinned binary. The spec states
+      that the implementer may commit freely in its workspace and that the host makes the landing
+      commits. Broken down from slice-35.
+  - id: p3-microvm-libkrun-reference
+    title: When microVMs start, read Discobox's libkrun provider before designing the engine adapter
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      MicroVMs come later, on several cloud providers (docs/charter.md:157). Discobox
+      (github.com/discobox-ai/discobox at 97b2281, Apache-2.0, read 2026-11-23) runs boxes on
+      libkrun microVMs on Linux with /dev/kvm and on vz on macOS; those, not its Docker provider
+      (privileged, beside the host Docker socket), are its real isolation boundary. When that line
+      starts, read server/providers/libkrun/ and server/providers/DESIGN.md first, and decide
+      whether a microVM adapter goes behind this project's engine port. Not now: no item in the
+      queue changes.
+  - id: p2-credentials-manager-integration
+    title: Read credential sources from a credentials manager instead of one-secret files
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The person, 2026-11-23 (decision 0035): a credentials-manager integration is needed but not
+      started. Until it exists, credential sources are files, one secret per file, mode 0600, in a
+      directory of mode 0700, so nothing waits on this. When it starts, it decides which manager,
+      how a run's approved grant names a secret there instead of a path, and how readiness, approval
+      and the frozen grant keep binding a source without reading its contents
+      (docs/decisions/0029-credential-approval.md:11).
+  - id: T-82
+    title: Bump go.opentelemetry.io/otel to v1.47.0 for GO-2026-6974
     phase: 1
     owner: donvargax
     status: done
