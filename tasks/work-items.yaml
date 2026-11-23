@@ -464,7 +464,7 @@ items:
     title: The checkout mount is bound to the inode that passed validation
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: slice-19
