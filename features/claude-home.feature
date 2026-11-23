@@ -7,43 +7,93 @@ Feature: Claude starts with onboarding completed in its private persistent home
   # Slice-36 specification only. EVERY step phrase below is NEW; this draft adds
   # no bindings, implementation or observed red/green evidence.
   # Authorities: charter milestone two step 3; architecture.md Slices; slice-34's
-  # harness-home.feature and decision 0030-persistent-harness-home.md; decision
+  # harness-home.feature and decision 0030-persistent-harness-home.md; slice-41's
+  # home.harnesses block in harness-home.feature; decision
   # 0025-credentials-passed-in.md; run/offline/approval/egress/lifecycle scenarios.
-  # Read against main 2897e1024a57632e22e181383488b4e52af1cebb,
-  # slice-34 abc2174916395f4ca67edd70c5e96a93324701d2,
-  # slice-35 f20c946d9454a78f5bd0a2fb259a5c042d3549df and
-  # slice-31 3dedaf1c20f71de13f6a93680fc28f49d4cf76eb.
+  # Read against main ca7dc633c7fe86e119abdc5ff661fd4285581e7e, as merged into
+  # this branch at 98baba1cef7aa7ac613900032425c9d43a400ddc: slice-34, slice-41
+  # and T-78 are done there. slice-35 (Codex) and slice-31 (Claude login) are not
+  # on main; they were read at slice-35 f20c946d9454a78f5bd0a2fb259a5c042d3549df
+  # and slice-31 3dedaf1c20f71de13f6a93680fc28f49d4cf76eb.
   # These are dependency inputs, not claims that their unfinished behavior works.
-  # Consume slice-34 first. CLAUDEHOME-10 also uses the approved egress proxy.
-  # Token delivery stays in slice-31; none of these fixtures requests a grant.
+  # Consume slice-34 and slice-41 first. CLAUDEHOME-10 also uses the approved
+  # egress proxy. Token delivery stays in slice-31; none of these fixtures
+  # requests a grant.
   #
-  # Selection and approval, decided here:
-  # - Extend the closed home object with optional harness: claude, a literal
-  #   case-sensitive string, alongside storage: volume in supported versions 1/2/3.
-  #   This shares slice-35's home.harness selector; its codex value is a sibling
-  #   implementation, not an alias or a value to reject once that slice lands.
-  #   No top-level harness key, argv sniffing, automatic installation, manifest
-  #   hook, caller-selected state path or caller-supplied seed content is added.
-  # - File-only doctor retains harness: claude in normalized home. Null and
-  #   non-string values use policy.type at /home/harness; unsupported strings,
-  #   including empty and "Claude", use policy.home_harness there (exit 2).
-  #   Missing storage remains policy.required at /home/storage. Duplicate and
-  #   unknown fields keep their existing rules. No other policy-version gate lifts.
-  # - Add exactly harness:{kind:"claude",seed:"claude-v1",target:"/home/itos/.claude"}
-  #   to slice-34's effective home object. Retain its profile name, owner, storage,
-  #   target and lifetime. The seed revision binds the fixed file/environment
-  #   contract below; a future revision requires approval. No-home and plain-home
+  # Selection and approval, decided here on top of slice-41's home.harnesses:
+  # - Add "claude" as an accepted name of slice-41's optional home.harnesses, a
+  #   non-empty list of unique literal case-sensitive names, beside storage:
+  #   volume in supported versions 1/2/3. The accepted names become claude and
+  #   opencode; slice-35 adds codex the same way. There is no second selector:
+  #   no scalar home.harness, top-level harness key, argv sniffing, automatic
+  #   installation, manifest hook, caller-selected state path or caller-supplied
+  #   seed content.
+  # - [claude, opencode] is accepted, in either written order. File-only doctor,
+  #   the approval and the frozen settings hold the sorted list. A repeated name
+  #   is refused wherever it appears; the written order only decides which index
+  #   the refusal names.
+  # - File-only doctor returns home: {storage: volume, harnesses: [claude]} or
+  #   home: {storage: volume, harnesses: [claude, opencode]}. Malformed requests
+  #   keep slice-41's rules, each exit 2 with no state, engine or harness access:
+  #   harnesses null, "claude" or {} -> policy.type /home/harnesses; [] ->
+  #   policy.home_harness /home/harnesses; [Claude], [other] or [""] ->
+  #   policy.home_harness /home/harnesses/0; [claude, claude] ->
+  #   policy.home_harness /home/harnesses/1; [opencode, claude, claude] ->
+  #   policy.home_harness /home/harnesses/2; [7] or [null] -> policy.type
+  #   /home/harnesses/0; {harnesses: [claude]} without storage -> the existing
+  #   policy.required /home/storage. source, config or target keys under home
+  #   stay policy.unknown_key at their own path. Duplicate keys, depth and size
+  #   keep their rules. No other policy-version gate lifts.
+  # - policy.home_harness's fix becomes "use home.harnesses with claude,
+  #   opencode or both, or omit harnesses". ID-HOME-25 checks rule and subject,
+  #   not this text, so no slice-41 scenario changes; the implementer updates the
+  #   unit expectations, docs/CONFIG.md's harness section and slice-41's comment
+  #   that quotes the old fix.
+  # - The effective approval's home object binds claude-v1 as the harness entry
+  #   {"name":"claude","profile":"claude-v1"}, so [claude] gives
+  #   harnesses:[{"name":"claude","profile":"claude-v1"}] and [claude, opencode]
+  #   gives [{"name":"claude","profile":"claude-v1"},
+  #   {"name":"opencode","profile":"opencode-v1"}]. The entry gains no other
+  #   member: like opencode-v1, the profile ID binds the whole fixed contract
+  #   below, both environment values and the fixed paths /home/itos/.claude,
+  #   its .claude.json and the refused .config.json, so changing any of them
+  #   needs a new profile ID and a new approval. Retain slice-34's profile name,
+  #   owner, storage, target and lifetime. No-home, plain-home and OpenCode-only
   #   canonical bytes remain unchanged. No home contents enter the fingerprint.
-  # - Doctor and approve disclose the harness/revision, both fixed paths below,
-  #   nonessential-traffic default, create-if-missing behavior, retention and
-  #   refusal of incompatible retained state. Adding/removing/changing the harness
-  #   needs approval, with /home/harness in sorted differences. Existing consent
-  #   rules still apply. Review never allocates, seeds, runs Claude or reads a token.
-  # - Freeze the selector with the existing snapshot. Selection changes neither
-  #   home scope nor generation. Removing it leaves files intact and stops only
-  #   Claude seeding/environment overrides; selecting it again reuses that home.
-  #   Image changes and reapproval do not reset state. A plain home remains usable
-  #   without Claude validation; only separate consented home management deletes it.
+  # - doctor --json gains no field. approval.effective carries that home object,
+  #   approval.differences carries {"path":"/home/harnesses","before":<old list
+  #   or null>,"after":<new list or null>} in the existing sorted order, and
+  #   approval.fingerprint is the new digest. JSON names the profile only.
+  # - Plain doctor and bare approve's review print slice-41's shared home
+  #   disclosure and then, for each requested harness in sorted name order,
+  #   that harness's lines; Claude's come before OpenCode's. Claude's lines are
+  #   "Claude harness: profile claude-v1.", then
+  #   CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 and
+  #   CLAUDE_CONFIG_DIR=/home/itos/.claude in that order, then sentences
+  #   disclosing both fixed paths, the nonessential-traffic default,
+  #   create-if-missing behavior, retention, refusal of incompatible retained
+  #   state including any .config.json, and that this setting delivers no
+  #   Claude login. Their wording is the implementer's; the step checks the
+  #   fixed words /home/itos/.claude, .claude.json, .config.json, nonessential,
+  #   retained and login. Only the review prints "/home/harnesses: before ->
+  #   after" lines; plain doctor gains none.
+  # - Adding, removing or changing the claude entry needs approval; run reports
+  #   run.approval-changed at /home/harnesses, exit 1, before any engine
+  #   connection. claude-v1 is no network or credential grant, so existing
+  #   consent rules apply unchanged. Review never allocates, seeds, runs Claude
+  #   or reads a credential.
+  # - With [claude, opencode] each profile applies on its own terms. The worker
+  #   environment holds both tables, whose names are disjoint (CLAUDE_* and
+  #   OPENCODE_*), and the existing exact environment comparison verifies both.
+  #   Only claude-v1 writes files, and only under /home/itos/.claude, which
+  #   opencode-v1 never touches. A defect in either profile refuses the whole
+  #   launch with that profile's rule; neither skips the other's validation.
+  # - Freeze the harness list with the existing snapshot. Selection changes
+  #   neither home scope nor generation. Removing claude from the list leaves
+  #   its files intact and stops only Claude seeding/environment overrides;
+  #   adding it again reuses that home. Image changes and reapproval do not reset
+  #   state. A home without claude remains usable without Claude validation;
+  #   only separate consented home management deletes it.
   #
   # claude-v1 is deliberately minimal nonsecret initialization:
   # - Set CLAUDE_CONFIG_DIR=/home/itos/.claude and
@@ -208,8 +258,12 @@ Feature: Claude starts with onboarding completed in its private persistent home
   #   and a second worker across selected state roots, including controller death.
   #
   # Architecture and implementation handoff:
-  # Extend internal/engine/policy for selection and internal/engine/approval for
-  # canonical/frozen settings and disclosure. Extend internal/engine/session's
+  # Extend internal/engine/policy's home.harnesses check (domain inspectHarnesses,
+  # port Home.Harnesses and the policy.home_harness fix) for selection, and
+  # internal/engine/approval's canonical harness entry and home validation,
+  # frozen settings and presentation harness lines for disclosure, beside
+  # slice-41's OpenCode code. Add claude to home.harnesses in the three published
+  # policy schemas. Extend internal/engine/session's
   # domain/port and named Docker adapter for seed sequencing and bounded archive
   # I/O; keep strict JSON/archive processing in an adapter, not a domain import.
   # Reuse its disk ownership/claims/recovery and internal/engine/budget. Integrate
@@ -246,11 +300,14 @@ Feature: Claude starts with onboarding completed in its private persistent home
   #   is CI-only, with no agent Docker socket.
   #   Native assertions precede fixture teardown; teardown only reclaims tracked
   #   disposable resources after product cleanup has been independently observed.
-  # - This spec assigns claude-home.feature to the existing other engine shard in
-  #   .github/workflows/ci.yml. TestEngineShards inventories @wip engine files too;
-  #   its workflow and partition checks require this assignment before activation.
-  #   Keep that assignment for CI red dispatch; all eleven scenarios remain @wip.
-  #   Add a smoke entry when a scenario becomes live. No local engine, full-features
+  # - T-78 already places claude-home.feature in the other engine shard (ci.yml
+  #   and engine_shards_test.go) and lists it in pendingEngineFeatures. This file
+  #   now exists, so the implementer's red test commit removes that entry from
+  #   pendingEngineFeatures in features_test.go, updates the exact-map check and
+  #   drops the two claude-home wrong-shard controls in engine_pending_test.go,
+  #   and drops the "pending" wording for it in features/README.md and arc42.md,
+  #   as T-78 and decision 0024 assign. No workflow edit. All eleven scenarios
+  #   remain @wip; add a smoke entry when a scenario becomes live. No local engine, full-features
   #   race run, generated coverage or mutation evidence belongs to this draft.
   # - The implementer may commit freely in its workspace; the host makes the
   #   landing commits.
@@ -259,12 +316,17 @@ Feature: Claude starts with onboarding completed in its private persistent home
   #   APPROVAL/RUN frozen inputs and literal argv, OFFLINE/ANCHORS/LIFECYCLE/RECOVERY,
   #   EGRESS, and CREDRUN's explicit token delivery. None is weakened or retagged.
 
-  # Policy and approval. The positive Claude case fails before malformed controls.
+  # Policy and approval. The positive Claude cases fail before malformed controls.
+  # Requests: home omitted; a plain home; [claude]; [claude, opencode];
+  # [opencode, claude], normalized to the sorted list; and [opencode], slice-41's
+  # unchanged control. Malformed requests are exactly the slice-41-shaped rows
+  # under "Selection and approval" above, with their subjects at /home/harnesses
+  # or /home/harnesses/N, plus source/config/target keys under home.
   @wip @slice-36 @ID-CLAUDEHOME-01
   Scenario Outline: Claude initialization is an explicit closed home selection
-    Given a Claude home policy fixture for version <version> with omitted plain Claude and malformed harness requests
+    Given a Claude home policy fixture for version <version> with omitted plain Claude combined and malformed harness requests
     When file-only doctor reads each Claude home policy request
-    Then only the Claude selection adds harness claude to normalized home and omitted and plain home outputs are unchanged
+    Then each Claude request adds its sorted harness names to normalized home and omitted plain and OpenCode-only home outputs are unchanged
     And malformed Claude requests have the specified rules subjects and exits without state engine or harness access
 
     Examples:
@@ -273,14 +335,16 @@ Feature: Claude starts with onboarding completed in its private persistent home
       | 2       |
       | 3       |
 
-  # Malformed requests include null/list/boolean, empty/"Claude"/"other" strings,
-  # missing storage, duplicate harness, and source/config/target keys under home.
+  # Changed selections: no harnesses -> [claude], [claude] -> no harnesses, and
+  # [opencode] -> [claude, opencode] and back. Each reports one /home/harnesses
+  # difference holding the whole old and new lists. The combined approval binds
+  # both entries in sorted order and its review prints Claude's lines first.
   @wip @slice-36 @ID-CLAUDEHOME-02 @local-engine-fixture @linux
   Scenario: Approval binds Claude initialization without resetting retained state
     Given Claude review fixtures with independently recorded plain and Claude approvals retained sentinels and isolated consent terminals
     When doctor and consenting approve review Claude selection and run attempts changed matching disabled and re-enabled selections
-    Then review and approval bind the exact claude-v1 home settings with their paths retention refusal and traffic disclosures and a changed fingerprint
-    And unapproved additions and removals report changed approval at /home/harness before mutation while matching controls start
+    Then review and approval bind the exact claude-v1 harness entry with its paths retention refusal and traffic disclosures and a changed fingerprint
+    And unapproved additions and removals report changed approval at /home/harnesses before mutation while matching controls start
     And review creates no home or seed and disabling then re-enabling preserves the same home generation and retained file bytes
 
   # The selector, not argv[0], controls seeding. Include conflicting image
