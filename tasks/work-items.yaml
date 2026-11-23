@@ -1463,6 +1463,15 @@ items:
       provider can use, since those share no filesystem with the host. Costs: sync time on large
       repositories, no live view in the host editor, and divergence when the person edits the
       checkout meanwhile (commits merge; uncommitted edits don't).
+
+      Discobox (github.com/discobox-ai/discobox at 97b2281, Apache-2.0) builds this mode, read
+      2026-11-23. Its box clones from a read-only origin the pool serves over authenticated git HTTP
+      at a reserved host name, with a day-long token scoped to fetch and bound to one sandbox;
+      uncommitted changes come along only on request (--include-dirty), the agent commits inside the
+      box, and the host fetches the commits back. That fits the rule that pushes stay on the host,
+      and would let decisions 0013, 0019 and 0020 shrink; it changes the contract's
+      checkout-is-the-only-mount line, so it stays the person's call. Read docs/adr/26-10-08-561 in
+      that repository first.
   - id: p1-engine-timing-notice-every-run
     title: Every engine job run publishes its slowest scenario timings and the runner's identity as a ::notice annotation, green runs included
     phase: 1
