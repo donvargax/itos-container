@@ -58,7 +58,7 @@ func terminalText(text string) string {
 func (u UI) Report(v port.View) port.Report {
 	report := port.Report{Status: v.Status, Fingerprint: v.Candidate.Fingerprint, Effective: object(v.Candidate.Canonical), Differences: []port.Change{}}
 	report.EffectiveText = jsonText(report.Effective)
-	report.RequestedText = grantLines(requested(v))
+	report.RequestedText = append(grantLines(requested(v)), harnessLines(report.Effective)...)
 	if v.Record.Generation != "" {
 		g := v.Record.Generation
 		report.Generation = &g
@@ -170,6 +170,47 @@ func (u UI) homeDisclosure(effective any) {
 	_, _ = fmt.Fprintf(u.Out, "Harness home: private volume at /home/itos, mode 0700, owner %s:%s.\n", host["uid"], host["gid"])
 	_, _ = fmt.Fprintln(u.Out, "Scoped to this checkout and retained after exit and stop; the host home is never mounted or copied.")
 	_, _ = fmt.Fprintln(u.Out, "Contents are hostile worker data reused by the next run. Only a terminal-consented reset or delete discards them; disabling home does not delete it.")
+	for _, line := range harnessLines(effective) {
+		_, _ = fmt.Fprintln(u.Out, line)
+	}
+}
+
+// harnessLines state what an approved OpenCode harness binds, from the
+// validated candidate: the profile, every environment value, where OpenCode
+// keeps its state, who chooses the provider and model, and what it delivers.
+func harnessLines(effective any) []string {
+	s, _ := effective.(map[string]any)
+	home, _ := s["home"].(map[string]any)
+	harnesses, _ := home["harnesses"].([]any)
+	var lines []string
+	for _, entry := range harnesses {
+		harness, _ := entry.(map[string]any)
+		if harness["name"] != "opencode" {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("OpenCode harness: profile %s.", terminalText(fmt.Sprint(harness["profile"]))))
+		for _, pair := range port.OpenCodeEnvironment() {
+			lines = append(lines, pair[0]+"="+pair[1])
+		}
+		lines = append(lines, "OpenCode global configuration, data and state live in /home/itos.",
+			"The checkout's own opencode.json and .opencode configuration also apply, loaded before this profile, which overrides them where they conflict.",
+			"Any managed configuration in the approved image (/etc/opencode) loads after this profile and overrides it.",
+			"The image's other OPENCODE_* defaults stay in effect and can redirect or turn off configuration layers (OPENCODE_CONFIG, OPENCODE_CONFIG_DIR, which replaces the global directory, OPENCODE_DISABLE_PROJECT_CONFIG).",
+			"The argv and the checkout choose the provider and model; run never does.")
+		if networkMode(s) == "offline" {
+			lines = append(lines, "No provider is reachable: this policy is offline.")
+		} else {
+			lines = append(lines, "A provider is reachable only through the approved allowlist.")
+		}
+		lines = append(lines, "No OpenCode login is delivered by this setting. The profile is no network or credential grant.")
+	}
+	return lines
+}
+
+func networkMode(s map[string]any) any {
+	p, _ := s["policy"].(map[string]any)
+	n, _ := p["network"].(map[string]any)
+	return n["mode"]
 }
 
 func (u UI) networkDisclosure(effective any) {

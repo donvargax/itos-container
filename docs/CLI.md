@@ -255,6 +255,20 @@ any name or the proxy digest needs new consent. Offline retains `offline-v1`; ch
 policy version also needs consent. Run's changed-approval diagnostic lists sorted
 JSON-pointer paths, never their values.
 
+When a home requests the OpenCode harness, each output shows it differently. `doctor --json`
+gains no field: `approval.effective` carries the home object with
+`harnesses: [{"name":"opencode","profile":"opencode-v1"}]`, `approval.differences` lists
+`/home/harnesses` in the sorted order, and `approval.fingerprint` is the new digest. JSON
+names the profile only; the environment is bound by the profile ID. Plain `doctor` and
+bare `approve`'s review print the shared home disclosure, which then adds the line
+`OpenCode harness: profile opencode-v1.`, one `NAME=value` line per profile environment
+entry in sorted order and the disclosure sentences (where OpenCode keeps its state, which
+configuration layers apply and which override the profile, that the image's other
+`OPENCODE_*` defaults stay in effect and can redirect or turn off configuration layers,
+who chooses the provider and model, which providers are reachable, and that no login is
+delivered). Plain `doctor` prints no difference lines; only the review adds
+`/home/harnesses: null -> [...]`.
+
 An unsandboxed agent on the host can fake a terminal; the offline fingerprint route
 also permits automation. Approval records what was approved, not who. See
 [security.md](security.md).
@@ -461,6 +475,22 @@ cleanup. Its diagnostic names the exact session and original state-root selectio
 An interrupted action retains its exact home ID and action as a retry, requiring
 fresh consent. Repeating a completed action cannot affect its successor. Missing
 storage is never recreated implicitly, and toggling policy does not undo deletion.
+
+### OpenCode harness request
+
+`home: {storage: volume, harnesses: [opencode]}` also binds the `opencode-v1` worker
+environment (see [CONFIG](CONFIG.md#opencode-harness-profile)). Ordinary `doctor` and bare
+`approve` show, before any consent, the harness, its profile, every environment name and
+value, that OpenCode's global configuration, data and state live in `/home/itos`, that the checkout's own OpenCode configuration applies, that managed configuration in the approved image overrides the profile, that the image's
+other `OPENCODE_*` defaults stay in effect and can redirect or turn off configuration
+layers, that the argv and the checkout choose the provider and model, that a provider is reachable only
+through the approved allowlist (for an offline policy, that none is) and that no OpenCode
+login is delivered. The sorted differences list `/home/harnesses`. Adding or removing the
+harness needs a fresh approval, and `run` reports the mismatch as `run.approval-changed`
+at `/home/harnesses` before any engine connection. Run adds no flag, model, prompt or
+wrapper: `opencode --standalone run --format json` is the person's own argv, and its JSON
+event lines reach stdout unchanged while run's diagnostics go to stderr. Run starts no
+OpenCode, claims no OpenCode compatibility and delivers no login.
 
 Local contracts cover these decisions. Native isolation and initialization remain
 subject to the CI engine scenarios at the pushed head.

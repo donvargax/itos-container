@@ -58,6 +58,9 @@ type Record struct {
 
 type Binding struct {
 	Home bool
+	// OpenCode freezes the approved opencode-v1 harness profile: the worker gets
+	// its environment values, which the boundary inspection then verifies.
+	OpenCode bool
 	// StagingKinds selects delivery independently of the approved grant metadata.
 	StagingKinds CredentialKinds
 	// Schema-1 credential grants have at most two known kinds. Fixed storage

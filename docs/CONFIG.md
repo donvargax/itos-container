@@ -688,3 +688,46 @@ Use `status --homes` to discover retained and obsolete generations and the
 terminal-consented `stop --home <id> --reset|--delete` operations to retire one.
 Native CI evidence is required before claiming filesystem isolation; see
 [decision 0030](decisions/0030-persistent-harness-home.md).
+
+### OpenCode harness profile
+
+`home` also accepts optional `harnesses`, a non-empty list of unique harness names.
+This version accepts only `opencode`, so `home: {storage: volume, harnesses: [opencode]}`
+is the one request; `home.storage` stays required. Null, a string or an object is
+`policy.type` at `/home/harnesses`, an empty list is `policy.home_harness` at
+`/home/harnesses`, and an unknown, differently spelled or repeated name is
+`policy.home_harness` at that item (`/home/harnesses/0`, `/home/harnesses/1`). Omitting
+`harnesses` keeps every earlier output and approval byte. File-only doctor reports
+`home: {storage: volume, harnesses: [opencode]}`.
+
+The effective approval's `home` object then holds
+`harnesses: [{"name": "opencode", "profile": "opencode-v1"}]`; profile names such as
+`offline-home-v1` stay as they were. Adding or removing the harness changes the
+fingerprint and needs a new approval, and run refuses a mismatch as
+`run.approval-changed` at `/home/harnesses` before any engine connection. An older
+binary's strict record decoder refuses a record that carries harnesses.
+
+The `opencode-v1` profile binds exactly this worker environment, set over any image
+default and verified in the created worker before it starts. A defect is
+`run.isolation-unverified`, exit 1, with no start; the unstarted worker is removed and
+the home retained.
+
+| Name | Value |
+| --- | --- |
+| `OPENCODE_CONFIG_CONTENT` | `{"share":"disabled"}` |
+| `OPENCODE_DISABLE_AUTOUPDATE` | `true` |
+| `OPENCODE_DISABLE_MODELS_FETCH` | `true` |
+
+The table follows the host smoke check of OpenCode v2.2.1
+([record](proof/slice-41-opencode-smoke.md)); another release needs its own check and a
+new profile ID. `OPENCODE_DISABLE_MODELS_FETCH` is the one value with an observed
+off/on effect; the other two are safeguards. The profile is a convenience, not an
+isolation property: the approved egress proxy stays the only route out, and the
+bundled local-provider probes of `127.0.0.1` are neither stopped nor claimed. Run never
+writes an OpenCode file into the home or adds a mount. OpenCode's global configuration, data
+and state live in `/home/itos`. The checkout's own `opencode.json` and `.opencode` configuration also apply (loaded before the profile, which overrides them where they conflict), and managed configuration in the approved image (`/etc/opencode`) loads after the profile and overrides it. The literal argv and the checkout's own
+`opencode.json` choose the provider and model. Host `OPENCODE_*`, `XDG_*` and `HOME`
+values never reach the worker, and no OpenCode login is delivered by this setting; the
+profile is no network or credential grant. Other `OPENCODE_*` defaults in the approved
+image are left alone, and any managed configuration the image holds is the person's
+approved, digest-pinned input.

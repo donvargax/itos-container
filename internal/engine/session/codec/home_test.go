@@ -2,9 +2,12 @@ package codec
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 
+	ap "github.com/donvargax/itos-container/internal/engine/approval/port"
+	af "github.com/donvargax/itos-container/internal/engine/approval/port/porttest"
 	"github.com/donvargax/itos-container/internal/engine/session/port"
 	f "github.com/donvargax/itos-container/internal/engine/session/port/porttest"
 )
@@ -181,6 +184,41 @@ func TestHomeCodecGenerationChainAndClaims(t *testing.T) {
 					change(&bad)
 					assert(bad, port.Invalid)
 				}
+			}
+		})
+	}
+}
+
+func TestFrozenBindingCarriesTheApprovedOpenCodeHarness(t *testing.T) {
+	for name, tc := range map[string]struct {
+		home     map[string]any
+		hasHome  bool
+		opencode bool
+	}{
+		"no home":              {nil, false, false},
+		"home without harness": {map[string]any{"storage": "volume"}, true, false},
+		"home with opencode":   {map[string]any{"storage": "volume", "harnesses": []any{map[string]any{"name": "opencode", "profile": "opencode-v1"}}}, true, true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			b, _, _ := f.Fixture()
+			settings := map[string]any{
+				"checkout": map[string]string{"root": b.Checkout.Root, "device": "1", "inode": "2", "git_device": "1", "git_inode": "3"},
+				"engine":   map[string]string{"endpoint": b.Endpoint, "id": b.EngineID},
+				"image":    map[string]string{"reference": b.ImageReference, "id": b.ImageID},
+			}
+			if tc.home != nil {
+				settings["home"] = tc.home
+			}
+			data, err := json.Marshal(settings)
+			if err != nil {
+				t.Fatal(err)
+			}
+			b.Frozen.Settings = string(data)
+			record := ap.Record{Candidate: ap.Candidate{Project: b.Frozen.Project, Fingerprint: b.Frozen.Fingerprint, Canonical: b.Frozen.Settings, UID: b.UID, GID: b.GID, Root: b.Checkout.Root}, Generation: b.Frozen.Generation}
+			approval := af.FrozenRecords{Values: map[ap.Frozen]ap.Record{b.Frozen: record}, Bytes: map[ap.Record]string{record: "{}"}}
+			got, failure := (JSON{Approval: approval}).Frozen(b.Frozen)
+			if failure != "" || got.Home != tc.hasHome || got.OpenCode != tc.opencode {
+				t.Fatalf("binding home %v opencode %v (%s), want %v and %v", got.Home, got.OpenCode, failure, tc.hasHome, tc.opencode)
 			}
 		})
 	}

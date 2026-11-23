@@ -89,4 +89,12 @@ var homeLocalCases = []homeLocalCase{
 	{"HOME-22", "an unreferenced owned home with management fault \"controller dies after removal\" and independent timely and replacement-volume controls"},
 	{"HOME-22", "an unreferenced owned home with management fault \"engine removal consumes remaining budget\" and independent timely and replacement-volume controls"},
 	{"HOME-22", "an unreferenced owned home with management fault \"engine reports volume in use\" and independent timely and replacement-volume controls"},
+	{"HOME-28", "an OpenCode launch fixture with conflicting image OPENCODE and XDG defaults, host OPENCODE XDG and HOME sentinels, host-home OpenCode configuration and login sentinels and two sequential runs of \"opencode --standalone run --format json --model fake/fake-model say-ok\""},
+	{"HOME-29", "an OpenCode launch fixture whose worker inspection has \"OPENCODE_CONFIG_CONTENT left at the image's conflicting value\" and an independent correct OpenCode control"},
+	{"HOME-29", "an OpenCode launch fixture whose worker inspection has \"OPENCODE_CONFIG_CONTENT missing\" and an independent correct OpenCode control"},
+	{"HOME-29", "an OpenCode launch fixture whose worker inspection has \"OPENCODE_CONFIG_CONTENT set to {\"share\":\"auto\"}\" and an independent correct OpenCode control"},
+	{"HOME-29", "an OpenCode launch fixture whose worker inspection has \"OPENCODE_DISABLE_MODELS_FETCH missing\" and an independent correct OpenCode control"},
+	{"HOME-29", "an OpenCode launch fixture whose worker inspection has \"OPENCODE_DISABLE_MODELS_FETCH left at the image's false\" and an independent correct OpenCode control"},
+	{"HOME-29", "an OpenCode launch fixture whose worker inspection has \"OPENCODE_DISABLE_AUTOUPDATE set to false\" and an independent correct OpenCode control"},
+	{"HOME-29", "an OpenCode launch fixture whose worker inspection has \"OPENCODE_DISABLE_AUTOUPDATE missing\" and an independent correct OpenCode control"},
 }

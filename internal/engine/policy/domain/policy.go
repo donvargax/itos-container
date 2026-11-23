@@ -2,6 +2,7 @@
 package domain
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/donvargax/itos-container/internal/engine/policy/port"
@@ -88,7 +89,7 @@ func inspectHome(value port.Value, version int) (*port.Home, []port.Issue) {
 	if value.Kind != port.Object {
 		return nil, []port.Issue{{Kind: port.Type, Path: []string{"home"}, Version: version}}
 	}
-	issues := unknown(value, []string{"home"}, version, "storage")
+	issues := unknown(value, []string{"home"}, version, "storage", "harnesses")
 	storage, exists := value.Fields["storage"]
 	kind := port.None
 	switch {
@@ -102,10 +103,47 @@ func inspectHome(value port.Value, version int) (*port.Home, []port.Issue) {
 	if kind != port.None {
 		issues = append(issues, port.Issue{Kind: kind, Path: []string{"home", "storage"}, Version: version})
 	}
+	harnesses, found := inspectHarnesses(value, version)
+	issues = append(issues, found...)
 	if len(issues) != 0 {
 		return nil, issues
 	}
-	return &port.Home{Storage: "volume"}, nil
+	return &port.Home{Storage: "volume", Harnesses: harnesses}, nil
+}
+
+// inspectHarnesses reads the optional home.harnesses list: a non-empty list of
+// unique names, of which only "opencode" is accepted. A missing member requests
+// none. With one accepted name the list order is already the canonical sorted order.
+func inspectHarnesses(home port.Value, version int) ([]string, []port.Issue) {
+	list, exists := home.Fields["harnesses"]
+	if !exists {
+		return nil, nil
+	}
+	issue := func(kind port.Failure, path ...string) port.Issue {
+		return port.Issue{Kind: kind, Path: append([]string{"home", "harnesses"}, path...), Version: version}
+	}
+	switch {
+	case list.Kind != port.Array:
+		return nil, []port.Issue{issue(port.Type)}
+	case len(list.Items) == 0:
+		return nil, []port.Issue{issue(port.HomeHarness)}
+	}
+	var names []string
+	var issues []port.Issue
+	seen := map[string]bool{}
+	for i, item := range list.Items {
+		index := strconv.Itoa(i)
+		switch {
+		case item.Kind != port.String:
+			issues = append(issues, issue(port.Type, index))
+		case item.Text != "opencode" || seen[item.Text]:
+			issues = append(issues, issue(port.HomeHarness, index))
+		default:
+			seen[item.Text] = true
+			names = append(names, item.Text)
+		}
+	}
+	return names, issues
 }
 
 func refused(kind port.Failure, path ...string) port.Result {

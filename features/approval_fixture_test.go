@@ -29,6 +29,7 @@ type approvalWorld struct {
 	secondRoot, firstRecord                  string
 	firstBytes                               []byte
 	literal                                  string
+	home                                     map[string]any
 }
 
 func approvalJSON(value any) []byte { b, _ := json.Marshal(value); return b }
@@ -110,6 +111,11 @@ func (w *world) approvalOracle() error {
 	}
 	if w.credentialApproval != nil {
 		w.credentialApprovalSettings()
+	}
+	if a.home != nil {
+		// The harness-home profiles name the home object in the profile.
+		a.settings["profile"] = strings.TrimSuffix(a.settings["profile"].(string), "-v1") + "-home-v1"
+		a.settings["home"] = approvalClone(map[string]any{"home": a.home})["home"]
 	}
 	a.fingerprint = "sha256:" + approvalHash(a.settings)
 	a.project = approvalHash(map[string]any{"schema": 1, "uid": a.uid, "checkout": checkout})
