@@ -450,7 +450,7 @@ items:
     title: "Architecture drift: reconcile session and runtime evidence status"
     phase: 1
     owner: donvargax
-    status: doing
+    status: todo
     depends_on: []
     kind: task
   - id: slice-15
