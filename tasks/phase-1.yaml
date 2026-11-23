@@ -9572,3 +9572,17 @@
     commits. Broken down from slice-35.
   done_when:
     - run: A hermetic local Go test beside features/engine_fixture_test.go runs `tools/bin/engine-fixture cleanup` with a recording fake docker on a PATH that reaches no real engine. In the failed-after-tag and failed-after-cold-pull states, it removes exactly the recorded Codex references after inspections whose Id matches codex.build.iid, and it leaves a decoy reference, busybox and the registry. In the mismatched-Id state it fails without removing anything. A static order guard in the same test rejects each negative-control edit that moves a cleanup record after the step it protects or writes the handoff before cold-pull validation.
+- id: T-82
+  type: build
+  title: Bump go.opentelemetry.io/otel to v1.47.0 for GO-2026-6974
+  why: >
+    govulncheck now reports GO-2026-6974 in go.opentelemetry.io/otel/trace v1.35.0, fixed in
+    v1.47.0. The module is indirect, through the Docker client, but govulncheck finds it reachable
+    from internal/slices/count/input/input.go:33 and internal/engine/session/docker/run.go:294, so
+    the vulnerability gate refuses every commit and push until it moves. The work raises
+    go.opentelemetry.io/otel, otel/trace and otel/metric to v1.47.0, and otelhttp and the other otel
+    modules to their matching releases where the minimum version selection needs them, then runs go
+    mod tidy. It changes no code; the gate and the dependency's users stay as they are.
+  done_when:
+    - run: go tool govulncheck -test ./... && grep -q '^	go.opentelemetry.io/otel/trace v1.47.0 // indirect$' go.mod && go mod tidy -diff
+      timeout: 900

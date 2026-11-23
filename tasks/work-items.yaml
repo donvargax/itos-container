@@ -2850,3 +2850,10 @@ items:
       how a run's approved grant names a secret there instead of a path, and how readiness, approval
       and the frozen grant keep binding a source without reading its contents
       (docs/decisions/0029-credential-approval.md:11).
+  - id: T-82
+    title: Bump go.opentelemetry.io/otel to v1.47.0 for GO-2026-6974
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
