@@ -2312,8 +2312,8 @@ items:
   - id: slice-42
     title: Report the checkout socket backend in doctor
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [T-64]
     kind: slice
     why: >
