@@ -2759,14 +2759,15 @@ items:
       CODEXHOME-10, using the existing shared fixture image only. The spec states that the
       implementer may commit freely in its workspace and that the host makes the landing commits.
       Broken down from slice-35.
-  - id: codex-home-readback-contract
+  - id: slice-57
     title: Incomplete or unverifiable seeding never authorizes a worker start
     phase: 1
     owner: null
     status: todo
     depends_on: [slice-55, slice-56]
-    kind: idea
+    kind: slice
     why: >
+      Was codex-home-readback-contract.
       This child owns the classification of readback and publication faults, from the current
       CODEXHOME-06 and CODEXHOME-07. That covers partial, lost or failed publication; truncated,
       missing or extra end-of-archive blocks; a wrong name, an extra entry, an oversize stream and
