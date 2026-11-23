@@ -9539,3 +9539,17 @@
     slice-12's budgets, cancellation and loss scope so future briefs follow the settled order.
   done_when:
     - run: "! grep -nE '^\\| slice-(9|11|12|13|14) [^|]*(planned|in progress)|slice-14/12 runtime proof remains absent' docs/architecture/arc42.md && grep -q 'ID-LIFECYCLE-15' features/recovery.feature && grep -q 'slice-15' features/recovery.feature"
+- id: T-80
+  type: docs
+  title: The checkout mount is bound to the inode that passed validation
+  why: >
+    Isolation, this milestone. A read-only security audit of main at 7236d68 (Codex, 2026-11-06),
+    static, no Docker run; confirm with a scenario before building. Docker receives the checkout as
+    a pathname (internal/engine/session/docker/run.go:68; registered_run.go:179), so after the final
+    identity checks and before ContainerStart a worker whose checkout contains another approved
+    checkout can rename the inner one and put a symlink to the host home in its place; the second
+    worker then mounts an unapproved host directory. Fix: hand Docker an inode-bound source through
+    a protected mount anchor held through startup and recovery, and refuse overlapping worker
+    checkouts.
+  done_when:
+    - run: grep -q '7236d68' docs/decisions/0020-descriptor-backed-checkout-anchor.md && grep -q 'p2-admission-nested-checkouts-across-state-roots' docs/decisions/0020-descriptor-backed-checkout-anchor.md && go test ./internal/engine/session/docker ./internal/engine/session/port/... -run 'Anchor'
