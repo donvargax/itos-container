@@ -598,7 +598,7 @@ items:
     title: Run refuses checkouts exposing any project's control state
     phase: 1
     owner: donvargax
-    status: doing
+    status: todo
     depends_on: [slice-21]
     kind: slice
     why: >
@@ -908,7 +908,7 @@ items:
     title: Refusals are logged, a proxy failure stops the run, and cleanup removes the proxy and network
     phase: 1
     owner: donvargax
-    status: doing
+    status: todo
     depends_on: [slice-27]
     kind: slice
     why: >
@@ -2060,7 +2060,7 @@ items:
     title: Execute literal argv within a running owned session
     phase: 1
     owner: donvargax
-    status: doing
+    status: todo
     depends_on: []
     kind: slice
     why: >
@@ -2242,7 +2242,7 @@ items:
     title: Deliver an approved OpenCode login to one container run
     phase: 1
     owner: donvargax
-    status: doing
+    status: todo
     depends_on: [T-48, slice-34, slice-30]
     kind: slice
     why: >
