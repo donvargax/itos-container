@@ -367,3 +367,4 @@ questions:
     item: "p3-registration-before-intent"
     question: "May the next control-lock holder delete orphaned temporaries in protected host state automatically: the .intent-<nonce>.tmp a killed publisher leaves, and the copy temporaries that decision 0022 says nothing sweeps (docs/decisions/0022-egress-proxy.md:824)?"
     answer: "The person, 2026-11-23: yes. Orphaned temporaries in protected host state, the .intent-<nonce>.tmp a killed publisher leaves and the copy temporaries decision 0022 says nothing sweeps, may be deleted automatically by the next control-lock holder on durable evidence. How long completed sessions' real state is kept stays with p3-session-state-retention."
+    decision: 34
