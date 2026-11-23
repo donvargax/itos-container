@@ -3,6 +3,7 @@ package features
 import "github.com/cucumber/godog"
 
 func (w *world) socketSteps(sc *godog.ScenarioContext) {
+	w.socketBackendDoctorSteps(sc)
 	sc.Step(`^a CI socket checkout with a live "([^"]*)" host socket at "([^"]*)"$`, func(operation, path string) error {
 		return w.socketFixtureTargets("existing", []socketTarget{{Name: "startup", Op: operation, Path: path}})
 	})

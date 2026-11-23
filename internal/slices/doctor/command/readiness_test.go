@@ -93,7 +93,7 @@ func TestPlainReadinessRetainsRequestedCredentialsOnFailure(t *testing.T) {
 		`credentials: claude-token source="/vault/claude" target="/run/itos-container/credentials/claude-token"`,
 		`credentials: github-token source="/vault/github" target="/run/itos-container/credentials/github-token"`,
 	}}
-	code := present(&cli.UI{Stdout: &stdout, Stderr: &stderr}, result, false, &report, nil)
+	code := present(&cli.UI{Stdout: &stdout, Stderr: &stderr}, result, false, &report, nil, nil)
 	if code != 3 {
 		t.Fatalf("missing credential returned exit %d, want 3", code)
 	}
