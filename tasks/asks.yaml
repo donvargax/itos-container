@@ -350,6 +350,7 @@ questions:
   - id: q-87
     item: "slice-28"
     question: "slice-28: the implementer (attempt 9) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-28-implementer-9.result.json"
+    answer: "The person, 2026-11-22: status and stop both exit 75 with recovery.temporary when the refusal log survives but its report, egress-refusals.json, is missing."
   - id: q-88
     item: "slice-42"
     question: "slice-42: the drafter (attempt 24) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-42-drafter-24.result.json"
@@ -357,6 +358,7 @@ questions:
   - id: q-89
     item: "slice-43"
     question: "slice-43: the drafter (attempt 1) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-43-drafter-1.result.json"
+    answer: "Question 2, the person, 2026-11-22: when there is no checkout socket backend, only the person at a real terminal may consent to 'late host sockets reachable'. Every --fingerprint approval of such a candidate is refused, as for network and credential grants (the draft's option A). Question 1: ten scenario IDs were claimed outside the sandbox on 2026-11-22 with itos tests next-id scenario ID-APPROVAL --count 10: @ID-APPROVAL-61 to @ID-APPROVAL-70, one after @slice-43 on each of the ten @wip @slice-43 tag lines, in file order."
   - id: q-90
     item: "p2-credential-brokering"
     question: "For p2-credential-brokering: how a sandboxed agent gets credentials it cannot keep after the run (design: docs/plans/credential-brokering.md).\n\nWhich credential direction should itos-container take?\n\nRecommended, option E. Keep passing model credentials in (the Claude setup-token, and a Codex API key as the default instead of the shared read-write ChatGPT login), and mint a one-hour GitHub App installation token per run, limited to the approved repository and revoked at teardown. Build no TLS interception, and defer a base-URL broker.\n\nOption A keeps passing everything in as chartered, adding only least-scope rules such as a one-repository fine-grained token with an expiry.\n\nOption B brokers with TLS interception and a planted CA. It first moves the proxy to its own repository, and it cannot carry a Claude subscription under Anthropic's terms.\n\nOption C brokers API keys through a plain-HTTP base URL now, as a component separate from the egress proxy, leaving gh and the Claude subscription on passing in.\n\nThe design's Questions section lists seven narrower questions (Claude login, Codex login, GitHub, runs over an hour, where a base-URL broker lives, interception, microVMs), each with its recommendation."
