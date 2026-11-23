@@ -2817,3 +2817,18 @@ items:
       seeding for the seeded user layer and on the image task for the pinned binary. The spec states
       that the implementer may commit freely in its workspace and that the host makes the landing
       commits. Broken down from slice-35.
+  - id: p3-microvm-libkrun-reference
+    title: When microVMs start, read Discobox's libkrun provider before designing the engine adapter
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      MicroVMs come later, on several cloud providers (docs/charter.md:157). Discobox
+      (github.com/discobox-ai/discobox at 97b2281, Apache-2.0, read 2026-11-23) runs boxes on
+      libkrun microVMs on Linux with /dev/kvm and on vz on macOS; those, not its Docker provider
+      (privileged, beside the host Docker socket), are its real isolation boundary. When that line
+      starts, read server/providers/libkrun/ and server/providers/DESIGN.md first, and decide
+      whether a microVM adapter goes behind this project's engine port. Not now: no item in the
+      queue changes.
