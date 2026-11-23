@@ -1652,6 +1652,10 @@ items:
       scope here and no scenario reaches a real host. It reuses the token path of the Claude slice.
       Whether the GitHub token shares a grant with Claude's is not assumed, since each is its own
       approved grant. Broken down from p1-credentials-passed-in.
+    deferred: >
+      GitHub pushes stay on the host (the person, 2026-11-17; docs/decisions/STANDING.md:30): the
+      worker holds no GitHub token, so nothing needs this delivery yet. Resume when an agent needs
+      GitHub from inside the box.
   - id: T-51
     title: "A disk adapter for the RefusalLog port streams the proxy's log into egress-refusals.jsonl: private, fsynced, renamed"
     phase: 1
