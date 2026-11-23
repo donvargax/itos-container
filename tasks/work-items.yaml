@@ -1463,6 +1463,15 @@ items:
       provider can use, since those share no filesystem with the host. Costs: sync time on large
       repositories, no live view in the host editor, and divergence when the person edits the
       checkout meanwhile (commits merge; uncommitted edits don't).
+
+      Discobox (github.com/discobox-ai/discobox at 97b2281, Apache-2.0) builds this mode, read
+      2026-11-23. Its box clones from a read-only origin the pool serves over authenticated git HTTP
+      at a reserved host name, with a day-long token scoped to fetch and bound to one sandbox;
+      uncommitted changes come along only on request (--include-dirty), the agent commits inside the
+      box, and the host fetches the commits back. That fits the rule that pushes stay on the host,
+      and would let decisions 0013, 0019 and 0020 shrink; it changes the contract's
+      checkout-is-the-only-mount line, so it stays the person's call. Read docs/adr/26-10-08-561 in
+      that repository first.
   - id: p1-engine-timing-notice-every-run
     title: Every engine job run publishes its slowest scenario timings and the runner's identity as a ::notice annotation, green runs included
     phase: 1
@@ -1643,6 +1652,10 @@ items:
       scope here and no scenario reaches a real host. It reuses the token path of the Claude slice.
       Whether the GitHub token shares a grant with Claude's is not assumed, since each is its own
       approved grant. Broken down from p1-credentials-passed-in.
+    deferred: >
+      GitHub pushes stay on the host (the person, 2026-11-17; docs/decisions/STANDING.md:30): the
+      worker holds no GitHub token, so nothing needs this delivery yet. Resume when an agent needs
+      GitHub from inside the box.
   - id: T-51
     title: "A disk adapter for the RefusalLog port streams the proxy's log into egress-refusals.jsonl: private, fsynced, renamed"
     phase: 1
@@ -2469,6 +2482,16 @@ items:
       The person corrected the Codex part of q-90 on 2026-11-20: Codex defaults to a sandbox-only
       ChatGPT login in the harness home (device login, never the host auth.json), with an API key
       only as the fallback when a weekly limit is reached. The design is amended to match.
+
+      Discobox's design (github.com/discobox-ai/discobox at 97b2281, proxy/DESIGN.md, read
+      2026-11-23) is the reference for a sentinel-swap broker, built as a separate project because
+      it holds a CA and intercepts TLS: the box holds only sentinels shaped like the real keys; the
+      proxy swaps a sentinel for the real value only on an authorized route, matching the exact set,
+      never a prefix; every request is authorized before any secret is decrypted; values are
+      redacted from the audit; an outage answers 503 and never forwards the real value; grants
+      expire. Unlike slice-31's staged file, the real token never enters the box. Routes finer than
+      a host (method, path, tool) would sit beside the rule against exact-match allowlists of agent
+      actions, so that is for the person to weigh.
     deferred: >
       Deferred until remote sandboxes (microVMs on cloud providers) exist, by the person's direction
       of 2026-11-20 (q-90). Locally run sandboxes share the host's own logins, so the local case
@@ -2798,3 +2821,32 @@ items:
       seeding for the seeded user layer and on the image task for the pinned binary. The spec states
       that the implementer may commit freely in its workspace and that the host makes the landing
       commits. Broken down from slice-35.
+  - id: p3-microvm-libkrun-reference
+    title: When microVMs start, read Discobox's libkrun provider before designing the engine adapter
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      MicroVMs come later, on several cloud providers (docs/charter.md:157). Discobox
+      (github.com/discobox-ai/discobox at 97b2281, Apache-2.0, read 2026-11-23) runs boxes on
+      libkrun microVMs on Linux with /dev/kvm and on vz on macOS; those, not its Docker provider
+      (privileged, beside the host Docker socket), are its real isolation boundary. When that line
+      starts, read server/providers/libkrun/ and server/providers/DESIGN.md first, and decide
+      whether a microVM adapter goes behind this project's engine port. Not now: no item in the
+      queue changes.
+  - id: p2-credentials-manager-integration
+    title: Read credential sources from a credentials manager instead of one-secret files
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The person, 2026-11-23 (decision 0035): a credentials-manager integration is needed but not
+      started. Until it exists, credential sources are files, one secret per file, mode 0600, in a
+      directory of mode 0700, so nothing waits on this. When it starts, it decides which manager,
+      how a run's approved grant names a secret there instead of a path, and how readiness, approval
+      and the frozen grant keep binding a source without reading its contents
+      (docs/decisions/0029-credential-approval.md:11).
