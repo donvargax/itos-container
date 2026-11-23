@@ -9570,8 +9570,148 @@
     stay unchanged, and no product code changes, so it has no product prerequisite. The spec states
     that the implementer may commit freely in its workspace and that the host makes the landing
     commits. Broken down from slice-35.
+
+    The pins, measured by the drafter on 2026-11-23. The release API
+    (api.github.com/repos/openai/codex/releases/tags/rust-v0.167.0) publishes the asset's digest as
+    sha256:9d64836106d5b374e90ee4454c7ebcde7ca7106558bd7e41a34b9f26ebda251a, size 122587028 bytes.
+    A download from github.com hashed to the same value. The gzip tar holds exactly one member, a
+    regular file named codex-x86_64-unknown-linux-musl (mode 0755, 320575976 bytes), whose SHA-256
+    is cdcb45aaa01d0f14e298985e09465aebccd47f64ecd298aea44814af7b62bbda. So the cross-check is done,
+    and the implementer needs no network. features/testdata/codex-fixture/SHA256SUMS holds exactly
+    two lines in sha256sum's format, each a hash, two spaces and a name, and nothing else. Line 1
+    is the archive hash above with codex-x86_64-unknown-linux-musl.tar.gz. Line 2 is the member
+    hash above with codex-x86_64-unknown-linux-musl. The member name is part of the pin. Any other
+    name, a second member, or either hash differing fails prepare, and nobody judges whether a
+    difference is legitimate. T-81 never executes the binary; slice-58 owns `codex --version`.
+
+    Preparation. A new function codex_fixture runs inside prepare. It is called once, with `|| fail`,
+    after `remove_container smoke || fail` and before `remove_container registry || fail`, so the
+    registry is still up and the existing warm-up order guards still hold. In order, it does the
+    following. Each step is guarded with its own `|| fail`, as the rest of the driver does, because
+    set -e does not apply inside a function called with `||`. (1) It downloads
+    https://github.com/openai/codex/releases/download/rust-v0.167.0/codex-x86_64-unknown-linux-musl.tar.gz
+    with `curl --fail --location --silent --show-error --proto '=https' --proto-redir '=https'
+    --max-time 60` into a new directory under $state. (2) It hashes the archive with `sha256sum
+    --binary` on stdin and compares it with line 1, before any extraction. (3) It requires `tar -tzf`
+    to list exactly the one pinned name. It writes that member alone to stdout with `tar -xzOf` into
+    a new, otherwise empty build context as `codex`, compares its hash with line 2, and sets it to
+    0555. (4) It writes codex.repository
+    (`127.0.0.1:<port>/itos-fixture-<run>-<attempt>-codex`) and codex.tag (`<repository>:fixture`).
+    (5) It builds features/testdata/codex-fixture/Dockerfile, supplied with `--file -` on stdin,
+    against that context, through d with `--platform linux/amd64 --pull=false --iidfile
+    "$state/codex.build.iid"`, the FIXTURE_UID and FIXTURE_GID build arguments and `--tag
+    "$codex_tag"`. It requires the ID to be digest_valid and to differ from base.iid and
+    registry.iid. (6) It pushes the tag. It saves the built ID to its own tar and takes the config
+    digest through daemon_config_path and daemon_config_digest. It fetches the registry manifest for
+    the codex repository's `fixture` tag as T-20 does, and sets `codex_digest=$(validate_manifest
+    …)`. (7) It writes codex.digest, which holds the bare `sha256:<64 hex>`. (8) It runs
+    remove_codex_ref tag, then remove_codex_ref digest, then requires exact absence of
+    `<repository>@<digest>` through inspect_image. (9) It cold-pulls that reference with `d image
+    pull --platform linux/amd64`. It inspects the reference into $state/codex-image.json and passes
+    it to validate_cached with the built ID and the runner's UID and GID: that is the cold-pull
+    validation. Every Codex file is its own file under $state, never cached-image.json, which the
+    product warm-up reads. The recipe is exactly: `FROM <the busybox pin>`, `ARG FIXTURE_UID`, `ARG
+    FIXTURE_GID`, `COPY --chown=0:0 codex /usr/local/bin/codex`, `USER
+    ${FIXTURE_UID}:${FIXTURE_GID}`, `ENTRYPOINT []`, `CMD ["/bin/true"]`. The classic builder keeps
+    the context file's 0555 mode. A second function, codex_handoff, is called once, with `|| fail`,
+    after the product warm-up call and before the single `>>"$GITHUB_OUTPUT"` append. It rebuilds the
+    reference from the records and inspects it into $state/codex-final-image.json. It validates that
+    inspection with validate_cached while the registry is gone. Only then does it write
+    codex.reference (`<repository>@<digest>`), and then codex.iid (the built ID). These are the only
+    two writes of the handoff anywhere in the driver. slice-58 reads them from
+    $RUNNER_TEMP/T-20-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-engine-fixture/. New names the cleanup child
+    needs are exported on their own `export` line, leaving T-20's pinned export line as it is. The
+    179-second prepare bound, the four outputs and fixtureHelperRequirements stay unchanged. If CI
+    shows prepare exceeding its bound, stop and report; never raise it, because the 4-minute step
+    timeout sits in .github/workflows, outside this item. All four engine shards run prepare, so
+    each downloads and builds the image. That cost is accepted.
+
+    Cleanup. A new function, remove_codex_ref tag|digest, runs from cleanup as `(remove_codex_ref
+    tag) || failed=1` and `(remove_codex_ref digest) || failed=1`, after `(remove_image_ref
+    reference) || failed=1`. It returns 0 when its record (codex.tag or codex.digest) is absent.
+    Otherwise it reads codex.repository and requires it to match
+    `^127\.0\.0\.1:[0-9]{1,5}/itos-fixture-<run>-<attempt>-codex$`. It requires codex.tag to equal
+    `<repository>:fixture`, or codex.digest to be digest_valid, and forms the reference from them. It
+    inspects the reference with inspect_image. If the image is present, it reads codex.build.iid,
+    requires it to be digest_valid, and requires the inspected `.[0].Id` to equal it and to differ
+    from base.iid and registry.iid. Then it runs `d image rm` on that reference only and verifies
+    exact absence. On any mismatch, or on an unreadable record, it fails with a bounded
+    fixture_value diagnostic before any removal. Exact absence means there is nothing to do; any
+    other inspection failure fails. It never prunes, and never removes by image ID, by repository or
+    by a reference it did not record. The state directory is kept, as now.
+
+    The test, answering the cold reader's gaps. The test is TestEngineFixtureCodexCleanup in the new
+    file features/engine_fixture_codex_linux_test.go, kept under the 600-line limit;
+    engine_fixture_test.go is not grown. The _linux suffix exists because the driver needs GNU
+    coreutils (readlink -e, timeout, stat -c), which the manual macOS and Windows jobs lack. The
+    approval kernel helper's _linux test is the precedent. The test builds a private PATH directory.
+    It holds symlinks to the host's bash, env, timeout, jq, sha256sum, readlink, id, mkdir, cat and
+    stat, found with exec.LookPath before the environment is replaced. It also holds four scripts the
+    test writes: docker, curl, tar and uname. Nothing else is on PATH, so no real docker is
+    reachable. The child environment is built from nothing, not from os.Environ(). It holds that
+    PATH, HOME, RUNNER_TEMP and GITHUB_WORKSPACE (each a fresh t.TempDir, so the checkout is never
+    the workspace), CI=true, GITHUB_ACTIONS=true, GITHUB_RUN_ID=4242, GITHUB_RUN_ATTEMPT=1 and
+    LC_ALL=C, and no DOCKER_* variable. It runs `<bash> <absolute tools/bin/engine-fixture>
+    cleanup` under a 40-second context. The CI and Linux amd64 guards stay in the driver unchanged,
+    and fixtureHelperRequirements still pins their text. They are satisfied only inside this child,
+    by the variables above and by the uname stub, which prints Linux for -s and x86_64 for -m. So
+    the test runs the same on any Linux host, arm64 included, and never skips. A missing host tool
+    fails the test and names the tool. In the subtest host_guard_still_refuses, the stub prints
+    aarch64 instead. The driver must then exit nonzero with `requires an actual Linux amd64 host`,
+    with zero docker calls, which shows that the stub does not hide the guard. The docker stub
+    answers from a store of reference files in its own directory, a path baked into the script.
+    It ignores --config and --host and appends each call's arguments to a log. For `image inspect
+    R`, it prints `[{"Id":"<id>"}]` and exits 0, or it writes `Error response from daemon: No such
+    image: R` and exits 1. For `image rm R`, it deletes the reference. Any other call is logged and
+    exits 99. The curl and tar stubs log and exit 99. The test writes the state directory itself
+    ($RUNNER_TEMP/T-20-4242-1-engine-fixture, 0700, files 0600). It holds owner, base.iid,
+    registry.iid, codex.repository (127.0.0.1:5000/itos-fixture-4242-1-codex), codex.tag and
+    codex.build.iid=C. Before each run, the store holds the busybox pin (Id = base.iid), the
+    registry pin (Id = registry.iid), and a decoy `<repository>:decoy` whose Id is also C, so only
+    the record protects it. The subtests are these. failed_after_tag: the store adds the tag with
+    Id C. failed_after_cold_pull: codex.digest=D is added, the store holds `<repository>@D` with Id
+    C, and the tag is absent. In both, the driver exits 0 and prints `engine-fixture cleanup: PASS`.
+    The only `image rm` calls name exactly the recorded references present. Each one is preceded by
+    an `image inspect` of the same reference that answered Id C, and followed by one that answered
+    absent. The decoy, busybox and registry entries remain, and curl, tar and every other docker
+    call stay unused. mismatched_id: as failed_after_tag, but the tag answers Id X, not C. The
+    driver exits nonzero, its stderr names the identity mismatch, and the log holds no `image rm`.
+    The subtest order_guard is in the same test. It reads the real driver and runs
+    codexFixtureOrderIssues over it. That function uses fixtureFunction and fixtureWarmupLines and
+    requires the following. In codex_fixture, the codex.repository and codex.tag writes come before
+    the `d image build` line. That line carries `--iidfile "$state/codex.build.iid"`. The
+    codex.digest write follows `codex_digest=$(validate_manifest` and comes before both
+    remove_codex_ref calls and the cold pull. The validate_cached of codex-image.json follows the
+    cold pull. In prepare, codex_fixture lies between the two removals named above, and
+    codex_handoff lies after the product warm-up and before the output append, each once. In
+    codex_handoff, its validate_cached comes before both handoff writes, and the driver holds no
+    other handoff write. Both remove_codex_ref lines are present in cleanup. The unedited driver
+    must give no issue. Each of these edits must change the text and give at least one issue:
+    codex.repository moved after the build; codex.tag moved after the build; codex.digest moved
+    after `remove_codex_ref tag`; codex.digest moved after the cold pull; the --iidfile path
+    renamed; a codex.reference write moved into codex_fixture before the cold pull; the codex.iid
+    write moved before codex_handoff's validate_cached; and the codex_handoff call moved before the
+    codex_fixture call. The guard and its edits sit inside TestEngineFixtureCodexCleanup, so the
+    check below runs them.
+
+    Documents and commits. features/testdata/codex-fixture/README.md records the asset URL, the API
+    digest, the measured sizes and hashes, and Codex's Apache-2.0 licence
+    (https://github.com/openai/codex/blob/rust-v0.167.0/LICENSE). It also says the image is
+    published only to the disposable runner-local registry. features/README.md gains one link to it
+    and changes one sentence to "Agents never invoke these modes against an engine or spoof CI,
+    outside the hermetic T-81 cleanup test, whose child sees only a recording fake docker." doc-caps
+    must still pass under the 49152-byte cap; shorten the addition rather than raise the cap. The
+    first commit is a `test` commit holding only the new test file. Against today's driver, it fails
+    at failed_after_tag's removal assertion (exit 0, no `image rm`), at mismatched_id's expected
+    failure, and at order_guard's baseline (no codex_fixture). The work commit adds the driver
+    functions, the recipe, SHA256SUMS and the two READMEs, and changes nothing under
+    .github/workflows, cmd or internal, so there is no proof.code range. Real-engine evidence is the
+    engine shards' prepare and cleanup steps in CI. Nothing here claims that evidence locally, and
+    agents never run prepare. The implementer may commit freely in its workspace. The host makes
+    the landing commits and handles itos, submission, publication and review. The check fails
+    today: `go test` reports no tests to run and prints no PASS line for the test.
   done_when:
-    - run: A hermetic local Go test beside features/engine_fixture_test.go runs `tools/bin/engine-fixture cleanup` with a recording fake docker on a PATH that reaches no real engine. In the failed-after-tag and failed-after-cold-pull states, it removes exactly the recorded Codex references after inspections whose Id matches codex.build.iid, and it leaves a decoy reference, busybox and the registry. In the mismatched-Id state it fails without removing anything. A static order guard in the same test rejects each negative-control edit that moves a cleanup record after the step it protects or writes the handoff before cold-pull validation.
+    - run: 'out=$(go test ./features -run "^TestEngineFixtureCodexCleanup$" -v 2>&1); status=$?; printf "%s\n" "$out"; test "$status" -eq 0 && printf "%s\n" "$out" | grep -q "^--- PASS: TestEngineFixtureCodexCleanup " && ! printf "%s\n" "$out" | grep -q -- "--- SKIP"'
 - id: T-82
   type: build
   title: Bump go.opentelemetry.io/otel to v1.47.0 for GO-2026-6974
