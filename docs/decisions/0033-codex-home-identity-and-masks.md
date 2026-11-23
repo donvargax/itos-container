@@ -55,5 +55,5 @@ A scenario must prove two things together:
 - It runs with the masks in place.
 
 A real engine is needed for that, so the scenario runs in CI and never on the loop's host
-(`docs/decisions/STANDING.md:72`). Like every scenario, it uses the fake endpoint and no real
+(`docs/decisions/STANDING.md:78`). Like every scenario, it uses the fake endpoint and no real
 login (`docs/charter.md:101`).

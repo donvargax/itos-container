@@ -13,10 +13,16 @@ coordinator made. A change to a line is the person's, and it replaces the line.
   logins, API keys and credential brokering are for remote sandboxes only; invent no threat
   model for the local case. 2026-11-20. `docs/charter.md:143`
 - Codex uses the ChatGPT subscription, not an API key. 2026-11-20. `docs/charter.md:148`
-- Claude's login is the host's `~/.claude/.credentials.json`, mounted read-write as one file;
-  Codex's is the host's Codex home mounted read-write as a directory, with the worker's
-  `auth.json` a symlink into it, because Codex renames a new copy over the file. 2026-11-20.
-  `docs/charter.md:72`
+- Container runs may use real credentials, one form per provider: a long-lived subscription
+  token where the provider issues one, else its auth file mounted, shared with the host and
+  refreshed in place. Claude gets a `claude setup-token` token, read from
+  `CLAUDE_CODE_OAUTH_TOKEN`, as slice-31's approved token. Codex, with no subscription token,
+  gets the host's Codex home mounted read-write as a directory, with the worker's `auth.json`
+  a symlink into it. itos-container is told which credential each harness gets. 2026-11-23.
+  `docs/decisions/0035-real-credentials-for-container-runs-a-subscription-token-where-the-provider-issues-one-else-its-auth-file-shared.md:22`
+- Credential sources are files, one secret per file, mode 0600, in a 0700 directory, until a
+  credentials-manager integration exists; nothing waits on it. 2026-11-23.
+  `docs/decisions/0035-real-credentials-for-container-runs-a-subscription-token-where-the-provider-issues-one-else-its-auth-file-shared.md:22`
 - The Codex grant binds the mounted directory's and its lock's device and inode; a changed
   identity at the same path needs the person's consent again. This reopens 0029's rotation
   and no-inode lines for the Codex home only. 2026-11-21.
