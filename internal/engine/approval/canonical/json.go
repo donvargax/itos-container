@@ -80,12 +80,23 @@ type settings struct {
 	Credentials []port.CredentialGrant `json:"credentials,omitempty"`
 }
 type home struct {
-	Storage   string    `json:"storage"`
-	Target    string    `json:"target"`
-	Lifetime  string    `json:"lifetime"`
-	Mode      string    `json:"mode"`
-	Harnesses []harness `json:"harnesses,omitempty"`
+	Storage   string        `json:"storage"`
+	Target    string        `json:"target"`
+	Lifetime  string        `json:"lifetime"`
+	Mode      string        `json:"mode"`
+	Harness   *codexHarness `json:"harness,omitempty"`
+	Harnesses []harness     `json:"harnesses,omitempty"`
 }
+
+// codexHarness binds the explicit Codex default to the seed whose bytes the
+// approval covers. A different seed needs a new seed ID and a new approval.
+type codexHarness struct {
+	Kind   string `json:"kind"`
+	Seed   string `json:"seed"`
+	Target string `json:"target"`
+}
+
+func codexDefaults() codexHarness { return codexHarness{"codex", "codex-v1", "/home/itos/.codex"} }
 
 // harness binds one harness name to the profile whose worker environment the
 // approval covers. A new environment table needs a new profile ID.
@@ -94,12 +105,18 @@ type harness struct {
 	Profile string `json:"profile"`
 }
 
-func volumeHome() home { return home{"volume", "/home/itos", "project", "0700", nil} }
+func volumeHome() home {
+	return home{Storage: "volume", Target: "/home/itos", Lifetime: "project", Mode: "0700"}
+}
 
-// validHome accepts the volume home with no harness or exactly the OpenCode one.
+// validHome accepts the volume home with no harness or exactly the Codex
+// default and exactly the OpenCode one, each alone or together.
 func validHome(h home) bool {
 	base := volumeHome()
 	if h.Storage != base.Storage || h.Target != base.Target || h.Lifetime != base.Lifetime || h.Mode != base.Mode {
+		return false
+	}
+	if h.Harness != nil && *h.Harness != codexDefaults() {
 		return false
 	}
 	return h.Harnesses == nil || len(h.Harnesses) == 1 && h.Harnesses[0] == harness{"opencode", "opencode-v1"}
@@ -158,6 +175,10 @@ func (JSON) Candidate(r readiness.Result, uid, gid string) port.Candidate {
 	}
 	if r.Policy.Policy.Home != nil {
 		h := volumeHome()
+		if r.Policy.Policy.Home.Harness == "codex" {
+			codex := codexDefaults()
+			h.Harness = &codex
+		}
 		for _, name := range r.Policy.Policy.Home.Harnesses {
 			h.Harnesses = append(h.Harnesses, harness{name, name + "-v1"})
 		}
