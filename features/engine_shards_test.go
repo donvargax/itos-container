@@ -80,7 +80,7 @@ func egressShardFiles(engine []string) []string {
 
 // The offline and lifecycle shards each pin their complete set of feature files.
 var (
-	shardOfflineFiles   = []string{"harness-home.feature", "offline.feature"}
+	shardOfflineFiles   = []string{"credentials-run-native.feature", "harness-home.feature", "offline.feature"}
 	shardLifecycleFiles = []string{"lifecycle.feature"}
 )
 
@@ -450,7 +450,7 @@ func shardBaseline(t *testing.T) []byte {
       fail-fast: false
       matrix:
         include:
-          - {shard: offline, features: "offline.feature harness-home.feature"}
+          - {shard: offline, features: "offline.feature harness-home.feature credentials-run-native.feature"}
           - {shard: lifecycle, features: lifecycle.feature}
           - {shard: other, features: "%s"}
           - {shard: egress, features: "%s"}
