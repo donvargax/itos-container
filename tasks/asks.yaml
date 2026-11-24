@@ -379,3 +379,4 @@ questions:
   - id: q-94
     item: "slice-40"
     question: "slice-40: the implementer (attempt 1) stopped incomplete, with 2 of 9 scenarios done on branch slice-40 (d9e5a2d). Continue from those?"
+    answer: "Yes, the coordinator, 2026-11-24: continue from the 2 of 9 scenarios done on branch slice-40 (d9e5a2d)."
