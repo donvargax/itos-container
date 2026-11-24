@@ -9633,8 +9633,186 @@
     features/engine_timing_test.go, features/engine_timing_regression_test.go,
     features/features_test.go. No fake engine is needed. Broken down from
     p2-profile-non-engine-feature-suite.
+
+    Why the promoted check is replaced. On ee2a50dd, go test ./features -run
+    'TestEngineScenarioTiming|TestNonEngineScenarioTiming' already exits 0: TestEngineScenarioTiming
+    passes, and go test does not complain about a -run name that matches nothing. So the first check
+    below runs the same tests with -v and requires each named PASS line. It adds no -count=1
+    (the charter's CPU rule), because a cached result replays the same lines.
+
+    Where the records go. Records are written only when someone asks for them, into one file. A
+    child of the test binary must never write one. Scenario fixtures run that binary as product
+    stand-ins whose stdout a scenario compares (TestLocalRunCommand, TestRunMaskHelper), and as
+    diagnostic children whose last log line is asserted (runDiagnosticChild in
+    features/engine_failure_report_test.go). ITOS_CONTAINER_TIMING_RECORDS=<path> names the file.
+    TestMain (features/engine_diagnostics_test.go) calls timingSinkFromEnvironment once, before
+    m.Run. That function reads the variable and unsets it in the process, so no child, product or
+    fixture process inherits it. If the variable was non-empty, it opens the path write-only,
+    creating it with mode 0600 or truncating it. TestMain closes the file after m.Run. Failing to
+    open or close the file prints the error to stderr and exits 1, as the MkdirTemp failure does.
+    The open sink is the package variable timingSink, an io.Writer. It stays a nil interface when
+    the variable is empty, never a typed nil. It serialises writers with a mutex and writes each
+    record in one Write call. With the variable unset, nothing is written anywhere, and every
+    run's output, exit status and files are as today. A cached go test result writes no file:
+    T-86 reads an uncached run.
+
+    Record forms. Every record is written as engineTiming.write writes today: a newline, the
+    prefix, compact JSON, a newline. The prefixes are `ordinary scenario timing: `, `ordinary suite
+    timing: ` and `harness test timing: `. None is a substring of an engine prefix or the other
+    way round. T-44's `^engine scenario timing: ` grep and TestEngineScenarioTiming's "ordinary
+    tier has no timing records" therefore keep holding. An ordinary scenario record has exactly
+    the engine record's five fields: feature, id, line, duration_ns and outcome. It never carries
+    `signals`, which stays an engine-tier field for @ID-LIFECYCLE-09 rows. An ordinary suite
+    record has selected, completed, duration_ns and outcome. A harness record is
+    {"test":<the top-level test's name>,"duration_ns":<n>,"outcome":"passed"|"failed"|"skipped"}.
+    Engine records keep their bytes, prefixes and exit rules. features/engine_failure_timings_test.go
+    stays unchanged, so an engineTiming built as it builds one still writes `engine` prefixes.
+
+    The ordinary tier. scenarioSelection gains `records io.Writer`. TestFeatures sets
+    `selection.records = timingSink` before its runPreparedFeatures call. When the tier is not
+    engine, the selection is not skipped and records is non-nil, runFeatureScenarios times the run
+    with a collector writing to records, red runs included. Otherwise it behaves exactly as today.
+    The engine tier ignores records. A skipped selection writes no record of either kind. That
+    includes count 0, which selectScenarios always turns into a skip. A TestFeatures that fails or
+    skips before it reaches runFeatureScenarios writes no suite record, and its own harness record
+    says so.
+
+    The collector is engineTiming with a tier word and a sync.Mutex guarding completed, failed and
+    each write, or a sibling type that does the same. The ordinary tier runs four rows at a time
+    (Options.Concurrency 4), so the guard is needed. runScenarios registers the timing Before hook
+    as it does now. For the ordinary tier it adds a step After hook and an After hook of the
+    collector's own, both after initialize(sc). The step hook marks the row failed when a step's
+    status is not passed or its error is non-nil. The After hook writes the row's record after
+    all fixture cleanup, failed if the row was marked or the hook's error is non-nil. They never
+    touch runScenarios's shared completed and unsuccessful counters, which are not guarded. The
+    engine and red hooks stay as they are.
+
+    A row's duration runs from its own Before to that record, so concurrent rows overlap. The
+    suite record follows godog's return. Its duration_ns is wall time from selection.started to
+    the record, or from runFeatureScenarios's entry when started is zero. It is measured on its
+    own, never summed from rows. TestFeatures sets started before the product build, so the build
+    is inside. The suite outcome is failed when godog's code is nonzero, a row failed, a write
+    failed, or completed differs from selected. Unlike the engine tier's finish, the ordinary
+    collector never changes the exit status.
+
+    Harness tests. features/nonengine_timing_test.go defines the interface harnessTest, which holds
+    Name, Cleanup, Failed and Skipped and which *testing.T satisfies. It also defines
+    startHarnessTiming(t harnessTest, output io.Writer) and timeHarnessTest(t harnessTest), which
+    calls startHarnessTiming(t, timingSink). With a nil output, startHarnessTiming does nothing and
+    registers nothing. Otherwise it notes the start and registers one cleanup. Cleanups run last in
+    first out, so that cleanup runs after the test's own cleanups and its subtests. It writes the
+    record's outcome: failed if Failed, else skipped if Skipped, else passed. The first statement of
+    every top-level test function in package features must be timeHarnessTest(<its *testing.T
+    parameter>). That covers every `func TestX(t *testing.T)` in features/*_test.go, build-tagged
+    files included, and TestFeatures, which leaves 223 on ee2a50dd besides TestMain. No test
+    calls t.Parallel today. A record is written only when the sink is open, which happens only in
+    the parent process.
+
+    Two files are at revive's 600-line limit (.golangci.yml file-length-limit, comments and blank
+    lines skipped). Code lines on ee2a50dd: engine_fixture_test.go 599 and
+    engine_fixture_warmup_test.go 600. One line per test would refuse both. Never join lines to fit,
+    the gaming p2-split-engine-fixture-test names. Move whole functions, unchanged except for the
+    timing line, into new sibling files instead. TestEngineFixtureManifestValidation and
+    fixtureJSON go to features/engine_fixture_manifest_test.go. fixtureProductPreparationIssues
+    and TestEngineFixtureWarmupProduct go to features/engine_fixture_warmup_product_test.go. If
+    revive refuses another file, move whole test functions the same way. The rest of
+    p2-split-engine-fixture-test stays with that idea, validFixtureEnvironment's formatting
+    included.
+
+    TestNonEngineScenarioTiming, in features/nonengine_timing_regression_test.go, has these subtests.
+    The first four run in synctest bubbles with memory-only steps. They use timingSelection(t,
+    fixture, false), with selection.records a buffer separate from the godog progress Output. The
+    fixture is TestEngineScenarioTiming's `source` without its first line `@engine`. That constant
+    may be lifted to package level unchanged. The fixture reads: `Feature: timing`; `@ID-MEMORY-01`;
+    `Scenario Outline: identical names and values` with the one step `Then spend time`; then
+    `Examples:` with the header `| value |` and five `| same |` rows, which are lines 7 to 11.
+
+    ordinary_rows runs the engine test's six variants: setup, step, cleanup, pending, skip and
+    undefined, with the same hooks. Before counts the row and sleeps 2 s, and fails on row 2 in
+    setup. The step is defined in every variant: it sleeps 3 s, then on row 2 returns an error in
+    step, or godog.ErrPending, godog.ErrSkip or godog.ErrUndefined. After sleeps 5 s and fails on
+    row 2 in cleanup. Options.Concurrency is unset, so rows run one at a time. At row 3's Before,
+    the records buffer holds exactly two scenario records. At the end it holds five, in row order.
+    Each is decoded with timingRecords into scenarioTimingRecord and has Signals nil and no
+    `"signals"` text. Each has the feature filepath.Join(dir, "memory.feature") after Clean, the id
+    @ID-MEMORY-01, the line 7+i and the duration 10 s. Row 2 takes 7 s in setup only, because its
+    step never runs; in the other five variants it takes 10 s. Outcomes are passed, except row 2,
+    which is failed in all six variants, skip included. There is one suite record: {5, 5, 50 s,
+    failed}, or {5, 5, 47 s, failed} in setup. Serial rows make the wall time equal the rows'
+    sum. The exit code is godog's, measured on ee2a50dd: 1 in setup, step, cleanup, pending and
+    undefined, and 0 in skip, since godog's shouldFail ignores ErrSkip. Neither buffer holds an
+    `engine ` record, and the progress Output holds no `timing: ` text.
+
+    concurrent_rows uses Concurrency 4 and a step that sleeps 10 s, with no hooks. It gives five
+    passed 10 s records whose lines are 7 to 11 in any order. The suite record is {5, 5, 20 s,
+    passed} and the exit code is 0. That is 20 s, not the rows' 50 s: four rows run, then the
+    fifth.
+
+    missing_row does selection.count++. The suite record is {6, 5, _, failed} and the exit code
+    stays 0.
+
+    build_interval sets selection.started, sleeps 11 s, then runs. The suite duration is exactly
+    11 s.
+
+    skipped_selection uses a fixture whose only scenario is tagged `@ID-MEMORY-01 @wip`. The
+    selection's skip is set, runFeatureScenarios returns 0 and the records buffer stays empty.
+
+    harness_tests uses a fake harnessTest inside a bubble. Its Cleanup appends, and the test runs
+    the appended functions last in first out. startHarnessTiming(fake, &buf) is followed by
+    another cleanup that sleeps 1 s, then a 4 s sleep. No record is written before the cleanups
+    run. Afterwards there is exactly one, {"test":"TestFake","duration_ns":5000000000,
+    "outcome":"passed"}, decoded with DisallowUnknownFields. Failed and Skipped both true gives
+    failed. Skipped alone gives skipped. A nil output registers no cleanup.
+
+    sink sets the variable with t.Setenv to a file in t.TempDir() that already holds text. After
+    timingSinkFromEnvironment, os.LookupEnv reports the variable absent. The file is regular with
+    mode 0600, its old text is gone, and a record written through the sink reads back. An empty
+    variable gives a nil sink and no error and creates nothing. A path in a missing directory
+    gives an error.
+
+    every_top_level_test_is_timed parses features/*_test.go with go/parser, as
+    testWarmupEntryWiring does. It lists, sorted as file:function, each test whose first
+    statement is not timeHarnessTest of its parameter. It fails when the list is not empty.
+
+    features_entry reads the AST of features_test.go and engine_diagnostics_test.go. TestFeatures
+    must hold exactly one assignment `selection.records = timingSink`, before its runPreparedFeatures
+    call. TestMain must call timingSinkFromEnvironment exactly once, before m.Run.
+
+    features/README.md, after the "Scenario timing." paragraph, gains at most 600 bytes. The file
+    has 1221 bytes left under doc-caps' 49152-byte cap. The sentence names the variable, the three
+    prefixes, that TestMain unsets the variable before any test, that nothing is written without
+    it, and TestNonEngineScenarioTiming.
+
+    Commits. The implementer may commit freely in its workspace. The host makes the landing commits
+    and runs itos, submission, publication and review. Commit 1 is red, a test commit made with
+    itos commit --item T-85. It holds the new test and stubs that compile and do nothing: the
+    records field, timingSink, harnessTest, startHarnessTiming, timeHarnessTest,
+    harnessTimingRecord and a timingSinkFromEnvironment that returns nil. Every subtest then
+    fails at its assertion, apart from skipped_selection, a guard that already holds. Then come
+    one or more test commits with itos commit --task T-85, holding the collector, the sink, the
+    TestMain and TestFeatures wiring, the timing line in every test, the two moves and
+    features/README.md. CI runs a task's checks only for commits with a Task: footer, and the
+    README goes in those test commits, with no separate docs commit.
+
+    features/ is not a proof.code path, so there is no mutation proof. No product code, scenario,
+    workflow, engine record, limit or dependency changes. Before stopping, run the checks and
+    golangci-lint's revive on the changed files. Run -race only over TestNonEngineScenarioTiming
+    and TestEngineScenarioTiming, never over the whole package. Then run the whole feature suite
+    once with the variable set, since every test changes. Report the number of records the file
+    held against the selected count and the 223 tests.
+
+    How the checks fail on ee2a50dd. The first: go test exits 0, then the check prints
+    `TestNonEngineScenarioTiming/ordinary_rows did not pass` and exits 1. The second exits 1 at its
+    first grep. Both were run here under sh.
   done_when:
-    - run: go test ./features -run 'TestEngineScenarioTiming|TestNonEngineScenarioTiming'
+    - run: >-
+        out=$(go test ./features -v -run '^(TestEngineScenarioTiming|TestNonEngineScenarioTiming)$' 2>&1);
+        status=$?; if [ "$status" -ne 0 ]; then printf '%s\n' "$out" | grep -E -e '^ *(--- |FAIL|ok )' -e '_test\.go:[0-9]+:'; exit 1; fi;
+        for name in TestEngineScenarioTiming TestNonEngineScenarioTiming/ordinary_rows TestNonEngineScenarioTiming/concurrent_rows
+        TestNonEngineScenarioTiming/missing_row TestNonEngineScenarioTiming/build_interval TestNonEngineScenarioTiming/skipped_selection
+        TestNonEngineScenarioTiming/harness_tests TestNonEngineScenarioTiming/sink TestNonEngineScenarioTiming/every_top_level_test_is_timed
+        TestNonEngineScenarioTiming/features_entry; do printf '%s\n' "$out" | grep -q -e "--- PASS: $name (" || { echo "$name did not pass"; exit 1; }; done
+    - run: grep -q 'ordinary scenario timing:' features/README.md && grep -q 'harness test timing:' features/README.md && grep -q 'ITOS_CONTAINER_TIMING_RECORDS' features/README.md
 - id: T-86
   type: docs
   title: "Record the non-engine suite's measured profile: slowest scenario rows, harness tests and fixture setup, with their shares of wall time"
