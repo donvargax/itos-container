@@ -9596,8 +9596,131 @@
     misses do not prove the create finished. This task writes the open decision record with the
     options and one recommendation, and builds nothing. Recovery for these cases is proposed only
     after the person answers. Broken down from p3-registration-before-intent.
+
+    The problem, as the code shows it. Every citation below was read at main 718b7d8. Each engine
+    create maps any error reply, and any reply that is lost or late, to an uncertain outcome. It
+    never maps them to "not created". The worker create is
+    internal/engine/session/docker/run.go:122-124. The proxy create is docker/proxy.go:40-42.
+    Both egress network creates are docker/egress.go:41-43. The checkout anchor volume is docker/anchor.go:17-25 (port.MountUncertain). The harness home
+    volume is docker/home.go:24-27 (port.HomeUnavailable). The port states the rule at
+    internal/engine/session/port/session.go:185: "Uncertain is not absence". The run publishes the
+    durable "intent" stage before it sends the worker create, so a lost reply is uncertain from
+    then on (domain/registered_run.go:437-441). Recovery then keeps the session. A worker with no
+    recorded ID that a name lookup cannot observe gives port.Uncertain (domain/recovery.go:183-191).
+    An egress resource still at "intent" whose name is not found gives port.Incomplete
+    (domain/egress_recovery.go:66-69). An anchor that was never seen and has no Created time gives
+    port.Incomplete (domain/anchor.go:221-224). A home generation at "intent" whose name is not
+    found gives port.Incomplete (domain/home.go:389-393). Each of these is retryable, so status and
+    stop exit 75 with recovery.temporary every time, and no supported command clears the session.
+    Its admission claim survives uncertain cleanup
+    (internal/engine/session/disk/admission.go:56-58), so a nested checkout stays refused. arc42 says the same at docs/architecture/arc42.md:329-331.
+    ID-HOME-10 (features/harness-home.feature:1093) covers only a volume that does appear later.
+
+    What the sibling items leave out. slice-59 (registry, tasks/work-items.yaml:2806-2827) covers
+    controllers killed between reservation and the first engine create. It retires a session only
+    where durable evidence shows no create was issued. Its last sentence says: "Uncertain creates
+    are out of scope: an engine error reply, or a create whose reply was lost." slice-60 and
+    decision 0034 cover only orphaned .intent-<nonce>.tmp temporaries. So nothing else owns this
+    question, and it is the person's: it is an open security property
+    (docs/decisions/STANDING.md:82-84).
+
+    The record. The implementer writes one new file,
+    docs/decisions/0036-what-evidence-lets-recovery-retire-an-uncertain-create.md, by hand. Its
+    first four lines are exactly the following, in the front-matter form of
+    docs/decisions/0034-the-next-control-lock-holder-deletes-orphaned-temporaries-in-protected-state.md:
+    a line `---`, a line `status: proposed`, a line `date: YYYY-MM-DD` giving the UTC date the
+    record is written, and a line `---`. No other front-matter fields are added. Line 6 is the
+    title, `# What evidence lets recovery retire an uncertain create`. After the title come these
+    headings, each on its own line, in this order: `## Context and Problem Statement`,
+    `## Considered Options`, `## Decision Outcome`, and `### Consequences` under Decision Outcome.
+    The record is "proposed" in MADR's sense: it holds a recommendation, and the decision itself is
+    open. It says so in words, with its date, as docs/decisions/STANDING.md:63-64 asks.
+
+    Context and Problem Statement holds four things. First, the question in one sentence. Write it
+    as: what evidence lets status or stop retire an uncertain create, that is, finish its session
+    and release its admission claim, when the create was sent or may have been sent and its outcome
+    is unknown? Second, the three cases from the first paragraph of this entry. Third, today's
+    behaviour, with the citations above. Fourth, slice-59's exclusion quoted with its registry
+    location, and the statement that elapsed time, repeated name-only misses and a name-only 404
+    are not evidence. It says the record was written for T-83, and names no q-number: the
+    coordinator asks the person.
+
+    Considered Options lists four options, in this order, each with its cost.
+    Option 1 keeps today's rule. Nothing retires an uncertain create, and the record discloses that
+    the only remedy is removing protected state by hand.
+    Option 2 treats some engine error replies as proof that nothing was created. The Docker API does
+    not document that an error reply means nothing was allocated. So each error class would need
+    engine-source evidence for the pinned engine version, the rule features/README.md already
+    applies to mount option strings. A lost reply gets no such evidence.
+    Option 3 fences the exact name. Recovery creates its own labelled placeholder under the
+    uncertain resource's name. If that succeeds, the original can no longer land under that name.
+    If it conflicts, the original landed, and recovery adopts it through the existing name and
+    full-ID checks. The costs are three. The placeholder must be kept for an unknown time. A volume
+    create on an existing name succeeds without a conflict, so this does not fence the anchor or
+    home volumes. Name uniqueness for containers and networks also needs engine-source evidence. It
+    sits close to the standing rule that no timed-out mutation is retried
+    (docs/decisions/STANDING.md:159-161), and the record says so.
+    Option 4 is consented retirement. At a real terminal only, stop shows the exact resource names
+    it could not observe and asks y/N. On yes it publishes a durable tombstone that keeps each name
+    and its labels, releases the admission claim and finishes the session. Every later stop of that
+    project inspects the tombstoned names and removes a late arrival by full ID, after the existing
+    ownership checks. Time, a count of misses, JSON and --fingerprint never retire anything. It
+    adds a consent surface, which the charter does not yet authorize, so it needs the person's word
+    in any case.
+
+    Decision Outcome opens with "Open: the person has not decided," and the record's date. It then
+    recommends option 4, and says why. It keeps "Uncertain is not absence" as the only automatic
+    rule. It matches the consented, exact-generation retirement of harness homes
+    (docs/decisions/0030-persistent-harness-home.md; docs/decisions/STANDING.md:126-129) and
+    terminal-only consent (docs/decisions/STANDING.md:112-116). It keeps deletion from protected
+    state an explicit act of the person, as the registry's p3-session-state-retention asks. Option 2
+    is refused until engine-source evidence exists. Option 3 is named as possible later automation.
+    Consequences says three things. Until the person answers, the code and today's rule stay as
+    they are. Whatever the person decides is built by a later item, which the coordinator proposes
+    with scenarios written red first. Nothing in the record is runtime evidence or a support claim.
+
+    Bounds. Add only the record. Leave docs/decisions/README.md alone: its itos:decisions list is
+    written by `itos decision record` and lists only decisions that stand. Leave STANDING.md, arc42,
+    the code, the scenarios and the gates alone. arc42:329-331 already agrees with the code, so no
+    architecture section is wrong. If docs/decisions/0036-* already exists with another subject when
+    the work starts, stop and report: the number is not this task's to change. If the commit hook's
+    `itos config check` refuses the record's front matter, stop and report it. Do not add fields to
+    get past the check, and do not edit the generated list by hand.
+
+    Citations. Every file:line above was read at main 718b7d8 (pinned 2026-11-24). Before writing,
+    re-read each citation in the implementer's checkout. If a line has only moved, cite the new
+    line. If the code there now behaves differently, stop and report: the record must not describe
+    changed behaviour from this entry. One example would be an adapter that classifies an error
+    reply as port.Refused, or recovery that retires an "intent" stage on a name-only miss.
+
+    Commits and proof. One docs commit carries the record alone. The implementer may commit freely
+    in its workspace. The host makes the landing commits and runs itos, submission, publication and
+    review. The range is prose-only, because itos.yaml's ci.prose.paths includes docs/**. On such a
+    range CI keeps only a task's static checks and those declaring prose: true, and itos work done
+    runs no late check. So both checks declare prose: true. They use only POSIX sh, ls, sed and
+    grep, as on ubuntu-latest's dash.
+
+    How each check fails today. The first is the item's own check. It exits 2 today because no
+    docs/decisions/0036-* file exists, and it fails on a record that never says "uncertain create".
+    The second also fails at its first test today, because ls finds no 0036 record. After the work
+    it fails in these cases: the filename differs, or a second 0036 record exists; the front matter
+    is not exactly the four lines above; a required heading is missing; or the record never names
+    slice-59, never makes a recommendation or never says "name-only". Neither check can judge
+    whether the options or the recommendation are stated correctly. Review of the diff against this
+    entry judges that.
   done_when:
     - run: grep -qi 'uncertain create' docs/decisions/0036-*.md
+      prose: true
+    - run: >-
+        f=docs/decisions/0036-what-evidence-lets-recovery-retire-an-uncertain-create.md &&
+        test "$(ls docs/decisions/0036-*.md)" = "$f" &&
+        test "$(sed -n 1p "$f")" = '---' &&
+        test "$(sed -n 2p "$f")" = 'status: proposed' &&
+        sed -n 3p "$f" | grep -qxE 'date: [0-9]{4}-[0-9]{2}-[0-9]{2}' &&
+        test "$(sed -n 4p "$f")" = '---' &&
+        for h in '## Context and Problem Statement' '## Considered Options' '## Decision Outcome' '### Consequences'; do grep -qxF "$h" "$f" || exit 1; done &&
+        grep -q 'slice-59' "$f" && grep -qi 'recommend' "$f" && grep -qi 'name-only' "$f"
+      prose: true
 - id: T-84
   type: ci
   title: credentials-run-native.feature joins the offline engine shard whole, before slice-31 lands
