@@ -375,3 +375,4 @@ questions:
   - id: q-93
     item: "slice-28"
     question: "slice-28: the implementer (attempt 9) needs a decision before it can go on: whether status and stop exit 75 with recovery.temporary when the refusal log survives but its report, egress-refusals.json, is missing. q-87 asked the same and is answered; this is its record for attempt 9."
+    answer: "The person, 2026-11-22, as answered in q-87: status and stop both exit 75 with recovery.temporary when the refusal log survives but its report, egress-refusals.json, is missing."
