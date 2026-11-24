@@ -127,6 +127,21 @@ pending name is skipped and logged, a present one is ordinary, and any other abs
 refused. slice-36 removes its entry in its own test commit. No scenario, assertion or limit
 changes, and no timing is claimed for the new rows until slice-36 lands.
 
+### Credentials-run-native placement, 2026-11-24
+
+slice-31's breakdown adds `credentials-run-native.feature`, and the agent that implements it may
+not edit workflows. The person approved on 2026-11-24 placing the whole file in the **offline**
+shard, so the placement lands on main first, as T-77 and T-78 did, in `.github/workflows/ci.yml`
+and in `shardOfflineFiles` (now three names, sorted). The last four green main runs measured the
+`Engine scenarios` step at 69 to 96 seconds in offline, 36 to 56 in egress, 106 to 128 in
+lifecycle and 143 to 176 in other, against the unchanged 180-second budget. Offline has the most
+room after egress, and egress already holds `credentials-run.feature`.
+
+The file is not on this tree, so it joins the reviewed pending map as `credentials-run-native.feature`
+for slice-31 in offline, beside the two existing entries. `TestEngineShards` fails it in any
+other shard and names offline. slice-31 removes its entry in its own test commit. No scenario,
+assertion or limit changes, and no timing is claimed for the new rows until slice-31 lands.
+
 ### Soft budget, 2026-11-20
 
 T-69 supersedes this record's 180-second failure and its 4, 5 and 10 minute limits, on the
