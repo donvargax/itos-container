@@ -1074,6 +1074,230 @@ Feature: An approved persistent home for one checkout's harness
       | OPENCODE_DISABLE_AUTOUPDATE set to false                      |
       | OPENCODE_DISABLE_AUTOUPDATE missing                           |
 
+  # Slice-55: every run that selects the Codex harness sets CODEX_HOME and
+  # rewrites only config.toml from the fixed codex-v1 seed before the literal
+  # workload starts. It builds on slice-54 (done), which selects, binds and
+  # discloses the harness above ID-CODEXHOME-01, and on slice-34's home (done).
+  # Its rows are ID-CODEXHOME-03 and 04 here and ID-CODEXHOME-08 after
+  # ID-HOME-31. Slice-56 owns refusing unsafe retained seed paths, slice-57 the
+  # readback and publication faults, and slice-58 pinned Codex's own startup.
+  # None of that is specified here. This spec adds rows and comments only: no
+  # step definitions, product code or evidence. Rows and decisions above stay
+  # unchanged, except ID-CODEXHOME-02's run half, which the implementation
+  # changes as stated below.
+  # Authorities: charter milestone two step 3 ("harness state seeded where its
+  # first run would otherwise stop or call home ... Codex with update checks,
+  # analytics and plugins off, and its own sandbox off because the container is
+  # the sandbox"); decision 0030; slice-54's approved disclosure lines above;
+  # architecture.md Slices; the slice-55 registry entry.
+  #
+  # The selection run reads: the frozen approval settings of the selected run,
+  # never the current request. A Codex run is one whose frozen home object
+  # holds exactly harness {"kind":"codex","seed":"codex-v1","target":"/home/itos/.codex"},
+  # which only slice-54's approval writes. It may also hold slice-41's OpenCode
+  # list, and then both apply. A frozen home without harness is not a Codex run
+  # and gets none of what follows. Edits to itos-container.yaml, the manifest
+  # or the approval after selection change nothing for that run, as ID-HOME-04
+  # holds for the home itself.
+  #
+  # The seed codex-v1 is exactly these 155 bytes: LF line ends, one final LF, no
+  # BOM, no comment, SHA-256
+  # 36bc1a5e0c2ea3e6fc0888311cbd819cb636b3884f4af15c742278b5f29125c1. Each
+  # line below is one line of the file after "#   ", and "(empty)" is an empty line:
+  #   approval_policy = "never"
+  #   sandbox_mode = "danger-full-access"
+  #   check_for_update_on_startup = false
+  #   (empty)
+  #   [analytics]
+  #   enabled = false
+  #   (empty)
+  #   [features]
+  #   plugins = false
+  # The key names come from the configuration schema published with the pinned
+  # release (codex-rs/core/config.schema.json at rust-v0.167.0, read
+  # 2026-11-23). check_for_update_on_startup false turns off the startup update
+  # check. analytics.enabled false turns off OpenAI analytics. features.plugins
+  # false turns off plugins. sandbox_mode "danger-full-access" turns off Codex's
+  # own sandbox. approval_policy "never" stops Codex from stopping to ask for
+  # approval, the other half of its own sandbox, which Codex's own bypass flag
+  # pairs with the sandbox mode. That is a source reading, not evidence of
+  # effect. This slice proves the bytes, never what Codex does with them, and
+  # never that startup traffic is absent: slice-58 owns that against pinned
+  # Codex. If slice-58 finds a key unread or wrong, the fix is a new seed ID
+  # (codex-v2) and a new approval, never an edit of codex-v1. The seed writes no
+  # [projects] entry, so it trusts no checkout configuration. Codex's other
+  # layers (managed configuration in the approved image, a profile or override
+  # in the literal argv) can still override it. The seed is a convenience, not
+  # an isolation property: the container and its policy stay the boundary. The
+  # bytes are not secret and name no host.
+  #
+  # Runtime, for a Codex run only:
+  # - The worker gets CODEX_HOME=/home/itos/.codex beside slice-34's HOME/XDG
+  #   mappings. It overrides any image default, and no host value reaches the
+  #   worker. The manifest cannot set it, because slice-54 reserves it. The
+  #   existing exact environment comparison of the boundary inspection
+  #   (VerifyRun's sameEnvironment, internal/engine/session/docker/run.go) gains
+  #   it as an expected entry. A worker without that exact value is therefore
+  #   run.isolation-unverified, exit 1, with no start, as for every expected
+  #   entry. ID-HOME-08's "HOME inherited from image" row already proves that
+  #   comparison, so no defect row is added for it.
+  # - When it happens: in the create phase, under the session's operation lock.
+  #   It comes after the boundary inspection of the created worker and after
+  #   slice-34's home verification (root initialization on a new home, root
+  #   verification and the durable initialized-home record), and before that
+  #   phase releases the lock. So it is always after durable home ownership and
+  #   before attach, the later boundary inspections and start. Every run does
+  #   it, including a fresh controller on a retained home. The worker is
+  #   unstarted throughout, so no workload instruction runs before the seed is
+  #   confirmed.
+  # - It makes three Engine calls, in this order, each inside the existing 10 s
+  #   call cap and 120 s startup budget:
+  #   1. A path stat, HEAD /containers/<id>/archive?path=/home/itos/.codex. A
+  #      404 means .codex is missing, and a directory means it exists. It reads
+  #      no content.
+  #   2. One publication, PUT /containers/<id>/archive with path /home/itos (the
+  #      verified home root) and copyUIDGID true, through slice-34's
+  #      CopyToContainer seam. Its tar holds only these entries, in this order:
+  #      ".codex/" (a directory, mode 0700) when .codex is missing, then
+  #      ".codex/config.toml" (a regular file, mode 0600, size 155, the seed as
+  #      its body). Both carry the approved numeric UID and GID. There is no
+  #      other entry, link or path. An existing .codex gets no header, so its
+  #      own metadata is left alone. Moby's extractor removes an existing
+  #      config.toml and creates a new file, rather than writing through it (a
+  #      source reading, not evidence).
+  #   3. One readback, GET /containers/<id>/archive?path=/home/itos/.codex/config.toml,
+  #      bounded to 64 KiB as slice-34's root read is. It confirms the seed
+  #      only when the path stat says a regular file with mode 0600 and no link
+  #      target, and the stream holds exactly one entry, "config.toml": regular,
+  #      mode 0600, the approved UID and GID, size 155 and a body equal to the
+  #      seed, followed by the end of the archive. Only then may the run go on
+  #      towards start.
+  # - What a run never does: it never reads, lists, copies, changes or removes
+  #   anything else under /home/itos/.codex (sessions/, the history files,
+  #   auth.json and its lock, AGENTS.md, logs or caches). It never reads the
+  #   .codex directory as an archive, which would stream them. Nothing from the
+  #   host's ~/.codex or CODEX_* environment reaches the worker or an archive.
+  #   The argv stays literal: no wrapper, no -c, --config, --profile, sandbox
+  #   or approval flag, and run does not check that argv[0] is codex.
+  # - A failure stops before start: the owned unstarted worker is removed and
+  #   the home is retained, as for slice-34's launch failures. Until slice-56 and
+  #   slice-57 add their rows and diagnostics, the implementation fails closed
+  #   this way. A stat that shows anything but a 404 or a directory is
+  #   run.home-refused (1). A failed, unavailable or uncertain stat, publication
+  #   or readback is run.home-unavailable (75). A delivered readback that shows
+  #   other bytes or metadata is run.isolation-unverified (1). Those slices
+  #   decide and prove how each case is classified, and none of this slice's
+  #   rows reaches one.
+  # - The seed owns no resource. Session, status, stop and recovery records gain
+  #   nothing, and cleanup never touches .codex. A run without the harness makes
+  #   none of these calls and leaves an existing .codex as it is.
+  #
+  # The run gate goes. The readiness inspector
+  # (internal/engine/readiness/domain/inspect.go) stops refusing home.harness for
+  # run, and HomeHarnessGated and its diagnostic go with it. Run then compares
+  # the harness with the approval like any setting. ID-CODEXHOME-02's run half
+  # changes with the gate. A changed existing scenario needs a feat commit, so
+  # the implementation's feat commit rewrites that row's title and its last two
+  # Then lines exactly as below. It also rewrites the "Run gate, until slice-55
+  # lifts it" comments above ID-CODEXHOME-01 to say that run compares the
+  # harness with the approval:
+  #   Scenario: Doctor and approve disclose and bind the Codex harness, and run requires the matching approval
+  #   And the removing and adding checkouts report changed approval at /home/harness with exit 1 and neither Engine API fixture saw a connection
+  #   And the matching checkout and the no-harness control report no approval change and each Engine API fixture journal holds the readiness inspection of version, info and the approved image
+  # The adding checkout then writes exactly "itos-container: run.approval-changed:
+  # run approval changed at /home/harness; use itos container approve" to stderr.
+  # A Codex request with no approval keeps the existing missing-approval
+  # refusal. Before the work, the edited row fails at the first of those two
+  # lines, because the adding checkout reports the gate (policy.home_harness,
+  # exit 2). The implementer runs the edited row on the tree without the work
+  # first and reports that failure as its red evidence. The row is local.
+  #
+  # Architecture and libraries: the session engine's domain orders the seed
+  # inside its home verification (internal/engine/session/domain/home.go). Its
+  # port gains the seed operations on HomeConnection. The docker adapter
+  # (internal/engine/session/docker/home.go) makes the three calls, and the
+  # porttest fake models .codex and config.toml without I/O. The shared home
+  # contract runs against both. port.Binding gains the frozen Codex selection,
+  # which the session codec reads from the frozen settings as it reads OpenCode
+  # (internal/engine/session/codec/json.go). No slice imports another, and only
+  # cmd assembles. No new package, dependency or service: Go 1.27.4's
+  # archive/tar and the pinned moby client v0.6.2/api v1.56.1 suffice. arc42's
+  # runtime-view home paragraph says run initializes "only a new owned volume".
+  # Rewriting config.toml on every Codex run departs from that, so the same pull
+  # request records a decision in docs/decisions/ that names that paragraph and
+  # amends it. The implementation also updates docs/CONFIG.md's "Codex harness
+  # defaults" (the seed bytes, when run writes them, and run's approval
+  # comparison in place of the gate paragraph) and docs/CLI.md's sentence about
+  # the gate.
+  #
+  # Step handoff: ID-CODEXHOME-03 and 04 reuse two existing When phrases, from
+  # ID-HOME-05 ("fresh run controllers execute both runs through both local
+  # backends") and ID-HOME-04 ("run selects A and the fixture publishes B before
+  # create and then invokes a fresh run through both local backends"). Their
+  # definition (features/harness_home_local_steps_test.go) must also capture the
+  # @ID-CODEXHOME- tag. TestHomeLocalContract
+  # (cmd/itos-container/home_local_contract_test.go) gains CODEXHOME-03 and 04
+  # cases, without changing what ID-HOME-04, 05 and 28 assert. Every Given and
+  # Then phrase is NEW. On the disk backend, cmd's production docker adapter
+  # talks to the SDK recording endpoint (home_sdk_fixture_test.go). Today that
+  # endpoint fails any archive PUT except root initialization. It gains a
+  # per-volume file model that holds .codex and its files, answers the HEAD
+  # stat, the PUT and the GET from that model, and journals each one together
+  # with the protected home record's initialized state at that moment. The
+  # memory fake models the same. Only the disk backend judges environments, so
+  # both rows are @linux, as ID-HOME-28 is. The fixture's oracle holds its own
+  # copy of the 155 bytes and digest, never the product's constant. Givens
+  # write raw settings, independently encoded approval, snapshot and ownership
+  # records, and host and home sentinels. None calls product approve, run,
+  # status or stop, and none asserts. Both rows are local, so their red and
+  # green runs are local. Add the definitions alone in a red test commit with
+  # @wip kept.
+  #
+  # Expected red, from reading main at 71a23ae (predictions, not executed
+  # evidence), always at the first Then:
+  # - ID-CODEXHOME-03 and 04: the test assembly skips readiness, so the gate
+  #   never fires. The session codec's settings view has no harness member, so
+  #   the binding carries no Codex selection. The workers are created with no
+  #   CODEX_HOME on the disk backend and no stat, publication or readback on
+  #   either backend, so the contract fails its first assertion.
+  #
+  # The implementer may commit freely in its own workspace; the host makes the
+  # landing commits and handles itos, submission, publication and review.
+  #
+  # ID-CODEXHOME-03's fixture. The synthetic image sets
+  # CODEX_HOME=/opt/image-codex. The host process has CODEX_HOME set to the
+  # isolated HOME's .codex, which holds slice-54's host-home Codex sentinels
+  # (config.toml, auth.json, sessions/sentinel.jsonl). After the first run, and
+  # before the second, the fixture writes these into the retained home's model,
+  # each mode 0600 and owned by the approved UID and GID, as a worker could:
+  # .codex/config.toml holding 'sandbox_mode = "workspace-write"' and a newline;
+  # .codex/sessions/2026/11/23/rollout-slice-55.jsonl;
+  # .codex/history.jsonl; and .codex/auth.json holding synthetic text and no
+  # credential. The first run finds .codex missing and the second finds it a
+  # directory.
+  @wip @slice-55 @ID-CODEXHOME-03 @local-engine-fixture @linux
+  Scenario: Every Codex run rewrites only config.toml from the codex-v1 seed and reads it back before the worker starts
+    Given a Codex launch fixture with a conflicting image CODEX_HOME default, host CODEX_HOME and HOME sentinels, host-home Codex configuration, login and session sentinels and two sequential runs of "codex exec --json say-ok" with hostile Codex files left in the retained home between them
+    When fresh run controllers execute both runs through both local backends
+    Then each worker's command is exactly the supplied argv and on the disk backend its created and inspected environment holds CODEX_HOME=/home/itos/.codex and the home mappings over the image default and without any host value
+    And each run makes one .codex path stat, one seed publication and one config.toml readback, in that order, after its home root is verified and recorded initialized and before its worker starts
+    And the first publication holds only the .codex directory at 0700 and config.toml at 0600, the second only config.toml, each owned by the approved UID GID with exactly the codex-v1 bytes, and the second run replaces the hostile config.toml with them
+    And the hostile session, history and login files keep their bytes, no archive copy reads or carries them or a host file, and the host-home Codex sentinels and the host home are unchanged
+
+  # A is a version 1 offline volume home with the Codex harness, and B the same
+  # home without it, for the same checkout, UID, GID and daemon, so both select
+  # one home scope. As in ID-HOME-04, the fixture publishes B's request and
+  # approval at a barrier after A's selection and before create. The second run
+  # is then a fresh controller under B. Its absence half is a regression
+  # control. The first worker's half fails first.
+  @wip @slice-55 @ID-CODEXHOME-04 @local-engine-fixture @linux
+  Scenario: A selected Codex run keeps its seed after requests change, and a run without the harness leaves the Codex files alone
+    Given a Codex launch fixture with approved Codex home settings A and independently approved volume-home settings B without the harness for the same checkout UID GID and daemon
+    When run selects A and the fixture publishes B before create and then invokes a fresh run through both local backends
+    Then the first worker gets CODEX_HOME=/home/itos/.codex on the disk backend and the codex-v1 stat, publication and readback before start from A's frozen settings with no post-selection request reads
+    And the fresh worker under B reuses the same home with no CODEX_HOME on the disk backend and no .codex stat, publication or readback
+    And the .codex directory and config.toml the first run wrote keep their metadata and bytes after the second run and A's frozen snapshot is unchanged
+
   # Recovery and bounded operations. Independently seeded home-aware records
   # are not accepted by the old codec: first Then is red, never a setup assertion.
   @slice-34 @ID-HOME-09 @local-engine-fixture
@@ -1322,6 +1546,42 @@ Feature: An approved persistent home for one checkout's harness
     And the fake provider receives exactly the stand-in's nonce request through the proxy variables and the stand-in prints its final JSON event on run's stdout
     And each startup-service name receives 403 without an upstream dial or a fixture receipt while its independent control succeeds
     And the product returns the observed workload exit and confirms its worker, proxy and both networks absent while the home remains
+
+  # Slice-55's native row; its decisions sit above ID-CODEXHOME-03. It runs in
+  # the existing offline shard on the shared fixture image, which holds no
+  # Codex binary: slice-58 owns pinned Codex. The probe is a harness-compiled
+  # static ELF, installed in the CI checkout as /workspace/slice-55-codex-probe
+  # and named by that path as the literal argv, as slice-34's probe is. It is
+  # the workload's first instruction, and it reports before it writes anything.
+  # Its JSON report on stdout holds:
+  # - CODEX_HOME and HOME as it received them;
+  # - the Lstat of /home/itos/.codex and of config.toml in it (kind,
+  #   permission bits, numeric owner and group, link count);
+  # - config.toml's bytes;
+  # - each marker's bytes or absence;
+  # - whether the host-home Codex sentinel path given as an argument is
+  #   readable.
+  # In write mode it then truncates config.toml and rewrites it in place with
+  # 'sandbox_mode = "workspace-write"' and a newline. It also writes the
+  # markers .codex/sessions/slice-55-session.jsonl, .codex/history.jsonl and
+  # .codex/auth.json, which hold synthetic text and no credential. The first run
+  # uses write mode and the second report mode. The policy is version 1 offline
+  # with home {storage: volume, harness: codex}. Its approval and protected
+  # records are seeded independently, as for ID-HOME-30. Before the work the
+  # first Then is red: run refuses the Codex selection at slice-54's gate
+  # (policy.home_harness, exit 2), so no probe runs. The row proves, byte for
+  # byte, the file that run leaves before the first instruction. It claims
+  # nothing about Codex's startup or network traffic (slice-58's) or about
+  # unsafe retained paths (slice-56's). It adds two product runs to the offline
+  # shard, whose 180 s target warns and whose 600 s guard stops. Its red and
+  # green runs are CI-only, by dispatch.
+  @wip @slice-55 @ID-CODEXHOME-08 @engine
+  Scenario: The workload's first instruction finds CODEX_HOME and exactly the codex-v1 config.toml on every run
+    Given a CI Codex checkout with a cached approved image for the actual non-root controller UID GID, an approved offline volume home with the Codex harness, host-home Codex configuration, login and session sentinels and a Codex seed probe installed at "/workspace/slice-55-codex-probe"
+    When two fresh product runs invoke the probe as their literal argv, the first reporting and then rewriting config.toml and writing session, history and login markers, and the second only reporting
+    Then both runs start and in each the probe's first report shows CODEX_HOME=/home/itos/.codex, a .codex directory 0700 and a single-link regular config.toml 0600 both owned by the approved UID GID, and config.toml holding exactly the codex-v1 bytes
+    And the second report shows the seed in place of the first run's rewrite while the session, history and login markers keep their bytes, and neither report finds a host Codex file
+    And both runs exit zero with the probe's report on stdout, and after each its worker and anchor are absent while the home remains and the host-home Codex sentinels and checkout ownership are unchanged
 
   # Controller death cannot supply retry output: use the independently captured
   # protected registration, then explicitly invoke fresh status and stop.
