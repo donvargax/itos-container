@@ -2848,8 +2848,8 @@ items:
   - id: T-83
     title: Record the open decision on what evidence lets recovery retire an uncertain create
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: T-84
