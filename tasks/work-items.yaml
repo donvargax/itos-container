@@ -2716,21 +2716,9 @@ items:
     title: Select Codex defaults explicitly and disclose them for approval
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [slice-34]
     kind: slice
-    why: >
-      Was codex-home-selection-consent.
-      This is the smallest observable rule and has no seeding, engine or native dependency. Policy
-      versions 1–3 accept an optional home `harness: codex`, as a literal string and only beside
-      `storage: volume`. Malformed values report policy.type or policy.home_harness at
-      /home/harness. Only under that selection, CODEX_HOME in containerEnv (compared ASCII
-      case-insensitively) is manifest.reserved; omitted and plain homes keep the variable. Doctor
-      and approve disclose and fingerprint harness {kind codex, seed codex-v1, target
-      /home/itos/.codex}, and adding or removing it needs new consent. It owns the current
-      CODEXHOME-01 and CODEXHOME-02. It keeps its parent's prerequisite, slice-34. Version 4's Codex
-      credential entry stays with slice-48. The spec states that the implementer may commit freely
-      in its workspace and that the host makes the landing commits. Broken down from slice-35.
   - id: slice-55
     title: Every selected run regenerates only config.toml before the literal workload starts
     phase: 1
