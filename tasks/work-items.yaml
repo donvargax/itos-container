@@ -2849,3 +2849,10 @@ items:
     status: todo
     depends_on: []
     kind: task
+  - id: T-84
+    title: credentials-run-native.feature joins the offline engine shard whole, before slice-31 lands
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task
