@@ -9571,7 +9571,7 @@
     that the implementer may commit freely in its workspace and that the host makes the landing
     commits. Broken down from slice-35.
   done_when:
-    - run: A hermetic local Go test beside features/engine_fixture_test.go runs `tools/bin/engine-fixture cleanup` with a recording fake docker on a PATH that reaches no real engine. In the failed-after-tag and failed-after-cold-pull states, it removes exactly the recorded Codex references after inspections whose Id matches codex.build.iid, and it leaves a decoy reference, busybox and the registry. In the mismatched-Id state it fails without removing anything. A static order guard in the same test rejects each negative-control edit that moves a cleanup record after the step it protects or writes the handoff before cold-pull validation.
+    - run: 'out=$(go test ./features -run "^TestEngineFixtureCodexCleanup$" -v 2>&1); status=$?; printf "%s\n" "$out"; test "$status" -eq 0 && printf "%s\n" "$out" | grep -q "^--- PASS: TestEngineFixtureCodexCleanup " && ! printf "%s\n" "$out" | grep -q -- "--- SKIP"'
 - id: T-82
   type: build
   title: Bump go.opentelemetry.io/otel to v1.47.0 for GO-2026-6974
