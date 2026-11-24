@@ -2826,7 +2826,7 @@ items:
     title: The next control-lock holder removes orphaned .intent-<nonce>.tmp files and leaves records and live publishers' temporaries alone
     phase: 1
     owner: donvargax
-    status: doing
+    status: todo
     depends_on: []
     kind: slice
     why: >
