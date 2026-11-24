@@ -2681,7 +2681,7 @@ items:
     title: Every selected run regenerates only config.toml before the literal workload starts
     phase: 1
     owner: donvargax
-    status: todo
+    status: doing
     depends_on: [slice-54]
     kind: slice
     why: >
