@@ -2867,14 +2867,15 @@ items:
       absent. Write the scenarios red first, in checkout-overlap.feature or recovery.feature. Fix
       only the rows that fail. Uncertain creates are out of scope: an engine error reply, or a
       create whose reply was lost. Broken down from p3-registration-before-intent.
-  - id: retire-orphan-intent-temporaries
+  - id: slice-60
     title: The next control-lock holder removes orphaned .intent-<nonce>.tmp files and leaves records and live publishers' temporaries alone
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
+    kind: slice
     why: >
+      Was retire-orphan-intent-temporaries.
       Decision 0034 (the person, 2026-11-23) allows this; it narrows decision 0022:824-828 for these
       temporaries only. A publisher killed anywhere in Publish
       (internal/engine/approval/disk/storage.go:190) can leave a .intent-<nonce>.tmp, either on its
