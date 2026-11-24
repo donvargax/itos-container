@@ -663,7 +663,13 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # spends Begin's existing call budget; when that ends it stops and keeps what
   # is left. Out of scope: .refusals-, .approval-, .snapshot- and .location-
   # temporaries, every record, and how long sessions are kept, all of which stay
-  # with p3-session-state-retention or their owners. Add disk-adapter tests
+  # with p3-session-state-retention or their owners. The homes catalog
+  # (<account home>/.local/state/itos-container/homes) is not scanned either,
+  # although Homes.Save publishes through the same Publish: it lies outside
+  # every managed root L, and its publishers hold the homes transaction's lock,
+  # not the control lock or a lock rule 4 names, so its liveness evidence is a
+  # separate design point. Its leftovers stay with p3-session-state-retention
+  # until an item specifies that rule. Add disk-adapter tests
   # beside admission_leftover_test.go for each evidence rule that no scenario
   # reaches: an operation.lock that is missing, unsafe or held, a three-link
   # record, and an owner other than the effective UID.
@@ -765,6 +771,22 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # pauses on its first call whose source has intentTemporary's shape and whose
   # target is <64 hex>.json (intent row) or record.json (public row). It writes
   # Ready with the source name, then waits for Release through publicBarrier.
+  # Rename takes no context, so the wrapper bounds that wait itself with its own
+  # context.WithTimeout of ten seconds, W's finite-call cap. If that deadline
+  # ends the wait, the wrapper still makes the real Rename, so W is never left
+  # hanging until the shard's hang guard, and it records the timeout below.
+  # Evidence. Only the paused call can show what it published: W later replaces
+  # the same record again (intent stage intent to owned, public record ready to
+  # running to stopped), so the end state cannot. publicProbeRequest gains one
+  # new field, Evidence, a file path in W's fixture directory outside every
+  # state tree. Right after the real Rename returns, and before returning its
+  # error, the wrapper writes that file once, 0600, as JSON holding: whether the
+  # wait timed out, the Rename error text (empty on success), and the target's
+  # Lstat through the same *os.Root (device, inode, link count) with the bytes
+  # it then reads from the target through that root. The fixture inventories
+  # W's paused temporary after Ready and before P runs; the evidence must show
+  # no timeout, no error, and that inventory's device, inode and bytes with one
+  # link.
   # Matching record.json excludes admission's pending-to-active replacement,
   # which shares publicStorage.IO and runs under the control lock. Prepare's
   # intent and the registration's record.json are first publications that link
@@ -780,7 +802,10 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # finite-call cap. A W that times out fails the last Thens; it is data, not
   # setup. The first Then fails today because the admission orphan remains. A
   # sweep that took the paused temporary would make W's rename fail with
-  # state.write, and the last two Thens would catch it.
+  # state.write, and the evidence and the last two Thens would catch it. "No
+  # temporary of its own" is read at the end, after W's run has exited: in W's
+  # intent directory and session directory, no .intent-*.tmp name remains but
+  # the one the fixture planted beside the paused temporary.
   @wip @slice-60 @ID-CONTROL-29 @local-engine-fixture
   Scenario Outline: A live publisher's temporary survives another holder's sweep
     Given a control-state fixture whose W run will pause before its first "<record>" replacement after registration once that replacement's temporary is durable
@@ -789,7 +814,8 @@ Feature: Doctor and approve keep control state outside another worker's checkout
     Then the writer succeeds and the temporary planted in W's admission collection is gone
     And W's paused temporary its record and the temporary planted beside them keep their bytes inode link count and mtime
     When the fixture releases W and ends W's workload
-    Then W replaced its "<record>" with the paused temporary's bytes and inode and left no temporary of its own
+    Then W's paused rename evidence shows its "<record>" published with the paused temporary's bytes device and inode and one link
+    And W left no publisher temporary of its own in its intent directory or session directory
     And W's run exits zero with complete cleanup
 
     Examples:
