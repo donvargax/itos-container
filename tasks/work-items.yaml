@@ -2880,18 +2880,10 @@ items:
     status: todo
     depends_on: [T-86]
     kind: task
-  - id: nonengine-recovery-lifecycle-readiness-waits
+  - id: T-88
     title: Recovery and lifecycle fixtures wait on observed readiness instead of fixed sleeps, wherever the profile shows the sleep dominating a row
     phase: 1
     owner: null
     status: todo
     depends_on: [T-86]
-    kind: idea
-    why: >
-      The idea names fixed waits in the recovery and lifecycle fixtures as the other suspected cost.
-      Many time.Sleep calls sit in lifecycle_*, recovery_* and overlap fixtures. Replace only the
-      sleeps the recorded profile names with a wait on the event the sleep stands in for, under the
-      same upper bound. A sleep that is itself the behaviour under test stays, such as grace windows
-      or fixed SIGKILL timing (decision 0009). The regression is committed red first and fails when
-      a listed fixture blocks for a fixed interval with readiness already observed. All assertions
-      and timing contracts stay unchanged. Broken down from p2-profile-non-engine-feature-suite.
+    kind: task
