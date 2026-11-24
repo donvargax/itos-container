@@ -2273,9 +2273,6 @@ items:
       Show the selected backend during review and record it in the approval. When neither backend is
       available, require explicit consent to “late host sockets reachable”. Cover reapproval after
       the selection changes. Broken down from p1-checkout-socket-kernel-enforcement.
-    deferred: >
-      its spec drafter turn yields no change and ends the coordinating driver; resume after the
-      driver's fix lands
   - id: slice-44
     title: Require matching socket approval before worker creation
     phase: 1
