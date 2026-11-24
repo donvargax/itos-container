@@ -9527,7 +9527,7 @@
     scenario, assertion or limit changes. Run the engine-free self-tests below locally. Before the
     work, the check exits 1 at its first grep.
 - id: T-79
-  type: docs
+  type: test
   title: "Architecture drift: reconcile session and runtime evidence status"
   why: >
     Reconcile arc42 with merged slice-9 ownership work and live engine scenarios, preserving the
@@ -9678,3 +9678,124 @@
     worker then mounts an unapproved host directory. Fix: hand Docker an inode-bound source through
     a protected mount anchor held through startup and recovery, and refuse overlapping worker
     checkouts.
+- id: T-81
+  type: test
+  title: engine-fixture prepares, hands off and cleans up a verified pinned Codex 0.167.0 fixture image
+  why: >
+    Native real-Codex evidence needs the rust-v0.167.0 asset codex-x86_64-unknown-linux-musl.tar.gz.
+    Every host this uses is signed: github.com and release-assets.githubusercontent.com for the
+    download, and api.github.com for the published asset digest that the red commit cross-checks
+    against a local sha256sum. features/testdata/codex-fixture/SHA256SUMS pins the asset and the
+    extracted executable, and CI compares only against that file. Inside the existing
+    `tools/bin/engine-fixture prepare` step, already called by ci.yml, it does the following. It
+    builds features/testdata/codex-fixture/Dockerfile FROM the pinned busybox, with the executable
+    root-owned 0555 at /usr/local/bin/codex. It pushes to a separate
+    itos-fixture-<run>-<attempt>-codex repository, verifies the manifest and config digests, removes
+    the tag and digest, and cold-pulls. Its ordered 0600 records (codex.repository, codex.tag,
+    codex.build.iid, codex.digest) exist only for cleanup. Its handoff (codex.reference, codex.iid)
+    is written only after the whole protocol passes. Prepare's four outputs and .github/workflows
+    stay unchanged, and no product code changes, so it has no product prerequisite. The spec states
+    that the implementer may commit freely in its workspace and that the host makes the landing
+    commits. Broken down from slice-35.
+  done_when:
+    - run: 'out=$(go test ./features -run "^TestEngineFixtureCodexCleanup$" -v 2>&1); status=$?; printf "%s\n" "$out"; test "$status" -eq 0 && printf "%s\n" "$out" | grep -q "^--- PASS: TestEngineFixtureCodexCleanup " && ! printf "%s\n" "$out" | grep -q -- "--- SKIP"'
+- id: T-82
+  type: build
+  title: Bump go.opentelemetry.io/otel to v1.47.0 for GO-2026-6974
+  why: >
+    govulncheck now reports GO-2026-6974 in go.opentelemetry.io/otel/trace v1.35.0, fixed in
+    v1.47.0. The module is indirect, through the Docker client, but govulncheck finds it reachable
+    from internal/slices/count/input/input.go:33 and internal/engine/session/docker/run.go:294, so
+    the vulnerability gate refuses every commit and push until it moves. The work raises
+    go.opentelemetry.io/otel, otel/trace and otel/metric to v1.47.0, and otelhttp and the other otel
+    modules to their matching releases where the minimum version selection needs them, then runs go
+    mod tidy. It changes no code; the gate and the dependency's users stay as they are.
+- id: T-83
+  type: docs
+  title: Record the open decision on what evidence lets recovery retire an uncertain create
+  why: >
+    Some sessions can never be finished by status or stop because a create's outcome is uncertain.
+    Cases: the daemon answered a container or network create with an error (an exhausted address
+    pool, for example); VolumeCreate was sent, its reply was lost, and later lookups keep finding no
+    volume; a controller died after sending a create. slice-27's two network creates per egress run
+    make these cases reachable, and nested checkouts then stay blocked. The item's notes say twice
+    that the rule is the person's security decision: a name-only miss, elapsed time and repeated
+    misses do not prove the create finished. This task writes the open decision record with the
+    options and one recommendation, and builds nothing. Recovery for these cases is proposed only
+    after the person answers. Broken down from p3-registration-before-intent.
+- id: T-84
+  type: ci
+  title: credentials-run-native.feature joins the offline engine shard whole, before slice-31 lands
+  why: >
+    slice-31's breakdown adds a new features/credentials-run-native.feature, and the agent that
+    implements it may not edit .github/workflows (docs/charter.md:163). The person approved on
+    2026-11-24 placing the whole file in the offline engine shard, so the placement lands on main
+    first, as T-77 did for credentials-run.feature and T-78 for claude-home.feature. The Engine
+    scenarios step on the last four green main runs took 69-96 s in offline, 36-56 s in egress,
+    106-128 s in lifecycle and 143-176 s in other, against the 180 s budget. -
+    .github/workflows/ci.yml: the offline include's features value adds
+    credentials-run-native.feature, on one line. - features/engine_shards_test.go: shardOfflineFiles
+    holds the same three names, sorted. - features/features_test.go: the file is not on this tree
+    yet, so pendingEngineFeatures gains credentials-run-native.feature -> slice-31 in offline,
+    beside the two existing entries. - features/engine_pending_test.go: controls cover the new entry
+    and refuse credentials-run-native.feature in egress and other. slice-31 removes its entry in its
+    own test commit once the file lands. - Decision 0024 gets a 'Credentials-run-native placement,
+    2026-11-24' subsection quoting those times and the person's approval, and features/README.md and
+    docs/architecture/arc42.md update their shard lists. No scenario, assertion or limit changes.
+    Run only the engine-free tests named in the check locally; CI runs the rest. Before the work,
+    the check exits 1 at its first grep.
+- id: T-85
+  type: test
+  title: The non-engine feature tier writes a timing record for every scenario row and every harness regression test
+  why: >
+    Without per-row and per-test durations nobody can tell which fixtures make up the roughly 300 s.
+    T-33's engineTiming collector (features/engine_timing_test.go) and its `engine scenario timing:`
+    records exist only when the engine tier is enabled (features/features_test.go:174, 475-495).
+    Extend the same record shape, or a sibling `scenario timing:` prefix, to the non-engine run of
+    TestFeatures. Add one record per top-level harness Go test in ./features. Durations, IDs and
+    outcomes only. Selection, assertions and output are otherwise unchanged.
+    TestEngineScenarioTiming's existing pins keep holding. Start files:
+    features/engine_timing_test.go, features/engine_timing_regression_test.go,
+    features/features_test.go. No fake engine is needed. Broken down from
+    p2-profile-non-engine-feature-suite.
+  done_when:
+    - run: go test ./features -run 'TestEngineScenarioTiming|TestNonEngineScenarioTiming'
+- id: T-86
+  type: docs
+  title: "Record the non-engine suite's measured profile: slowest scenario rows, harness tests and fixture setup, with their shares of wall time"
+  why: >
+    The cuts must target overhead that was actually measured, not guessed. Measure on the first
+    uncached run of a commit, without rerunning a suite that already ran there and without adding
+    -count=1 by default (the charter's CPU rule). Then record in features/README.md the top rows and
+    tests by duration, grouped by feature file and fixture. Name the repeated costs the records
+    show, such as product or probe binary builds and fixed sleeps, each with its measured seconds.
+    Plain English, dated, labelled as measurement and not as a support claim. If no candidate
+    overhead shows up, say so, and the cut children close as not needed. Broken down from
+    p2-profile-non-engine-feature-suite.
+  done_when:
+    - run: grep -q '^## Non-engine suite profile' features/README.md
+- id: T-87
+  type: perf
+  title: Fixtures in the non-engine tier build each product or probe binary once per suite run, not once per fixture or row
+  why: >
+    The idea suspects redundant fixture builds. About 40 fixture files under features/ build or exec
+    their own binaries. Take this only for the builds the recorded profile names. Route them through
+    one memoised build per suite run, keyed by the same inputs, so that every scenario row,
+    assertion and cleanup is unchanged and per-scenario coverage routing (ITOS_CC_TEST_COVERDIR) is
+    kept. Commit a regression red first that counts builds per run. Wall time before and after goes
+    in the PR, from timing records. Broken down from p2-profile-non-engine-feature-suite.
+  done_when:
+    - run: go test ./features -run 'TestNonEngineFixtureBuildsOnce'
+- id: T-88
+  type: perf
+  title: Recovery and lifecycle fixtures wait on observed readiness instead of fixed sleeps, wherever the profile shows the sleep dominating a row
+  why: >
+    The idea names fixed waits in the recovery and lifecycle fixtures as the other suspected cost.
+    Many time.Sleep calls sit in lifecycle_*, recovery_* and overlap fixtures. Replace only the
+    sleeps the recorded profile names with a wait on the event the sleep stands in for, under the
+    same upper bound. A sleep that is itself the behaviour under test stays, such as grace windows
+    or fixed SIGKILL timing (decision 0009). The regression is committed red first and fails when a
+    listed fixture blocks for a fixed interval with readiness already observed. All assertions and
+    timing contracts stay unchanged. Broken down from p2-profile-non-engine-feature-suite.
+  done_when:
+    - run: go test ./features -run 'TestRecoveryLifecycleFixturesWaitOnReadiness'

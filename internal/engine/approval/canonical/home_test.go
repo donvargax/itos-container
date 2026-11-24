@@ -118,3 +118,54 @@ func TestInvalidHarnessSettingsCannotAuthorize(t *testing.T) {
 		})
 	}
 }
+
+func TestCodexHarnessIsBoundByItsSeed(t *testing.T) {
+	r := porttest.Ready()
+	codec := JSON{}
+	r.Policy.Policy.Home = &policyport.Home{Storage: "volume"}
+	plain := codec.Candidate(r, "2001", "3001")
+	r.Policy.Policy.Home = &policyport.Home{Storage: "volume", Harness: "codex"}
+	got := codec.Candidate(r, "2001", "3001")
+	if got.Fingerprint == plain.Fingerprint || got.Project != plain.Project {
+		t.Fatal("the harness must change the fingerprint and keep the project", plain, got)
+	}
+	want := `"home":{"harness":{"kind":"codex","seed":"codex-v1","target":"/home/itos/.codex"},"lifetime":"project","mode":"0700","storage":"volume","target":"/home/itos"}`
+	if !strings.Contains(got.Canonical, want) || !strings.Contains(got.Canonical, `"profile":"offline-home-v1"`) {
+		t.Fatal("the home object omits the Codex binding", got.Canonical)
+	}
+	// Beside the OpenCode list the harness sits before it, as the sorted keys put it.
+	r.Policy.Policy.Home = &policyport.Home{Storage: "volume", Harness: "codex", Harnesses: []string{"opencode"}}
+	both := codec.Candidate(r, "2001", "3001")
+	if !strings.Contains(both.Canonical, `"harness":{"kind":"codex","seed":"codex-v1","target":"/home/itos/.codex"},"harnesses":[{"name":"opencode","profile":"opencode-v1"}],"lifetime"`) {
+		t.Fatal(both.Canonical)
+	}
+	record := port.Record{Candidate: got, Generation: "2"}
+	if decoded, f := codec.Decode(plain, codec.Encode(record)); f != "" || decoded != record {
+		t.Fatal(decoded, f)
+	}
+	paths := codec.ChangedPaths(got, port.Record{Candidate: plain, Generation: "1"}, true)
+	if len(paths) != 1 || paths[0] != "/home/harness" {
+		t.Fatal(paths)
+	}
+	// No frozen input may carry the harness until run can seed it.
+	frozen := port.Frozen{Project: got.Project, Generation: "2", Fingerprint: got.Fingerprint, Settings: got.Canonical}
+	if r, f := codec.FrozenRecord(frozen); f != "state.invalid" || r != (port.Record{}) {
+		t.Fatal("a frozen Codex harness was accepted", r, f)
+	}
+}
+
+func TestInvalidCodexHarnessSettingsCannotAuthorize(t *testing.T) {
+	for _, harness := range []codexHarness{
+		{"codex", "codex-v2", "/home/itos/.codex"},
+		{"codex", "codex-v1", "/home/itos/.other"},
+		{"opencode", "codex-v1", "/home/itos/.codex"},
+		{"", "", ""},
+	} {
+		testRejectsSelfConsistentInvalidSettings(t, func(s *settings) {
+			h := volumeHome()
+			h.Harness = &harness
+			s.Home = &h
+			s.Profile = "offline-home-v1"
+		})
+	}
+}

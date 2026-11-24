@@ -226,6 +226,8 @@ type pendingEngineFeature struct{ item, shard string }
 var pendingEngineFeatures = map[string]pendingEngineFeature{
 	"credentials-run.feature": {item: "slice-31", shard: "egress"},
 	"claude-home.feature":     {item: "slice-36", shard: "other"},
+
+	"credentials-run-native.feature": {item: "slice-31", shard: "offline"},
 }
 
 // These tags select native binaries before any scenario hook or fixture runs.

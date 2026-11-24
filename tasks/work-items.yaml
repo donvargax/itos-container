@@ -3,7 +3,6 @@ phases:
   1: null
 queue:
   - slice-28
-  - slice-35
   - slice-40
   - slice-31
   - slice-36
@@ -499,54 +498,9 @@ items:
     title: A crash between registration and intent publication leaves no stuck session
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      Recovery debris, this milestone. A read-only security audit of main at 7236d68 (Codex,
-      2026-11-06), static, no Docker run; confirm with a scenario before building. Registration is
-      durable before Store.New publishes its intent (registered_run.go:39;
-      session/disk/registry.go:144), so controller loss or an intent-write failure in that gap
-      leaves a session status and stop both refuse, which no supported command clears; no worker
-      exists, so it is debris, not an escape. Publish both consistently, or add a durable
-      create-not-issued state recovery can retire; a name-only 404 must not become proof of absence.
-
-      Extend this existing recovery item to cover crashes after durable admission reservation but
-      before public registration. Such orphan reservations can block overlapping checkouts without a
-      discoverable session. Include a black-box scenario and safe retirement based on durable
-      evidence that creation was never issued, preserving active reservations; a name-only 404 must
-      not establish absence.
-
-      This is crash debris with no supported way to clear it, which is what
-      p3-registration-before-intent is about. Add this to that item's safe-retirement part. A
-      publisher killed anywhere in Publish (before the write, during it, or after the link) leaves a
-      .intent-<nonce>.tmp, either alone or as the second link of its record. The next control-lock
-      holder can retire it on durable evidence: the name Publish makes, in the pinned private
-      directory, and either an orphan or the same inode as its record. Keep to the item's rule that
-      a name alone is not proof. It is not needed for correctness, because Names skips the temporary
-      and bd383fd reads the record around it. The item's scenario should check that a retired
-      temporary leaves the record intact and that a live publisher's temporary is never removed.
-
-      This is the same family: a session that status and stop can never finish, because an uncertain
-      create keeps its intent and a name-only miss is not proof of absence. That item already covers
-      the crash gaps around registration and intent. Add the case where the daemon answered a create
-      with an error (an exhausted address pool, say) as another way to reach it. Whether an error
-      reply proves no create was made is a security decision, so it is for the person or coordinator
-      to settle, and a drafter must not invent that rule. T-40's spec says the uncertain-create rule
-      is the worker's and the anchor's today and is not T-40's to change. But T-40 adds two network
-      creates per egress run, so slice-27 makes the stuck session reachable and nested checkouts
-      then stay blocked. The item is p3; its phase is worth revisiting once slice-27 is queued.
-
-      Include a controller killed after publishing the stage intent and claim but before issuing
-      VolumeCreate. This item already covers safe retirement when durable evidence proves a create
-      was never issued. A name-only lookup that finds no volume cannot rule out a late allocation.
-      Any broader reclaim rule needs the person’s decision.
-
-      This recovery item already covers uncertain creates that leave a session stuck. Add the case
-      where VolumeCreate was dispatched, its reply was lost, and later lookups continue to find no
-      volume. HOME-10 covers a volume that eventually appears. The person must settle what evidence
-      permits releasing the claim while a delayed allocation is still possible. Elapsed time and
-      repeated name-only misses do not establish that the create has finished.
   - id: slice-16
     title: Run refuses overlapping worker checkouts
     phase: 1
@@ -692,21 +646,9 @@ items:
     title: Profile the non-engine feature suite and cut its roughly 300 s wall time
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      No item covers this. T-35 recorded 303 s for the uncached `go test ./features -count=1` (1,274
-      scenario rows plus the harness regressions), and the current work step saw 298 s on Linux.
-      T-33 shortens only the engine tier, and T-36 only the coverage pass. Every slice adds rows,
-      and the same suite runs on the Linux, macOS and Windows platform jobs, so each pull request
-      pays it three times, and the loop pays it whenever there is no green base to select from. The
-      charter keeps suite-speed fixes in the first milestone, ahead of milestone 2. First measure
-      per-scenario and per-harness-test durations in the non-engine tier, reusing T-33's
-      timing-record approach. Then cut only demonstrated harness overhead, such as redundant fixture
-      builds or fixed waits in the recovery and lifecycle fixtures. Keep every row, assertion and
-      cleanup, and add no sharding or reduced selection. Phase p2: nothing blocks the current step,
-      and no CI job's limit is near 300 s.
   - id: p2-control-state-upgrade-contract
     title: Specify the upgrade contract for existing control state, and drop the persisted device field with it
     phase: 1
@@ -903,6 +845,9 @@ items:
       leaves a recovery record with the exact retry command, and stop recovers it without touching
       foreign resources. It builds on the run-through-proxy slice, so it comes last. Broken down
       from p1-egress-allowlist-proxy.
+    deferred: >
+      the queue's fresh draft cannot be posted now that the old branch is renamed; resume once the
+      queue can redraft it from current main
   - id: T-41
     title: The overlap scenarios' after hook stops timing out under the code proof's coverage run
     phase: 1
@@ -1464,6 +1409,15 @@ items:
       provider can use, since those share no filesystem with the host. Costs: sync time on large
       repositories, no live view in the host editor, and divergence when the person edits the
       checkout meanwhile (commits merge; uncommitted edits don't).
+
+      Discobox (github.com/discobox-ai/discobox at 97b2281, Apache-2.0) builds this mode, read
+      2026-11-23. Its box clones from a read-only origin the pool serves over authenticated git HTTP
+      at a reserved host name, with a day-long token scoped to fetch and bound to one sandbox;
+      uncommitted changes come along only on request (--include-dirty), the agent commits inside the
+      box, and the host fetches the commits back. That fits the rule that pushes stay on the host,
+      and would let decisions 0013, 0019 and 0020 shrink; it changes the contract's
+      checkout-is-the-only-mount line, so it stays the person's call. Read docs/adr/26-10-08-561 in
+      that repository first.
   - id: p1-engine-timing-notice-every-run
     title: Every engine job run publishes its slowest scenario timings and the runner's identity as a ::notice annotation, green runs included
     phase: 1
@@ -1633,7 +1587,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [slice-31]
+    depends_on: [slice-30, T-48]
     kind: slice
     why: >
       Was p1-credentials-github-token-run.
@@ -1644,6 +1598,10 @@ items:
       scope here and no scenario reaches a real host. It reuses the token path of the Claude slice.
       Whether the GitHub token shares a grant with Claude's is not assumed, since each is its own
       approved grant. Broken down from p1-credentials-passed-in.
+    deferred: >
+      GitHub pushes stay on the host (the person, 2026-11-17; docs/decisions/STANDING.md:30): the
+      worker holds no GitHub token, so nothing needs this delivery yet. Resume when an agent needs
+      GitHub from inside the box.
   - id: T-51
     title: "A disk adapter for the RefusalLog port streams the proxy's log into egress-refusals.jsonl: private, fsynced, renamed"
     phase: 1
@@ -1990,17 +1948,9 @@ items:
     title: Codex starts with isolated state and unwanted startup services disabled
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: [slice-34]
     kind: slice
-    why: >
-      Was p1-harness-codex-home-seeding.
-      Seed the container-owned home with Codex update checks, analytics, plugins and its own sandbox
-      disabled, as the charter requires. Specify initialization and repeat-run behavior without
-      changing literal workload argv or executing checkout code on the host. Keep authentication
-      delivery in slice-32 and follow the charter's dedicated-directory decision rather than that
-      item's stale single-file wording. Prove settings and startup behavior with black-box scenarios
-      and controlled endpoints, without real accounts or credentials. Broken down from null.
   - id: slice-36
     title: Claude starts with isolated state and onboarding already completed
     phase: 1
@@ -2232,9 +2182,10 @@ items:
       entries. Specify what one grant authorizes, how unrelated entries stay outside it, what
       approval shows, how updates or refreshes and cleanup work, and how the staged login stays out
       of the checkout, engine configuration and logs. Use synthetic markers and fake endpoints for
-      the scenarios. Name any unresolved account decision explicitly. Specification first;
-      implementation follows the Codex and Claude slices. Real credential use is subject to decision
-      0025 question 5.
+      the scenarios. Name any unresolved account decision explicitly. Specification first. Real
+      credentials follow decision 0035: OpenCode issues no subscription token, so the one grant is
+      the OpenCode Go provider entry from auth.json. Any harness may be the first in the container
+      (the person, 2026-11-24), so this slice need not wait for the Codex and Claude slices.
   - id: slice-41
     title: Start OpenCode headless with isolated home and configuration
     phase: 1
@@ -2478,6 +2429,16 @@ items:
       The person corrected the Codex part of q-90 on 2026-11-20: Codex defaults to a sandbox-only
       ChatGPT login in the harness home (device login, never the host auth.json), with an API key
       only as the fallback when a weekly limit is reached. The design is amended to match.
+
+      Discobox's design (github.com/discobox-ai/discobox at 97b2281, proxy/DESIGN.md, read
+      2026-11-23) is the reference for a sentinel-swap broker, built as a separate project because
+      it holds a CA and intercepts TLS: the box holds only sentinels shaped like the real keys; the
+      proxy swaps a sentinel for the real value only on an authorized route, matching the exact set,
+      never a prefix; every request is authorized before any secret is decrypted; values are
+      redacted from the audit; an outage answers 503 and never forwards the real value; grants
+      expire. Unlike slice-31's staged file, the real token never enters the box. Routes finer than
+      a host (method, path, tool) would sit beside the rule against exact-match allowlists of agent
+      actions, so that is for the person to weigh.
     deferred: >
       Deferred until remote sandboxes (microVMs on cloud providers) exist, by the person's direction
       of 2026-11-20 (q-90). Locally run sandboxes share the host's own logins, so the local case
@@ -2697,4 +2658,224 @@ items:
     owner: donvargax
     status: done
     depends_on: []
+    kind: task
+  - id: slice-54
+    title: Select Codex defaults explicitly and disclose them for approval
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: [slice-34]
+    kind: slice
+  - id: slice-55
+    title: Every selected run regenerates only config.toml before the literal workload starts
+    phase: 1
+    owner: donvargax
+    status: todo
+    depends_on: [slice-54]
+    kind: slice
+    why: >
+      Was codex-home-seed-every-run.
+      This is the core behavior. Its spec defines the selection it reads, so it relies on no draft
+      header. After durable home ownership and before any start, run sets
+      CODEX_HOME=/home/itos/.codex. It creates .codex (0700) if missing and publishes the fixed
+      codex-v1 config.toml (0600) through slice-34's archive seam on every invocation. The seed
+      turns off update checks, analytics, plugins and Codex's own sandbox. The run then confirms a
+      successful readback. The frozen selection survives request edits. Literal argv, sessions,
+      history and auth paths stay untouched. It owns the current CODEXHOME-03 and CODEXHOME-04
+      locally, and the first-instruction native evidence of CODEXHOME-08 in the existing shared
+      fixture image and offline shard. It proves the seeded settings byte for byte and must not
+      claim that runtime startup traffic is absent, which the native startup child owns. The spec
+      states that the implementer may commit freely in its workspace and that the host makes the
+      landing commits. Broken down from slice-35.
+    deferred: >
+      its red commit must change the live scenario @ID-CODEXHOME-02, which itos refuses; redraft
+      with a new scenario id for the seeded behaviour (the coordinator's call)
+  - id: slice-56
+    title: Refuse unsafe retained Codex seed paths before any write or start
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-55]
+    kind: slice
+    why: >
+      Was codex-home-unsafe-path-refusal.
+      This child owns pre-write path safety and round 7's first P1. Docker's archive GET and HEAD
+      call Stat, which uses Lstat for the mode but then follows the link chain to fill LinkTarget. A
+      self-referential link can therefore fail before the controller sees a mode. The spec must
+      state whether no-follow is promised only at the controller or also at the daemon. If
+      daemon-side no-follow is required, it must name an engine operation that provides it. It must
+      classify an engine that returns no metadata, and add a native symlink-loop row that asserts
+      the chosen diagnostic with zero publication and zero start. It also covers the symlink, FIFO,
+      directory, owner and mode refusals (run.home-refused, with fixed-path guidance) and the native
+      hard-link replacement that preserves the sentinel. That is the current CODEXHOME-05 and
+      CODEXHOME-10, using the existing shared fixture image only. The spec states that the
+      implementer may commit freely in its workspace and that the host makes the landing commits.
+      Broken down from slice-35.
+  - id: slice-57
+    title: Incomplete or unverifiable seeding never authorizes a worker start
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-55, slice-56]
+    kind: slice
+    why: >
+      Was codex-home-readback-contract.
+      This child owns the classification of readback and publication faults, from the current
+      CODEXHOME-06 and CODEXHOME-07. That covers partial, lost or failed publication; truncated,
+      missing or extra end-of-archive blocks; a wrong name, an extra entry, an oversize stream and
+      timeout precedence; and confirmed wrong seeds as run.isolation-unverified. The round-7 P2
+      belongs here: an otherwise correct archive with both terminator blocks and a nonzero byte
+      afterward must give a delivered readback fault, run.home-unavailable (75), and no start. It is
+      local-only orchestration evidence. It depends on the refusal child because its
+      retained-partial rows (a root-owned partial file is refused) reuse that child's pre-write
+      inspection. The spec states that the implementer may commit freely in its workspace and that
+      the host makes the landing commits. Broken down from slice-35.
+  - id: T-81
+    title: engine-fixture prepares, hands off and cleans up a verified pinned Codex 0.167.0 fixture image
+    phase: 1
+    owner: donvargax
+    status: todo
+    depends_on: []
+    kind: task
+  - id: slice-58
+    title: Pinned Codex 0.167.0 starts and resumes from seeded settings without unwanted startup traffic
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-55, T-81]
+    kind: slice
+    why: >
+      Was codex-pinned-startup-traffic.
+      This is the native real-Codex scenario, the current CODEXHOME-09, in the existing offline
+      engine shard. It reads the image task's handoff records and independently verifies the image
+      identity and `codex --version`. It covers round 7's second and third P1s. First, the relay
+      must account for each accepted client connection before its upstream dial, drain or fail on
+      pending relay work, and treat failed forwarding as evidence. A control must pause an accepted
+      connection before its upstream dial until the Codex child exits. Second, the layered config
+      report stays for provenance and the shell turns stay for execution and resume. Runtime
+      approvalPolicy and sandbox evidence must come from a separate app-server thread/start with
+      those overrides omitted, plus an independent control with different user-layer values, because
+      `codex exec` supplies Never itself. The fixture's closed-port canary stays. It depends on
+      seeding for the seeded user layer and on the image task for the pinned binary. The spec states
+      that the implementer may commit freely in its workspace and that the host makes the landing
+      commits. Broken down from slice-35.
+  - id: p3-microvm-libkrun-reference
+    title: When microVMs start, read Discobox's libkrun provider before designing the engine adapter
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      MicroVMs come later, on several cloud providers (docs/charter.md:157). Discobox
+      (github.com/discobox-ai/discobox at 97b2281, Apache-2.0, read 2026-11-23) runs boxes on
+      libkrun microVMs on Linux with /dev/kvm and on vz on macOS; those, not its Docker provider
+      (privileged, beside the host Docker socket), are its real isolation boundary. When that line
+      starts, read server/providers/libkrun/ and server/providers/DESIGN.md first, and decide
+      whether a microVM adapter goes behind this project's engine port. Not now: no item in the
+      queue changes.
+  - id: p2-credentials-manager-integration
+    title: Read credential sources from a credentials manager instead of one-secret files
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      The person, 2026-11-23 (decision 0035): a credentials-manager integration is needed but not
+      started. Until it exists, credential sources are files, one secret per file, mode 0600, in a
+      directory of mode 0700, so nothing waits on this. When it starts, it decides which manager,
+      how a run's approved grant names a secret there instead of a path, and how readiness, approval
+      and the frozen grant keep binding a source without reading its contents
+      (docs/decisions/0029-credential-approval.md:11).
+  - id: T-82
+    title: Bump go.opentelemetry.io/otel to v1.47.0 for GO-2026-6974
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: slice-59
+    title: A controller killed at any point between reservation and the first engine create leaves no session that status and stop cannot finish
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: slice
+    why: >
+      Was registration-kill-points-leave-no-stuck-session.
+      The audit found this gap by reading code (Codex, 7236d68, 2026-11-06), not by running
+      anything, and it asked for a scenario before any build. ID-OVERLAP-11 covers only a kill at
+      "reservation before registration" and two fsync faults. ID-OVERLAP-12 covers a pause before
+      create once registration is visible. Rows still missing: a kill after Store.Prepare publishes
+      the reserved intent but before Registry.Register; an intent-write failure at that same point;
+      a kill after registration but before the intent moves past reserved; and a kill after the
+      stage intent and claim are published but before VolumeCreate is issued, but only where durable
+      evidence shows the create was never issued. Each row must show one of two outcomes. Either
+      status and stop finish the session, or the next overlapping run is admitted, and in both cases
+      no engine mutation was sent. A name-only 404 must never count as proof that something is
+      absent. Write the scenarios red first, in checkout-overlap.feature or recovery.feature. Fix
+      only the rows that fail. Uncertain creates are out of scope: an engine error reply, or a
+      create whose reply was lost. Broken down from p3-registration-before-intent.
+  - id: slice-60
+    title: The next control-lock holder removes orphaned .intent-<nonce>.tmp files and leaves records and live publishers' temporaries alone
+    phase: 1
+    owner: donvargax
+    status: todo
+    depends_on: []
+    kind: slice
+    why: >
+      Was retire-orphan-intent-temporaries.
+      Decision 0034 (the person, 2026-11-23) allows this; it narrows decision 0022:824-828 for these
+      temporaries only. A publisher killed anywhere in Publish
+      (internal/engine/approval/disk/storage.go:190) can leave a .intent-<nonce>.tmp, either on its
+      own or as a second hard link to its record. The next control-lock holder removes it only on
+      durable evidence: the exact name shape Publish makes (intentTemporary, store.go:551), inside
+      the pinned private directory, and either an orphan or the same inode as its record. A name
+      alone is never proof. Scenarios, written red first, must show three things: a removed
+      temporary leaves its record byte-identical, a live publisher's temporary is never removed, and
+      names that only look similar are kept (see admission_leftover_test.go's cases). Out of scope:
+      refusal-log copy temporaries and how long session state is kept, which both stay with
+      p3-session-state-retention. Broken down from p3-registration-before-intent.
+  - id: T-83
+    title: Record the open decision on what evidence lets recovery retire an uncertain create
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-84
+    title: credentials-run-native.feature joins the offline engine shard whole, before slice-31 lands
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-85
+    title: The non-engine feature tier writes a timing record for every scenario row and every harness regression test
+    phase: 1
+    owner: donvargax
+    status: todo
+    depends_on: []
+    kind: task
+  - id: T-86
+    title: "Record the non-engine suite's measured profile: slowest scenario rows, harness tests and fixture setup, with their shares of wall time"
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-85]
+    kind: task
+  - id: T-87
+    title: Fixtures in the non-engine tier build each product or probe binary once per suite run, not once per fixture or row
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-86]
+    kind: task
+  - id: T-88
+    title: Recovery and lifecycle fixtures wait on observed readiness instead of fixed sleeps, wherever the profile shows the sleep dominating a row
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-86]
     kind: task

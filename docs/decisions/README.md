@@ -35,5 +35,6 @@ file and leaves this list, which itos decision record writes.
 - [ADR-0031: Foreground terminal attachment](0031-foreground-terminal.md)
 - [ADR-0033: Codex home: bound identity and masked host files](0033-codex-home-identity-and-masks.md)
 - [ADR-0034: The next control-lock holder deletes orphaned temporaries in protected state](0034-the-next-control-lock-holder-deletes-orphaned-temporaries-in-protected-state.md)
+- [ADR-0035: Real credentials for container runs: a subscription token where the provider issues one, else its auth file shared](0035-real-credentials-for-container-runs-a-subscription-token-where-the-provider-issues-one-else-its-auth-file-shared.md)
 
 <!-- itos:decisions:end -->

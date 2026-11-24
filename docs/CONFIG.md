@@ -689,6 +689,38 @@ terminal-consented `stop --home <id> --reset|--delete` operations to retire one.
 Native CI evidence is required before claiming filesystem isolation; see
 [decision 0030](decisions/0030-persistent-harness-home.md).
 
+### Codex harness defaults
+
+`home` also accepts the optional string `harness`, whose only value is `codex`, so
+`home: {storage: volume, harness: codex}` selects the Codex defaults explicitly. It is
+separate from the `harnesses` list and may sit beside it. It is accepted only beside
+`storage: volume`: without storage it is `policy.required` at `/home/storage`, and with
+`tmpfs` it is `policy.home_storage` there. Null, a number, a boolean, a list or an object is
+`policy.type` at `/home/harness`; any other string (`""`, `Codex`, `CODEX`, ` codex`,
+`opencode`, `codex-v1`) is `policy.home_harness` there. `harnesses: [codex]` stays
+`policy.home_harness` at `/home/harnesses/0`. File-only doctor reports
+`home: {storage: volume, harness: codex}` and prints `home.harness: codex` after
+`home.storage`.
+
+The effective approval's `home` object then holds
+`harness: {"kind": "codex", "seed": "codex-v1", "target": "/home/itos/.codex"}`, and the
+fingerprint changes; profile names such as `offline-home-v1` stay as they were. `codex-v1`
+names the seed a later run will write, so a different seed needs a new seed ID and a new
+approval. Plain doctor and bare `approve`'s review disclose the seed, where it lands, what it
+turns off (Codex update checks, analytics, plugins and Codex's own sandbox, because the
+container is the sandbox), that Codex's own files in the home are hostile worker data run never
+reads or removes, that `CODEX_HOME` is reserved and that no login is delivered. The setting is no
+network or credential grant.
+
+With this selection a manifest `containerEnv` key equal to `CODEX_HOME` under ASCII case folding
+is `manifest.reserved` at `/containerEnv/<key>`. Without it the key is ordinary, and `CODEX_HOME_DIR`,
+`CODEX_SANDBOX`, `CODEXHOME` and `MY_CODEX_HOME` stay ordinary under every selection.
+
+Run cannot seed a Codex home yet, so `run` refuses the selection as `policy.home_harness` at
+`/home/harness` ("Home harness is not accepted by this command yet"), exit 2, before the manifest,
+approval or any engine connection; doctor and approve inspect and approve it. A request without
+the harness over an approval that carries it reports `run.approval-changed` at `/home/harness`.
+
 ### OpenCode harness profile
 
 `home` also accepts optional `harnesses`, a non-empty list of unique harness names.
