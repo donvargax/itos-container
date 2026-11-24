@@ -102,37 +102,37 @@ remove_codex_ref() {
   case "$kind" in
     tag) record=codex.tag ;;
     digest) record=codex.digest ;;
-    *) fail "codex reference kind: expected tag/digest; observed=$(fixture_value "$kind")" ;;
+    *) fail "codex owned-reference kind: expected tag/digest; observed=$(fixture_value "$kind")" ;;
   esac
   [[ -f $state/$record ]] || return 0
-  repository=$(cat "$state/codex.repository") || fail "codex reference repository read: expected codex.repository; observed status=$?"
-  [[ $repository =~ ^127\.0\.0\.1:[0-9]{1,5}/itos-fixture-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-codex$ ]] || fail "codex reference repository: expected this attempt's codex repository; observed=$(fixture_value "$repository")"
-  ref=$(cat "$state/$record") || fail "codex reference record read: expected $record; observed status=$?"
+  repository=$(cat "$state/codex.repository") || fail "codex owned-reference repository read: expected codex.repository; observed status=$?"
+  [[ $repository =~ ^127\.0\.0\.1:[0-9]{1,5}/itos-fixture-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-codex$ ]] || fail "codex owned-reference repository: expected this attempt's codex repository; observed=$(fixture_value "$repository")"
+  ref=$(cat "$state/$record") || fail "codex owned-reference record read: expected $record; observed status=$?"
   case "$kind" in
-    tag) [[ $ref == "$repository:fixture" ]] || fail "codex reference tag: expected=$repository:fixture; observed=$(fixture_value "$ref")"
+    tag) [[ $ref == "$repository:fixture" ]] || fail "codex owned-reference tag: expected=$repository:fixture; observed=$(fixture_value "$ref")"
       ;;
-    digest) digest_valid "$ref" || fail "codex reference digest: expected sha256; observed=$(fixture_value "$ref")"
+    digest) digest_valid "$ref" || fail "codex owned-reference digest: expected sha256; observed=$(fixture_value "$ref")"
       ref="$repository@$ref" ;;
   esac
   if inspect_image "$ref" "$state/removing-codex-image.json"; then
-    built=$(cat "$state/codex.build.iid") || fail "codex reference built identity read: expected codex.build.iid; observed status=$?"
-    digest_valid "$built" || fail "codex reference built identity: expected sha256; observed=$(fixture_value "$built")"
-    observed=$(jq -er '.[0].Id' "$state/removing-codex-image.json") || fail "codex reference identity read: expected image Id; observed invalid inspection (status=$?)"
-    [[ $observed == "$built" ]] || fail "codex reference identity: expected=$built; observed=$(fixture_value "$observed")"
-    base=$(cat "$state/base.iid") || fail "codex reference base identity read: expected base.iid; observed status=$?"
-    registry=$(cat "$state/registry.iid") || fail "codex reference registry identity read: expected registry.iid; observed status=$?"
+    built=$(cat "$state/codex.build.iid") || fail "codex owned-reference built identity read: expected codex.build.iid; observed status=$?"
+    digest_valid "$built" || fail "codex owned-reference built identity: expected sha256; observed=$(fixture_value "$built")"
+    observed=$(jq -er '.[0].Id' "$state/removing-codex-image.json") || fail "codex owned-reference identity read: expected image Id; observed invalid inspection (status=$?)"
+    [[ $observed == "$built" ]] || fail "codex owned-reference identity: expected=$built; observed=$(fixture_value "$observed")"
+    base=$(cat "$state/base.iid") || fail "codex owned-reference base identity read: expected base.iid; observed status=$?"
+    registry=$(cat "$state/registry.iid") || fail "codex owned-reference registry identity read: expected registry.iid; observed status=$?"
     # Never delete a pinned input, even if an invalid recipe somehow produced it.
-    [[ $built != "$base" && $built != "$registry" ]] || fail "codex reference protection: expected derived image; observed built=$built base=$(fixture_value "$base") registry=$(fixture_value "$registry")"
-    d image rm "$ref" || fail "codex reference removal: expected removed $(fixture_value "$ref"); observed status=$?"
+    [[ $built != "$base" && $built != "$registry" ]] || fail "codex owned-reference protection: expected derived image; observed built=$built base=$(fixture_value "$base") registry=$(fixture_value "$registry")"
+    d image rm "$ref" || fail "codex owned-reference removal: expected removed $(fixture_value "$ref"); observed status=$?"
   else
     status=$?
-    [[ $status == 1 ]] || fail "codex reference inspection: expected present/absent; observed status=$status"
+    [[ $status == 1 ]] || fail "codex owned-reference inspection: expected present/absent; observed status=$status"
   fi
   if inspect_image "$ref" "$state/removed-codex-image.json"; then
-    fail "codex reference removal verification: expected absent; observed present $(fixture_value "$ref")"
+    fail "codex owned-reference removal verification: expected absent; observed present $(fixture_value "$ref")"
   else
     status=$?
-    [[ $status == 1 ]] || fail "codex reference removal verification: expected absent; observed status=$status"
+    [[ $status == 1 ]] || fail "codex owned-reference removal verification: expected absent; observed status=$status"
   fi
 }
 

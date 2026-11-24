@@ -54,6 +54,10 @@ func newCodexWorld(t *testing.T, machine string) *codexWorld {
 		`while [[ ${1:-} == --config || ${1:-} == --host ]]; do shift 2; done`,
 		`printf '%s\n' "$*" >>"$dir/log"`,
 		`if [[ ${1:-} == image && ${2:-} == inspect && $# == 3 ]]; then`,
+		`  if [[ -f "$dir/deny" ]] && read -r denied <"$dir/deny" && [[ $denied == "$3" ]]; then`,
+		`    printf 'permission denied while trying to connect to the Docker daemon socket\n' >&2`,
+		`    exit 1`,
+		`  fi`,
 		`  while IFS=$'\t' read -r ref id; do`,
 		`    if [[ $ref == "$3" ]]; then printf '[{"Id":"%s"}]\n' "$id"; exit 0; fi`,
 		`  done <"$dir/store"`,
@@ -191,11 +195,65 @@ func TestEngineFixtureCodexCleanup(t *testing.T) {
 		w := newCodexWorld(t, "x86_64")
 		w.records(t, w.baseRecords(), append(w.pinned(), [2]string{codexTag, codexOtherID})...)
 		_, stderr, err := w.run(t)
-		requireFixture(t, err != nil && strings.Contains(stderr, "codex reference identity"), "mismatch accepted or unnamed: %v stderr=%s", err, stderr)
+		requireFixture(t, err != nil && strings.Contains(stderr, "codex owned-reference identity"), "mismatch accepted or unnamed: %v stderr=%s", err, stderr)
 		for _, line := range w.log(t) {
 			requireFixture(t, !strings.HasPrefix(line, "image rm"), "removed despite mismatch: %q", w.log(t))
 		}
 	})
+	t.Run("refusals", testCodexCleanupRefusals)
 	t.Run("archive_verify", testCodexArchiveVerify)
 	t.Run("order_guard", testCodexOrderGuard)
+}
+
+// testCodexCleanupRefusals tampers with one thing at a time, so a cleanup missing that one
+// protection would remove an image that answers its record. Each refusal exits nonzero, logs no
+// removal and leaves the store's bytes as written.
+func testCodexCleanupRefusals(t *testing.T) {
+	foreignRepository := "127.0.0.1:5000/itos-fixture-4242-1"
+	foreignTag := foreignRepository + ":fixture"
+	const owned, inspection = "engine-fixture: codex owned-reference ", "engine-fixture: image inspection: "
+	cases := []struct {
+		name, deny, message string
+		tamper              func(records map[string]string) [2]string
+	}{
+		{"decoy_record", "", owned, func(r map[string]string) [2]string {
+			r["codex.tag"] = codexDecoy
+			return [2]string{codexTag, codexBuiltID}
+		}},
+		{"foreign_repository", "", owned, func(r map[string]string) [2]string {
+			r["codex.repository"], r["codex.tag"] = foreignRepository, foreignTag
+			return [2]string{foreignTag, codexBuiltID}
+		}},
+		{"invalid_digest_record", "", owned, func(r map[string]string) [2]string {
+			r["codex.digest"] = "sha256:short"
+			return [2]string{codexRepository + "@sha256:short", codexBuiltID}
+		}},
+		{"pinned_input_identity", "", owned, func(r map[string]string) [2]string {
+			r["codex.build.iid"] = codexBaseID
+			return [2]string{codexTag, codexBaseID}
+		}},
+		{"transport_error", codexTag, inspection, func(r map[string]string) [2]string {
+			return [2]string{codexTag, codexBuiltID}
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			w := newCodexWorld(t, "x86_64")
+			records := w.baseRecords()
+			extra := c.tamper(records)
+			w.records(t, records, append(w.pinned(), extra)...)
+			if c.deny != "" {
+				requireFixture(t, os.WriteFile(filepath.Join(w.bin, "deny"), []byte(c.deny+"\n"), 0o600) == nil, "cannot write deny file")
+			}
+			before, err := os.ReadFile(filepath.Join(w.bin, "store"))
+			requireFixture(t, err == nil, "cannot read image store: %v", err)
+			_, stderr, err := w.run(t)
+			requireFixture(t, err != nil && strings.Contains(stderr, c.message), "accepted or wrong diagnostic: %v stderr=%s", err, stderr)
+			for _, line := range w.log(t) {
+				requireFixture(t, !strings.HasPrefix(line, "image rm"), "removed despite refusal: %q", w.log(t))
+			}
+			after, err := os.ReadFile(filepath.Join(w.bin, "store"))
+			requireFixture(t, err == nil && string(after) == string(before), "store changed: %q -> %q (%v)", before, after, err)
+		})
+	}
 }
