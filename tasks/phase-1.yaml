@@ -9649,3 +9649,15 @@
     p2-profile-non-engine-feature-suite.
   done_when:
     - run: grep -q '^## Non-engine suite profile' features/README.md
+- id: T-87
+  type: perf
+  title: Fixtures in the non-engine tier build each product or probe binary once per suite run, not once per fixture or row
+  why: >
+    The idea suspects redundant fixture builds. About 40 fixture files under features/ build or exec
+    their own binaries. Take this only for the builds the recorded profile names. Route them through
+    one memoised build per suite run, keyed by the same inputs, so that every scenario row,
+    assertion and cleanup is unchanged and per-scenario coverage routing (ITOS_CC_TEST_COVERDIR) is
+    kept. Commit a regression red first that counts builds per run. Wall time before and after goes
+    in the PR, from timing records. Broken down from p2-profile-non-engine-feature-suite.
+  done_when:
+    - run: go test ./features -run 'TestNonEngineFixtureBuildsOnce'

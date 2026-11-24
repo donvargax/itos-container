@@ -2873,21 +2873,13 @@ items:
     status: todo
     depends_on: [T-85]
     kind: task
-  - id: nonengine-fixture-builds-once
+  - id: T-87
     title: Fixtures in the non-engine tier build each product or probe binary once per suite run, not once per fixture or row
     phase: 1
     owner: null
     status: todo
     depends_on: [T-86]
-    kind: idea
-    why: >
-      The idea suspects redundant fixture builds. About 40 fixture files under features/ build or
-      exec their own binaries. Take this only for the builds the recorded profile names. Route them
-      through one memoised build per suite run, keyed by the same inputs, so that every scenario
-      row, assertion and cleanup is unchanged and per-scenario coverage routing
-      (ITOS_CC_TEST_COVERDIR) is kept. Commit a regression red first that counts builds per run.
-      Wall time before and after goes in the PR, from timing records. Broken down from
-      p2-profile-non-engine-feature-suite.
+    kind: task
   - id: nonengine-recovery-lifecycle-readiness-waits
     title: Recovery and lifecycle fixtures wait on observed readiness instead of fixed sleeps, wherever the profile shows the sleep dominating a row
     phase: 1
