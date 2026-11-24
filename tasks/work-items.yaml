@@ -2845,14 +2845,15 @@ items:
     status: done
     depends_on: []
     kind: task
-  - id: registration-kill-points-leave-no-stuck-session
+  - id: slice-59
     title: A controller killed at any point between reservation and the first engine create leaves no session that status and stop cannot finish
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
+    kind: slice
     why: >
+      Was registration-kill-points-leave-no-stuck-session.
       The audit found this gap by reading code (Codex, 7236d68, 2026-11-06), not by running
       anything, and it asked for a scenario before any build. ID-OVERLAP-11 covers only a kill at
       "reservation before registration" and two fsync faults. ID-OVERLAP-12 covers a pause before
