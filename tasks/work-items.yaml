@@ -845,6 +845,9 @@ items:
       leaves a recovery record with the exact retry command, and stop recovers it without touching
       foreign resources. It builds on the run-through-proxy slice, so it comes last. Broken down
       from p1-egress-allowlist-proxy.
+    deferred: >
+      the queue's fresh draft cannot be posted now that the old branch is renamed; resume once the
+      queue can redraft it from current main
   - id: T-41
     title: The overlap scenarios' after hook stops timing out under the code proof's coverage run
     phase: 1
