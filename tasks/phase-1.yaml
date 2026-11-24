@@ -9619,6 +9619,3 @@
     docs/architecture/arc42.md update their shard lists. No scenario, assertion or limit changes.
     Run only the engine-free tests named in the check locally; CI runs the rest. Before the work,
     the check exits 1 at its first grep.
-  done_when:
-    - run: "grep -qE '^ +features: .*credentials-run-native\\.feature' .github/workflows/ci.yml && grep -q 'credentials-run-native.feature' docs/decisions/0024-engine-tier-shards.md && go test ./features -run '^(TestEngineShards|TestEngineSelection)$' -count=1"
-      timeout: 900

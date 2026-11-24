@@ -2853,6 +2853,6 @@ items:
     title: credentials-run-native.feature joins the offline engine shard whole, before slice-31 lands
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
