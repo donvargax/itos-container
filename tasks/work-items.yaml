@@ -1596,7 +1596,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [slice-31]
+    depends_on: [slice-30, T-48]
     kind: slice
     why: >
       Was p1-credentials-github-token-run.
@@ -2847,5 +2847,12 @@ items:
     phase: 1
     owner: null
     status: todo
+    depends_on: []
+    kind: task
+  - id: T-84
+    title: credentials-run-native.feature joins the offline engine shard whole, before slice-31 lands
+    phase: 1
+    owner: donvargax
+    status: done
     depends_on: []
     kind: task
