@@ -1203,10 +1203,26 @@ Feature: An approved persistent home for one checkout's harness
   #   nothing, and cleanup never touches .codex. A run without the harness makes
   #   none of these calls and leaves an existing .codex as it is.
   #
-  # The run gate goes. The readiness inspector
-  # (internal/engine/readiness/domain/inspect.go) stops refusing home.harness for
-  # run, and HomeHarnessGated and its diagnostic go with it. Run then compares
-  # the harness with the approval like any setting. ID-CODEXHOME-02's run half
+  # The run gate goes. Slice-54 left two refusals of a Codex selection, and
+  # both go:
+  # - The readiness inspector (internal/engine/readiness/domain/inspect.go)
+  #   stops refusing home.harness for run, and HomeHarnessGated
+  #   (internal/engine/policy/port/source.go) and its diagnostic go with it.
+  # - The approval canonical codec's FrozenRecord
+  #   (internal/engine/approval/canonical/preflight.go) stops refusing frozen
+  #   settings that carry home.harness as state.invalid. It then validates them
+  #   like any other frozen settings: the canonical re-encoding, project and
+  #   fingerprint must still match, so only the exact codex-v1 harness object
+  #   slice-54's approval writes is accepted. The session codec reaches it
+  #   through JSON.Frozen and JSON.Snapshot
+  #   (internal/engine/session/codec/json.go). The final assertion of
+  #   TestCodexHarnessIsBoundByItsSeed
+  #   (internal/engine/approval/canonical/home_test.go), which requires that
+  #   refusal, is inverted in the feat commit: the frozen input with the harness
+  #   decodes to the approved record with no failure.
+  #   TestInvalidCodexHarnessSettingsCannotAuthorize keeps refusing every other
+  #   harness object, frozen ones included.
+  # Run then compares the harness with the approval like any setting. ID-CODEXHOME-02's run half
   # changes with the gate. A changed existing scenario needs a feat commit, so
   # the implementation's feat commit rewrites that row's title and its last two
   # Then lines exactly as below. The same feat commit removes their two
@@ -1222,7 +1238,9 @@ Feature: An approved persistent home for one checkout's harness
   # stderr, and requires the version, info and approved-image readiness requests
   # in each journal, as the old control step does. It also rewrites the "Run gate, until slice-55
   # lifts it" comments above ID-CODEXHOME-01 to say that run compares the
-  # harness with the approval:
+  # harness with the approval, and that slice-54 architecture paragraph's
+  # sentence saying the session codec is untouched because the gate stops every
+  # Codex selection before freezing:
   #   Scenario: Doctor and approve disclose and bind the Codex harness, and run requires the matching approval
   #   And the removing and adding checkouts report changed approval at /home/harness with exit 1 and neither Engine API fixture saw a connection
   #   And the matching checkout and the no-harness control report no approval change and each Engine API fixture journal holds the readiness inspection of version, info and the approved image
@@ -1242,7 +1260,10 @@ Feature: An approved persistent home for one checkout's harness
   # porttest fake models .codex and config.toml without I/O. The shared home
   # contract runs against both. port.Binding gains the frozen Codex selection,
   # which the session codec reads from the frozen settings as it reads OpenCode
-  # (internal/engine/session/codec/json.go). No slice imports another, and only
+  # (internal/engine/session/codec/json.go). The approval canonical codec
+  # (internal/engine/approval/canonical) accepts the frozen harness, as "The
+  # run gate goes" states, and the readiness domain and policy port lose the
+  # run gate. No slice imports another, and only
   # cmd assembles. No new package, dependency or service: Go 1.27.4's
   # archive/tar and the pinned moby client v0.6.2/api v1.56.1 suffice. arc42's
   # runtime-view home paragraph says run initializes "only a new owned volume".
@@ -1287,11 +1308,17 @@ Feature: An approved persistent home for one checkout's harness
   #
   # Expected red, from reading main at 71a23ae (predictions, not executed
   # evidence), always at the first Then:
-  # - ID-CODEXHOME-03 and 04: the test assembly skips readiness, so the gate
-  #   never fires. The session codec's settings view has no harness member, so
-  #   the binding carries no Codex selection. The workers are created with no
-  #   CODEX_HOME on the disk backend and no stat, publication or readback on
-  #   either backend, so the contract fails its first assertion.
+  # - ID-CODEXHOME-03 and 04: the test assembly skips readiness, so the
+  #   readiness gate never fires. The second gate does: on both backends the
+  #   run prepares its reserved intent through the same session store and its
+  #   JSON codec (TestHomeLocalContract's runner), whose JSON.Frozen calls
+  #   FrozenRecord. That refuses A's frozen settings, which carry the harness,
+  #   as state.invalid. So the Codex run stops before any worker is created,
+  #   with no CODEX_HOME, stat, publication or readback, and the contract fails
+  #   its first assertion: 03's worker command and environment, and 04's first
+  #   worker. Even past that refusal, the session codec's settings view has no
+  #   harness member, so the binding would carry no Codex selection and the
+  #   rows would still fail at the same assertion.
   #
   # The implementer may commit freely in its own workspace; the host makes the
   # landing commits and handles itos, submission, publication and review.
