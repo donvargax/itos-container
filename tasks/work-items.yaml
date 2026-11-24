@@ -2859,30 +2859,19 @@ items:
     status: done
     depends_on: []
     kind: task
-  - id: nonengine-scenario-timing-records
+  - id: T-85
     title: The non-engine feature tier writes a timing record for every scenario row and every harness regression test
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      Without per-row and per-test durations nobody can tell which fixtures make up the roughly 300
-      s. T-33's engineTiming collector (features/engine_timing_test.go) and its `engine scenario
-      timing:` records exist only when the engine tier is enabled (features/features_test.go:174,
-      475-495). Extend the same record shape, or a sibling `scenario timing:` prefix, to the
-      non-engine run of TestFeatures. Add one record per top-level harness Go test in ./features.
-      Durations, IDs and outcomes only. Selection, assertions and output are otherwise unchanged.
-      TestEngineScenarioTiming's existing pins keep holding. Start files:
-      features/engine_timing_test.go, features/engine_timing_regression_test.go,
-      features/features_test.go. No fake engine is needed. Broken down from
-      p2-profile-non-engine-feature-suite.
+    kind: task
   - id: nonengine-suite-profile-record
     title: "Record the non-engine suite's measured profile: slowest scenario rows, harness tests and fixture setup, with their shares of wall time"
     phase: 1
     owner: null
     status: todo
-    depends_on: [nonengine-scenario-timing-records]
+    depends_on: [T-85]
     kind: idea
     why: >
       The cuts must target overhead that was actually measured, not guessed. Measure on the first
