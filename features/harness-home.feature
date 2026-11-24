@@ -1172,11 +1172,22 @@ Feature: An approved persistent home for one checkout's harness
   #      mode 0600, the approved UID and GID, size 155 and a body equal to the
   #      seed, followed by the end of the archive. Only then may the run go on
   #      towards start.
-  # - What a run never does: it never reads, lists, copies, changes or removes
-  #   anything else under /home/itos/.codex (sessions/, the history files,
-  #   auth.json and its lock, AGENTS.md, logs or caches). It never reads the
-  #   .codex directory as an archive, which would stream them. Nothing from the
-  #   host's ~/.codex or CODEX_* environment reaches the worker or an archive.
+  # - What a run never does: no seed call names anything under
+  #   /home/itos/.codex other than .codex itself and config.toml, and the run
+  #   never changes or removes anything else there (sessions/, the history
+  #   files, auth.json and its lock, AGENTS.md, logs or caches). The seed never
+  #   asks for the .codex directory as an archive. Nothing from the host's
+  #   ~/.codex or CODEX_* environment reaches the worker or an archive.
+  # - What slice-34 already reads: its root verification (VerifyHomeRoot,
+  #   internal/engine/session/docker/home.go) asks the daemon for an archive of
+  #   /home/itos, once before and once after the seed. A real daemon streams the
+  #   whole home in it, .codex's session, history and login files included, so
+  #   those bytes reach the controller's socket. The controller parses only the
+  #   root entry's header and closes the stream. This slice leaves that
+  #   verification as it is; narrowing what the daemon sends would need its own
+  #   call. It claims only that the controller consumes no archive entry under
+  #   .codex except the readback's config.toml, and keeps or emits none of the
+  #   bytes of the others.
   #   The argv stays literal: no wrapper, no -c, --config, --profile, sandbox
   #   or approval flag, and run does not check that argv[0] is codex.
   # - A failure stops before start: the owned unstarted worker is removed and
@@ -1198,7 +1209,18 @@ Feature: An approved persistent home for one checkout's harness
   # the harness with the approval like any setting. ID-CODEXHOME-02's run half
   # changes with the gate. A changed existing scenario needs a feat commit, so
   # the implementation's feat commit rewrites that row's title and its last two
-  # Then lines exactly as below. It also rewrites the "Run gate, until slice-55
+  # Then lines exactly as below. The same feat commit removes their two
+  # exact-string definitions in features/harness_home_codex_steps_test.go (the
+  # "removing checkout reports changed approval ... run gate with exit 2" and
+  # "no-harness control reports no approval change" steps) and adds one
+  # definition for each new line in that file. Both reuse that file's `cases`
+  # (removing, adding, matching, control, in that order) and the old checks.
+  # The first loops over cases[:2]: exit 1, empty stdout, the
+  # run.approval-changed line in stderr (exactly that line for adding), and no
+  # connection and an empty journal. The second loops over cases[2:4]. It
+  # refuses run.approval-changed, policy.home_harness and codexGateMsg in
+  # stderr, and requires the version, info and approved-image readiness requests
+  # in each journal, as the old control step does. It also rewrites the "Run gate, until slice-55
   # lifts it" comments above ID-CODEXHOME-01 to say that run compares the
   # harness with the approval:
   #   Scenario: Doctor and approve disclose and bind the Codex harness, and run requires the matching approval
@@ -1209,8 +1231,9 @@ Feature: An approved persistent home for one checkout's harness
   # A Codex request with no approval keeps the existing missing-approval
   # refusal. Before the work, the edited row fails at the first of those two
   # lines, because the adding checkout reports the gate (policy.home_harness,
-  # exit 2). The implementer runs the edited row on the tree without the work
-  # first and reports that failure as its red evidence. The row is local.
+  # exit 2). The implementer runs the edited row with its new definitions on the
+  # tree without the product change first, and reports that failure as its red
+  # evidence; nothing of that run is committed. The row is local.
   #
   # Architecture and libraries: the session engine's domain orders the seed
   # inside its home verification (internal/engine/session/domain/home.go). Its
@@ -1243,8 +1266,17 @@ Feature: An approved persistent home for one checkout's harness
   # endpoint fails any archive PUT except root initialization. It gains a
   # per-volume file model that holds .codex and its files, answers the HEAD
   # stat, the PUT and the GET from that model, and journals each one together
-  # with the protected home record's initialized state at that moment. The
-  # memory fake models the same. Only the disk backend judges environments, so
+  # with the protected home record's initialized state at that moment. Like a
+  # real daemon, it answers GET /home/itos (the root verification) with the
+  # whole modelled tree, not a lone root header. It writes and flushes the root
+  # entry's header. Then it waits up to 2 s for the client to close the stream,
+  # then writes every other modelled entry, the hostile files included, and the
+  # end of the archive. It journals, for each root read, whether the client
+  # closed before any entry past the root header was written. A controller
+  # that reads on past the root header gets those entries, and the journal shows
+  # it. The memory fake models the seed calls the same way. Its root
+  # verification has no stream, so only the disk backend judges stream
+  # consumption. Only the disk backend judges environments, so
   # both rows are @linux, as ID-HOME-28 is. The fixture's oracle holds its own
   # copy of the 155 bytes and digest, never the product's constant. Givens
   # write raw settings, independently encoded approval, snapshot and ownership
@@ -1282,11 +1314,13 @@ Feature: An approved persistent home for one checkout's harness
     Then each worker's command is exactly the supplied argv and on the disk backend its created and inspected environment holds CODEX_HOME=/home/itos/.codex and the home mappings over the image default and without any host value
     And each run makes one .codex path stat, one seed publication and one config.toml readback, in that order, after its home root is verified and recorded initialized and before its worker starts
     And the first publication holds only the .codex directory at 0700 and config.toml at 0600, the second only config.toml, each owned by the approved UID GID with exactly the codex-v1 bytes, and the second run replaces the hostile config.toml with them
-    And the hostile session, history and login files keep their bytes, no archive copy reads or carries them or a host file, and the host-home Codex sentinels and the host home are unchanged
+    And the hostile session, history and login files keep their bytes, no seed call names them or a host file, on the disk backend the controller closes each home-root archive before any entry past its root header, and the host-home Codex sentinels and the host home are unchanged
 
   # A is a version 1 offline volume home with the Codex harness, and B the same
   # home without it, for the same checkout, UID, GID and daemon, so both select
-  # one home scope. As in ID-HOME-04, the fixture publishes B's request and
+  # one home scope. Its synthetic image sets no CODEX_HOME, unlike
+  # ID-CODEXHOME-03's, and the host process has none. So B's worker has no
+  # CODEX_HOME at all. As in ID-HOME-04, the fixture publishes B's request and
   # approval at a barrier after A's selection and before create. The second run
   # is then a fresh controller under B. Its absence half is a regression
   # control. The first worker's half fails first.
@@ -1575,6 +1609,17 @@ Feature: An approved persistent home for one checkout's harness
   # unsafe retained paths (slice-56's). It adds two product runs to the offline
   # shard, whose 180 s target warns and whose 600 s guard stops. Its red and
   # green runs are CI-only, by dispatch.
+  # Step handoff: every Given, When and Then phrase in this row is NEW. Build
+  # them from the helpers ID-HOME-30's steps call in
+  # features/harness_home_opencode_native_test.go: homeNativeFixture for the
+  # CI checkout, cached image and non-root UID GID; approvalOracle and the
+  # independent approval and protected-record write for the Codex home;
+  # runTree for the host-home sentinel and checkout snapshots; and
+  # homeNativeResources for worker, anchor and home absence. The probe's source
+  # sits beside slice-34's homeNativeProbeSource in
+  # features/harness_home_native_probe_test.go. It is built with
+  # recoveryBuildHelper and installed with installNativeProbe, as
+  # features/harness_home_native_fixture_test.go does for slice-34's probe.
   @wip @slice-55 @ID-CODEXHOME-08 @engine
   Scenario: The workload's first instruction finds CODEX_HOME and exactly the codex-v1 config.toml on every run
     Given a CI Codex checkout with a cached approved image for the actual non-root controller UID GID, an approved offline volume home with the Codex harness, host-home Codex configuration, login and session sentinels and a Codex seed probe installed at "/workspace/slice-55-codex-probe"
