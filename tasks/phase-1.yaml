@@ -9798,3 +9798,39 @@
     go.opentelemetry.io/otel, otel/trace and otel/metric to v1.47.0, and otelhttp and the other otel
     modules to their matching releases where the minimum version selection needs them, then runs go
     mod tidy. It changes no code; the gate and the dependency's users stay as they are.
+- id: T-83
+  type: docs
+  title: Record the open decision on what evidence lets recovery retire an uncertain create
+  why: >
+    Some sessions can never be finished by status or stop because a create's outcome is uncertain.
+    Cases: the daemon answered a container or network create with an error (an exhausted address
+    pool, for example); VolumeCreate was sent, its reply was lost, and later lookups keep finding no
+    volume; a controller died after sending a create. slice-27's two network creates per egress run
+    make these cases reachable, and nested checkouts then stay blocked. The item's notes say twice
+    that the rule is the person's security decision: a name-only miss, elapsed time and repeated
+    misses do not prove the create finished. This task writes the open decision record with the
+    options and one recommendation, and builds nothing. Recovery for these cases is proposed only
+    after the person answers. Broken down from p3-registration-before-intent.
+  done_when:
+    - run: grep -qi 'uncertain create' docs/decisions/0036-*.md
+- id: T-84
+  type: ci
+  title: credentials-run-native.feature joins the offline engine shard whole, before slice-31 lands
+  why: >
+    slice-31's breakdown adds a new features/credentials-run-native.feature, and the agent that
+    implements it may not edit .github/workflows (docs/charter.md:163). The person approved on
+    2026-11-24 placing the whole file in the offline engine shard, so the placement lands on main
+    first, as T-77 did for credentials-run.feature and T-78 for claude-home.feature. The Engine
+    scenarios step on the last four green main runs took 69-96 s in offline, 36-56 s in egress,
+    106-128 s in lifecycle and 143-176 s in other, against the 180 s budget. -
+    .github/workflows/ci.yml: the offline include's features value adds
+    credentials-run-native.feature, on one line. - features/engine_shards_test.go: shardOfflineFiles
+    holds the same three names, sorted. - features/features_test.go: the file is not on this tree
+    yet, so pendingEngineFeatures gains credentials-run-native.feature -> slice-31 in offline,
+    beside the two existing entries. - features/engine_pending_test.go: controls cover the new entry
+    and refuse credentials-run-native.feature in egress and other. slice-31 removes its entry in its
+    own test commit once the file lands. - Decision 0024 gets a 'Credentials-run-native placement,
+    2026-11-24' subsection quoting those times and the person's approval, and features/README.md and
+    docs/architecture/arc42.md update their shard lists. No scenario, assertion or limit changes.
+    Run only the engine-free tests named in the check locally; CI runs the rest. Before the work,
+    the check exits 1 at its first grep.

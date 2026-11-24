@@ -149,7 +149,7 @@ native CI evidence; the loop owns native runs and closure.
 **Shards.** The tier runs as the matrix of the `engine-shard` job in `.github/workflows/ci.yml`.
 Each shard is whole feature files on its own native `ubuntu-latest` runner and daemon, with its own
 checkout of the exact `${{ env.TO }}` head, preflight, fixture preparation and cleanup: **offline**
-(`offline.feature`, `harness-home.feature`), **lifecycle** (`lifecycle.feature`, whose four
+(`offline.feature`, `harness-home.feature`, `credentials-run-native.feature`, which slice-31 brings and the shard skips and logs as pending until the file exists), **lifecycle** (`lifecycle.feature`, whose four
 `ID-LIFECYCLE-09` rows stay nested in `ID-LIFECYCLE-13`'s quiet row), **other** (`anchors.feature`,
 `checkout-overlap.feature`, `claude-home.feature`, `doctor.feature`, `hardlinks.feature`,
 `recovery.feature`, `run_terminal.feature`, `session.feature`, `sockets.feature`; `claude-home.feature` is slice-36's and is skipped and
