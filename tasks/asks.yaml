@@ -383,3 +383,6 @@ questions:
   - id: q-95
     item: "slice-38"
     question: "slice-38: its implementer (attempt 2) returned blocked, asking for a dispatched red run of @ID-EXEC-12 to -16 at fb23b67 before runtime work. Does it still wait on that?"
+  - id: q-96
+    item: "p2-control-state-upgrade-contract"
+    question: "p2-control-state-upgrade-contract: does itos-container owe existing v0.1.0 control state an upgrade path, a migration or a documented manual cleanup, and does a schema bump drop the persisted binding device field or does a stable filesystem ID replace it?"
