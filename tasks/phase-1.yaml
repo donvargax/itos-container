@@ -9689,21 +9689,39 @@
     arguments, joined by spaces, as one line to `log` beside the store. For `image inspect R`, it
     reads the store with `while IFS=$'\t' read -r`. On a match it prints `[{"Id":"<id>"}]` and exits
     0; otherwise it writes `Error response from daemon: No such image: R` and exits 1. For `image rm
-    R`, it reads the store into an array and rewrites the file with printf, leaving out R's line.
-    Any other call is logged and exits 99. The curl and tar stubs log their arguments to the same
-    log, prefixed `curl ` or `tar `, and exit 99. The test writes the state directory itself
-    ($RUNNER_TEMP/T-20-4242-1-engine-fixture, 0700, files 0600). It holds owner, base.iid,
-    registry.iid, codex.repository (127.0.0.1:5000/itos-fixture-4242-1-codex), codex.tag and
-    codex.build.iid=C. Before each run, the store holds the busybox pin (Id = base.iid), the
-    registry pin (Id = registry.iid), and a decoy `<repository>:decoy` whose Id is also C, so only
-    the record protects it. The subtests are these. failed_after_tag: the store adds the tag with
-    Id C. failed_after_cold_pull: codex.digest=D is added, the store holds `<repository>@D` with Id
-    C, and the tag is absent. In both, the driver exits 0 and prints `engine-fixture cleanup: PASS`.
-    The only `image rm` calls name exactly the recorded references present. Each one is preceded by
-    an `image inspect` of the same reference that answered Id C, and followed by one that answered
-    absent. The decoy, busybox and registry entries remain, and curl, tar and every other docker
-    call stay unused. mismatched_id: as failed_after_tag, but the tag answers Id X, not C. The
-    driver exits nonzero, its stderr names the identity mismatch, and the log holds no `image rm`.
+    R`, it reads the store into an array, rewrites the file with printf, leaving out R's line, and
+    exits 0. If an optional file `deny` beside the store holds one line equal to R, `image inspect
+    R` instead writes `permission denied while trying to connect to the Docker daemon socket` and
+    exits 1. Any other call is logged and exits 99. The curl and tar stubs log their arguments to
+    the same log, prefixed `curl ` or `tar `, and exit 99. The test writes the state directory
+    itself ($RUNNER_TEMP/T-20-4242-1-engine-fixture, 0700, files 0600). It holds owner
+    (`T-20-4242-1`, which today's ownership check requires), base.iid=B, registry.iid=G,
+    codex.repository (127.0.0.1:5000/itos-fixture-4242-1-codex), codex.tag (`<repository>:fixture`)
+    and codex.build.iid=C. B, G, C, D and X are five distinct `sha256:<64 lowercase hex>` values.
+    Before each run, the store holds the busybox pin (Id B), the registry pin (Id G), and a decoy
+    `<repository>:decoy` whose Id is also C, so only the record protects it. The subtests are
+    these. failed_after_tag: the store adds the tag with Id C. failed_after_cold_pull: codex.digest=D
+    is added, the store holds `<repository>@D` with Id C, and the tag is absent. In both, the driver
+    exits 0 and prints `engine-fixture cleanup: PASS`. The only `image rm` calls name exactly the
+    recorded references present. Each one is preceded by an `image inspect` of the same reference
+    that answered Id C, and followed by one that answered absent. The decoy, busybox and registry
+    entries remain, and curl, tar and every other docker call stay unused. mismatched_id: as
+    failed_after_tag, but the tag answers Id X, not C.
+
+    Five refusal subtests each tamper with one thing, so that a cleanup missing that one protection
+    would remove an image that answers its record. decoy_record: as failed_after_tag, but codex.tag
+    holds `<repository>:decoy`. foreign_repository: codex.repository holds
+    `127.0.0.1:5000/itos-fixture-4242-1`, codex.tag holds that repository's `:fixture`, and the
+    store holds that reference with Id C, not the codex tag. invalid_digest_record: as
+    failed_after_cold_pull, but codex.digest holds `sha256:short` and the store's
+    `<repository>@sha256:short` answers Id C. pinned_input_identity: as failed_after_tag, but
+    codex.build.iid holds B and the tag answers Id B. transport_error: as failed_after_tag, with
+    `deny` naming the tag. In mismatched_id and every refusal subtest, the driver exits nonzero, the
+    log holds no `image rm`, and the store's bytes equal those written before the run, so the
+    decoy, busybox and registry entries remain. Every diagnostic remove_codex_ref writes itself
+    begins `codex owned-reference `. stderr holds `engine-fixture: codex owned-reference identity`
+    in mismatched_id and `engine-fixture: codex owned-reference ` in the first four refusals. In
+    transport_error it holds inspect_image's `engine-fixture: image inspection: `.
 
     The subtest archive_verify runs codex_archive_verify itself, with the host's PATH, through a
     runner like runFixtureValidator: `bash -euo pipefail -c 'source "$1"; shift; "$@" || exit "$?"'
@@ -9775,8 +9793,9 @@
     outside the hermetic T-81 cleanup test, whose child sees only a recording fake docker." doc-caps
     must still pass under the 49152-byte cap; shorten the addition rather than raise the cap. The
     first commit is a `test` commit holding only the new test file or files. Against today's driver,
-    it fails at failed_after_tag's removal assertion (exit 0, no `image rm`), at mismatched_id's
-    expected failure, at archive_verify's match case (codex_archive_verify is undefined, so bash
+    it fails at failed_after_tag's removal assertion (exit 0, no `image rm`), at the expected
+    failure of mismatched_id and of each refusal subtest (today's cleanup reads no codex record and
+    exits 0), at archive_verify's match case (codex_archive_verify is undefined, so bash
     exits 127 and the context stays empty), and at order_guard's baseline (no codex_fixture). The
     work commit adds the driver functions, codex_archive_verify in the checks library, the recipe,
     SHA256SUMS and the two READMEs, and changes nothing under
