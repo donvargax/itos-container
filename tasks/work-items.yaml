@@ -845,6 +845,9 @@ items:
       leaves a recovery record with the exact retry command, and stop recovers it without touching
       foreign resources. It builds on the run-through-proxy slice, so it comes last. Broken down
       from p1-egress-allowlist-proxy.
+    deferred: >
+      the queue's fresh draft cannot be posted now that the old branch is renamed; resume once the
+      queue can redraft it from current main
   - id: T-41
     title: The overlap scenarios' after hook stops timing out under the code proof's coverage run
     phase: 1
@@ -2179,9 +2182,10 @@ items:
       entries. Specify what one grant authorizes, how unrelated entries stay outside it, what
       approval shows, how updates or refreshes and cleanup work, and how the staged login stays out
       of the checkout, engine configuration and logs. Use synthetic markers and fake endpoints for
-      the scenarios. Name any unresolved account decision explicitly. Specification first;
-      implementation follows the Codex and Claude slices. Real credential use is subject to decision
-      0025 question 5.
+      the scenarios. Name any unresolved account decision explicitly. Specification first. Real
+      credentials follow decision 0035: OpenCode issues no subscription token, so the one grant is
+      the OpenCode Go provider entry from auth.json. Any harness may be the first in the container
+      (the person, 2026-11-24), so this slice need not wait for the Codex and Claude slices.
   - id: slice-41
     title: Start OpenCode headless with isolated home and configuration
     phase: 1
@@ -2837,7 +2841,7 @@ items:
     title: Record the open decision on what evidence lets recovery retire an uncertain create
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: T-84
@@ -2850,7 +2854,7 @@ items:
   - id: T-85
     title: The non-engine feature tier writes a timing record for every scenario row and every harness regression test
     phase: 1
-    owner: null
+    owner: donvargax
     status: todo
     depends_on: []
     kind: task
