@@ -2866,28 +2866,19 @@ items:
     status: todo
     depends_on: []
     kind: task
-  - id: nonengine-suite-profile-record
+  - id: T-86
     title: "Record the non-engine suite's measured profile: slowest scenario rows, harness tests and fixture setup, with their shares of wall time"
     phase: 1
     owner: null
     status: todo
     depends_on: [T-85]
-    kind: idea
-    why: >
-      The cuts must target overhead that was actually measured, not guessed. Measure on the first
-      uncached run of a commit, without rerunning a suite that already ran there and without adding
-      -count=1 by default (the charter's CPU rule). Then record in features/README.md the top rows
-      and tests by duration, grouped by feature file and fixture. Name the repeated costs the
-      records show, such as product or probe binary builds and fixed sleeps, each with its measured
-      seconds. Plain English, dated, labelled as measurement and not as a support claim. If no
-      candidate overhead shows up, say so, and the cut children close as not needed. Broken down
-      from p2-profile-non-engine-feature-suite.
+    kind: task
   - id: nonengine-fixture-builds-once
     title: Fixtures in the non-engine tier build each product or probe binary once per suite run, not once per fixture or row
     phase: 1
     owner: null
     status: todo
-    depends_on: [nonengine-suite-profile-record]
+    depends_on: [T-86]
     kind: idea
     why: >
       The idea suspects redundant fixture builds. About 40 fixture files under features/ build or
@@ -2902,7 +2893,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [nonengine-suite-profile-record]
+    depends_on: [T-86]
     kind: idea
     why: >
       The idea names fixed waits in the recovery and lifecycle fixtures as the other suspected cost.
