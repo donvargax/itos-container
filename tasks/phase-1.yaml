@@ -9583,3 +9583,18 @@
     go.opentelemetry.io/otel, otel/trace and otel/metric to v1.47.0, and otelhttp and the other otel
     modules to their matching releases where the minimum version selection needs them, then runs go
     mod tidy. It changes no code; the gate and the dependency's users stay as they are.
+- id: T-83
+  type: docs
+  title: Record the open decision on what evidence lets recovery retire an uncertain create
+  why: >
+    Some sessions can never be finished by status or stop because a create's outcome is uncertain.
+    Cases: the daemon answered a container or network create with an error (an exhausted address
+    pool, for example); VolumeCreate was sent, its reply was lost, and later lookups keep finding no
+    volume; a controller died after sending a create. slice-27's two network creates per egress run
+    make these cases reachable, and nested checkouts then stay blocked. The item's notes say twice
+    that the rule is the person's security decision: a name-only miss, elapsed time and repeated
+    misses do not prove the create finished. This task writes the open decision record with the
+    options and one recommendation, and builds nothing. Recovery for these cases is proposed only
+    after the person answers. Broken down from p3-registration-before-intent.
+  done_when:
+    - run: grep -qi 'uncertain create' docs/decisions/0036-*.md

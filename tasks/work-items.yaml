@@ -2887,20 +2887,10 @@ items:
       names that only look similar are kept (see admission_leftover_test.go's cases). Out of scope:
       refusal-log copy temporaries and how long session state is kept, which both stay with
       p3-session-state-retention. Broken down from p3-registration-before-intent.
-  - id: uncertain-create-retirement-decision
+  - id: T-83
     title: Record the open decision on what evidence lets recovery retire an uncertain create
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      Some sessions can never be finished by status or stop because a create's outcome is uncertain.
-      Cases: the daemon answered a container or network create with an error (an exhausted address
-      pool, for example); VolumeCreate was sent, its reply was lost, and later lookups keep finding
-      no volume; a controller died after sending a create. slice-27's two network creates per egress
-      run make these cases reachable, and nested checkouts then stay blocked. The item's notes say
-      twice that the rule is the person's security decision: a name-only miss, elapsed time and
-      repeated misses do not prove the create finished. This task writes the open decision record
-      with the options and one recommendation, and builds nothing. Recovery for these cases is
-      proposed only after the person answers. Broken down from p3-registration-before-intent.
+    kind: task
