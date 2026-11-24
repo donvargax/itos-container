@@ -2698,6 +2698,9 @@ items:
       claim that runtime startup traffic is absent, which the native startup child owns. The spec
       states that the implementer may commit freely in its workspace and that the host makes the
       landing commits. Broken down from slice-35.
+    deferred: >
+      its red commit must change the live scenario @ID-CODEXHOME-02, which itos refuses; redraft
+      with a new scenario id for the seeded behaviour (the coordinator's call)
   - id: slice-56
     title: Refuse unsafe retained Codex seed paths before any write or start
     phase: 1
