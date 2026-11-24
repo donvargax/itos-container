@@ -9619,3 +9619,58 @@
     docs/architecture/arc42.md update their shard lists. No scenario, assertion or limit changes.
     Run only the engine-free tests named in the check locally; CI runs the rest. Before the work,
     the check exits 1 at its first grep.
+- id: T-85
+  type: test
+  title: The non-engine feature tier writes a timing record for every scenario row and every harness regression test
+  why: >
+    Without per-row and per-test durations nobody can tell which fixtures make up the roughly 300 s.
+    T-33's engineTiming collector (features/engine_timing_test.go) and its `engine scenario timing:`
+    records exist only when the engine tier is enabled (features/features_test.go:174, 475-495).
+    Extend the same record shape, or a sibling `scenario timing:` prefix, to the non-engine run of
+    TestFeatures. Add one record per top-level harness Go test in ./features. Durations, IDs and
+    outcomes only. Selection, assertions and output are otherwise unchanged.
+    TestEngineScenarioTiming's existing pins keep holding. Start files:
+    features/engine_timing_test.go, features/engine_timing_regression_test.go,
+    features/features_test.go. No fake engine is needed. Broken down from
+    p2-profile-non-engine-feature-suite.
+  done_when:
+    - run: go test ./features -run 'TestEngineScenarioTiming|TestNonEngineScenarioTiming'
+- id: T-86
+  type: docs
+  title: "Record the non-engine suite's measured profile: slowest scenario rows, harness tests and fixture setup, with their shares of wall time"
+  why: >
+    The cuts must target overhead that was actually measured, not guessed. Measure on the first
+    uncached run of a commit, without rerunning a suite that already ran there and without adding
+    -count=1 by default (the charter's CPU rule). Then record in features/README.md the top rows and
+    tests by duration, grouped by feature file and fixture. Name the repeated costs the records
+    show, such as product or probe binary builds and fixed sleeps, each with its measured seconds.
+    Plain English, dated, labelled as measurement and not as a support claim. If no candidate
+    overhead shows up, say so, and the cut children close as not needed. Broken down from
+    p2-profile-non-engine-feature-suite.
+  done_when:
+    - run: grep -q '^## Non-engine suite profile' features/README.md
+- id: T-87
+  type: perf
+  title: Fixtures in the non-engine tier build each product or probe binary once per suite run, not once per fixture or row
+  why: >
+    The idea suspects redundant fixture builds. About 40 fixture files under features/ build or exec
+    their own binaries. Take this only for the builds the recorded profile names. Route them through
+    one memoised build per suite run, keyed by the same inputs, so that every scenario row,
+    assertion and cleanup is unchanged and per-scenario coverage routing (ITOS_CC_TEST_COVERDIR) is
+    kept. Commit a regression red first that counts builds per run. Wall time before and after goes
+    in the PR, from timing records. Broken down from p2-profile-non-engine-feature-suite.
+  done_when:
+    - run: go test ./features -run 'TestNonEngineFixtureBuildsOnce'
+- id: T-88
+  type: perf
+  title: Recovery and lifecycle fixtures wait on observed readiness instead of fixed sleeps, wherever the profile shows the sleep dominating a row
+  why: >
+    The idea names fixed waits in the recovery and lifecycle fixtures as the other suspected cost.
+    Many time.Sleep calls sit in lifecycle_*, recovery_* and overlap fixtures. Replace only the
+    sleeps the recorded profile names with a wait on the event the sleep stands in for, under the
+    same upper bound. A sleep that is itself the behaviour under test stays, such as grace windows
+    or fixed SIGKILL timing (decision 0009). The regression is committed red first and fails when a
+    listed fixture blocks for a fixed interval with readiness already observed. All assertions and
+    timing contracts stay unchanged. Broken down from p2-profile-non-engine-feature-suite.
+  done_when:
+    - run: go test ./features -run 'TestRecoveryLifecycleFixturesWaitOnReadiness'
