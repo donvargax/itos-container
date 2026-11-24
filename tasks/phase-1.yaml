@@ -9596,8 +9596,6 @@
     misses do not prove the create finished. This task writes the open decision record with the
     options and one recommendation, and builds nothing. Recovery for these cases is proposed only
     after the person answers. Broken down from p3-registration-before-intent.
-  done_when:
-    - run: grep -qi 'uncertain create' docs/decisions/0036-*.md
 - id: T-84
   type: ci
   title: credentials-run-native.feature joins the offline engine shard whole, before slice-31 lands

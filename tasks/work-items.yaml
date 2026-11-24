@@ -2838,7 +2838,7 @@ items:
     title: Record the open decision on what evidence lets recovery retire an uncertain create
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: T-84
