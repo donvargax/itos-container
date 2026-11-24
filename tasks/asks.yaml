@@ -372,3 +372,11 @@ questions:
     question: "Decision 0025's question 5 (docs/decisions/0025-credentials-passed-in.md:493): may real credentials be used for container runs, the person's smoke check included, and in what form does each harness get its credential?"
     answer: "The person, 2026-11-23: real credentials are allowed for container runs, in one of two forms per provider. Where the provider issues a long-lived subscription token, the run gets that token: for Claude, a claude setup-token token, read from CLAUDE_CODE_OAUTH_TOKEN, as slice-31's approved token. Otherwise the run gets the provider's auth file mounted, shared with the host and refreshed in place: for Codex, which has no subscription token, its auth.json. itos-container is told which credential each harness gets. A credentials-manager integration is needed but not started; until it exists, credential sources are files, one secret per file, mode 0600, in a directory of mode 0700, so nothing waits on it."
     decision: 35
+  - id: q-93
+    item: "slice-28"
+    question: "slice-28: the implementer (attempt 9) needs a decision before it can go on: whether status and stop exit 75 with recovery.temporary when the refusal log survives but its report, egress-refusals.json, is missing. q-87 asked the same and is answered; this is its record for attempt 9."
+    answer: "The person, 2026-11-22, as answered in q-87: status and stop both exit 75 with recovery.temporary when the refusal log survives but its report, egress-refusals.json, is missing."
+  - id: q-94
+    item: "slice-40"
+    question: "slice-40: the implementer (attempt 1) stopped incomplete, with 2 of 9 scenarios done on branch slice-40 (d9e5a2d). Continue from those?"
+    answer: "Yes, the coordinator, 2026-11-24: continue from the 2 of 9 scenarios done on branch slice-40 (d9e5a2d)."
