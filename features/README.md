@@ -325,7 +325,7 @@ set included, skips with `no live @engine scenarios (count 0)`.
 
 T-20's [helper](../tools/bin/engine-fixture) runs only in the engine shard job, after preflight.
 Both `prepare` and `cleanup` refuse outside GitHub Actions on an actual Linux amd64 host, before
-engine access. Agents never invoke these modes against an engine or spoof CI. The helper uses the
+engine access. Agents never invoke these modes against an engine or spoof CI, outside the hermetic T-81 cleanup test, whose child sees only a recording fake docker. The helper uses the
 existing Docker CLI, shell/coreutils, curl, jq and tar and installs nothing. Every engine call
 clears Docker host/context/TLS/API overrides, uses `unix:///var/run/docker.sock` explicitly and
 supplies a disposable empty Docker configuration, without logins or credential helpers. It never
@@ -343,7 +343,7 @@ Tags identify the provenance only; CI never resolves them. The maintained
 the push/pull round trip, and [BusyBox](https://hub.docker.com/_/busybox) supplies a small shell
 and basic probes. No image or archive is published outside the disposable runner-local registry.
 This acquisition is CI scaffolding: it adds no product acquisition, registry dependency or
-permission for worker egress.
+permission for worker egress. The [Codex fixture](testdata/codex-fixture/README.md) image is built the same way.
 
 The reviewed [Dockerfile](testdata/engine-fixture/Dockerfile) takes the runner's numeric
 effective UID/GID, refusing UID zero before build, sets `USER`, clears `ENTRYPOINT` and uses

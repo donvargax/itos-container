@@ -95,6 +95,47 @@ remove_image_ref() {
   fi
 }
 
+# Only the recorded codex tag or digest reference is ever removed, and only while the inspected
+# image is exactly the recorded build. An absent record or absent image means nothing to do.
+remove_codex_ref() {
+  local kind=$1 record repository ref built base registry observed status
+  case "$kind" in
+    tag) record=codex.tag ;;
+    digest) record=codex.digest ;;
+    *) fail "codex reference kind: expected tag/digest; observed=$(fixture_value "$kind")" ;;
+  esac
+  [[ -f $state/$record ]] || return 0
+  repository=$(cat "$state/codex.repository") || fail "codex reference repository read: expected codex.repository; observed status=$?"
+  [[ $repository =~ ^127\.0\.0\.1:[0-9]{1,5}/itos-fixture-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-codex$ ]] || fail "codex reference repository: expected this attempt's codex repository; observed=$(fixture_value "$repository")"
+  ref=$(cat "$state/$record") || fail "codex reference record read: expected $record; observed status=$?"
+  case "$kind" in
+    tag) [[ $ref == "$repository:fixture" ]] || fail "codex reference tag: expected=$repository:fixture; observed=$(fixture_value "$ref")"
+      ;;
+    digest) digest_valid "$ref" || fail "codex reference digest: expected sha256; observed=$(fixture_value "$ref")"
+      ref="$repository@$ref" ;;
+  esac
+  if inspect_image "$ref" "$state/removing-codex-image.json"; then
+    built=$(cat "$state/codex.build.iid") || fail "codex reference built identity read: expected codex.build.iid; observed status=$?"
+    digest_valid "$built" || fail "codex reference built identity: expected sha256; observed=$(fixture_value "$built")"
+    observed=$(jq -er '.[0].Id' "$state/removing-codex-image.json") || fail "codex reference identity read: expected image Id; observed invalid inspection (status=$?)"
+    [[ $observed == "$built" ]] || fail "codex reference identity: expected=$built; observed=$(fixture_value "$observed")"
+    base=$(cat "$state/base.iid") || fail "codex reference base identity read: expected base.iid; observed status=$?"
+    registry=$(cat "$state/registry.iid") || fail "codex reference registry identity read: expected registry.iid; observed status=$?"
+    # Never delete a pinned input, even if an invalid recipe somehow produced it.
+    [[ $built != "$base" && $built != "$registry" ]] || fail "codex reference protection: expected derived image; observed built=$built base=$(fixture_value "$base") registry=$(fixture_value "$registry")"
+    d image rm "$ref" || fail "codex reference removal: expected removed $(fixture_value "$ref"); observed status=$?"
+  else
+    status=$?
+    [[ $status == 1 ]] || fail "codex reference inspection: expected present/absent; observed status=$status"
+  fi
+  if inspect_image "$ref" "$state/removed-codex-image.json"; then
+    fail "codex reference removal verification: expected absent; observed present $(fixture_value "$ref")"
+  else
+    status=$?
+    [[ $status == 1 ]] || fail "codex reference removal verification: expected absent; observed status=$status"
+  fi
+}
+
 remove_container() {
   local kind=$1 name expected cid observed message summary diagnostic=''
   [[ $kind != warmup ]] || diagnostic='warm-up '
@@ -221,6 +262,8 @@ cleanup() {
   (remove_container registry) || failed=1
   (remove_image_ref tag) || failed=1
   (remove_image_ref reference) || failed=1
+  (remove_codex_ref tag) || failed=1
+  (remove_codex_ref digest) || failed=1
   if (( failed )); then
     fail "cleanup: expected all owned resources absent; observed removal failures; retained record $state"
   fi
@@ -289,6 +332,73 @@ product_warmup_fixture() {
   printf '%s\n' "$cid" >"$state/product.cid" || fail 'warm-up product CID recording failed'
   remove_product_container || fail 'warm-up product container teardown failed'
   remove_product_volume || fail 'warm-up product anchor teardown failed'
+}
+
+# Download, verify, build, publish and cold-pull the pinned Codex image. Every step has its own
+# `|| fail`, because set -e does not apply inside a function called with `||`. Nothing here is
+# published as a handoff: codex_handoff does that after the whole protocol passed.
+codex_fixture() {
+  local port=$1 fixture_uid=$2 fixture_gid=$3 status
+  local codex_download codex_context codex_repository codex_tag codex_recipe codex_built codex_base codex_registry
+  local codex_config_path codex_config codex_digest codex_reference
+  codex_download="$state/codex-download"
+  codex_context="$state/codex-context"
+  mkdir -- "$codex_download" || fail "codex download directory: expected created; observed status=$?"
+  mkdir -- "$codex_context" || fail "codex build context: expected created; observed status=$?"
+  curl --fail --location --silent --show-error --proto '=https' --proto-redir '=https' --max-time 60 \
+    --output "$codex_download/codex-x86_64-unknown-linux-musl.tar.gz" \
+    https://github.com/openai/codex/releases/download/rust-v0.167.0/codex-x86_64-unknown-linux-musl.tar.gz || fail "codex download: expected the pinned release asset; observed status=$?"
+  codex_archive_verify "$codex_download/codex-x86_64-unknown-linux-musl.tar.gz" "$workspace/features/testdata/codex-fixture/SHA256SUMS" "$codex_context" || fail "codex archive verification: expected the pinned archive and executable; observed status=$?"
+  codex_repository="127.0.0.1:$port/itos-fixture-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-codex"
+  codex_tag="$codex_repository:fixture"
+  printf '%s\n' "$codex_repository" >"$state/codex.repository" || fail "codex repository record: expected writable record; observed status=$?"
+  printf '%s\n' "$codex_tag" >"$state/codex.tag" || fail "codex tag record: expected writable record; observed status=$?"
+  codex_recipe="$workspace/features/testdata/codex-fixture/Dockerfile"
+  d image build --platform linux/amd64 --pull=false --iidfile "$state/codex.build.iid" --file - \
+    --build-arg "FIXTURE_UID=$fixture_uid" --build-arg "FIXTURE_GID=$fixture_gid" \
+    --tag "$codex_tag" "$codex_context" <"$codex_recipe" || fail "codex build: expected built image; observed status=$?"
+  codex_built=$(cat "$state/codex.build.iid") || fail "codex built identity read: expected codex.build.iid; observed status=$?"
+  codex_base=$(cat "$state/base.iid") || fail "codex base identity read: expected base.iid; observed status=$?"
+  codex_registry=$(cat "$state/registry.iid") || fail "codex registry identity read: expected registry.iid; observed status=$?"
+  digest_valid "$codex_built" && [[ $codex_built != "$codex_base" && $codex_built != "$codex_registry" ]] || fail "codex built identity: expected derived sha256; observed built=$(fixture_value "$codex_built") base=$(fixture_value "$codex_base") registry=$(fixture_value "$codex_registry")"
+  d image push "$codex_tag" || fail "codex push: expected pushed tag; observed status=$?"
+  d image save --output "$state/codex-built.tar" "$codex_built" || fail "codex image export: expected saved builtID=$codex_built; observed status=$?"
+  tar -xOf "$state/codex-built.tar" manifest.json >"$state/codex-export-manifest.json" || fail "codex export metadata read: expected manifest.json; observed status=$?"
+  codex_config_path=$(daemon_config_path "$state/codex-export-manifest.json") || fail "codex export metadata validation: expected one config member; observed status=$?"
+  tar -xOf "$state/codex-built.tar" "$codex_config_path" >"$state/codex-daemon-config.json" || fail "codex config read: expected member=$(fixture_value "$codex_config_path"); observed status=$?"
+  codex_config=$(daemon_config_digest "$state/codex-daemon-config.json" "$codex_config_path") || fail "codex config validation: expected independent config digest; observed status=$?"
+  curl --fail --silent --show-error --noproxy '*' --proto '=http' --max-time 10 \
+    --header 'Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json' \
+    --dump-header "$state/codex-manifest.headers" --output "$state/codex-manifest.json" \
+    "http://127.0.0.1:$port/v2/${codex_repository#*/}/manifests/fixture" || fail "codex manifest fetch: expected HTTP success and captured response; observed status=$?"
+  codex_digest=$(validate_manifest "$state/codex-manifest.json" "$state/codex-manifest.headers" "$codex_built" "$codex_config") || fail "codex manifest validation: expected verified digest; observed status=$?"
+  printf '%s\n' "$codex_digest" >"$state/codex.digest" || fail "codex digest record: expected writable record; observed status=$?"
+  remove_codex_ref tag || fail "codex tag removal: expected absent; observed status=$?"
+  remove_codex_ref digest || fail "codex digest removal: expected absent; observed status=$?"
+  codex_reference="$codex_repository@$codex_digest"
+  if inspect_image "$codex_reference" "$state/codex-cold-image.json"; then
+    fail "codex cold inspection: expected absent; observed present $codex_reference"
+  else
+    status=$?
+    [[ $status == 1 ]] || fail "codex cold inspection: expected exact absence; observed status=$status"
+  fi
+  d image pull --platform linux/amd64 "$codex_reference" || fail "codex cold pull: expected cached $codex_reference; observed status=$?"
+  d image inspect "$codex_reference" >"$state/codex-image.json" || fail "codex cached inspection: expected exact reference $(fixture_value "$codex_reference"); observed status=$?"
+  validate_cached "$state/codex-image.json" "$codex_reference" "$codex_built" "$fixture_uid" "$fixture_gid" || fail 'codex cold-pull validation: expected validated image; observed failure'
+}
+
+# The handoff for the native Codex evidence, written only after the registry is gone and the
+# cached reference validated again. These are the only two handoff writes in the driver.
+codex_handoff() {
+  local fixture_uid=$1 fixture_gid=$2 codex_repository codex_digest codex_built codex_reference
+  codex_repository=$(cat "$state/codex.repository") || fail "codex handoff repository read: expected codex.repository; observed status=$?"
+  codex_digest=$(cat "$state/codex.digest") || fail "codex handoff digest read: expected codex.digest; observed status=$?"
+  codex_built=$(cat "$state/codex.build.iid") || fail "codex handoff built identity read: expected codex.build.iid; observed status=$?"
+  codex_reference="$codex_repository@$codex_digest"
+  d image inspect "$codex_reference" >"$state/codex-final-image.json" || fail "codex handoff inspection: expected exact reference $(fixture_value "$codex_reference"); observed status=$?"
+  validate_cached "$state/codex-final-image.json" "$codex_reference" "$codex_built" "$fixture_uid" "$fixture_gid" || fail 'codex handoff validation: expected cached image without the registry; observed failure'
+  printf '%s\n' "$codex_reference" >"$state/codex.reference" || fail "codex handoff reference: expected writable record; observed status=$?"
+  printf '%s\n' "$codex_built" >"$state/codex.iid" || fail "codex handoff identity: expected writable record; observed status=$?"
 }
 
 prepare() {
@@ -386,12 +496,14 @@ prepare() {
   validate_smoke "$state/smoke.json" "$state/smoke.out" "$fixture_uid" "$fixture_gid" || fail 'smoke validation: expected exit and identity; observed failure'
   printf 'fixture smoke: expected uid=%s gid=%s marker=T-20-engine-fixture-ok exit=0; observed matching output/identity exit=0\n' "$fixture_uid" "$fixture_gid" || fail 'smoke verdict output: expected writable diagnostics; observed write failure'
   remove_container smoke || fail "pre-scenario smoke cleanup: expected absent; observed status=$?"
+  codex_fixture "$port" "$fixture_uid" "$fixture_gid" || fail "codex fixture: expected verified pinned image; observed status=$?"
   remove_container registry || fail "pre-scenario registry cleanup: expected absent; observed status=$?"
   printf 'pre-scenario cleanup: PASS smoke/registry absent; registry tmpfs discarded\n' || fail 'cleanup verdict output: expected writable diagnostics; observed write failure'
   cached_fixture "$reference" "$built" "$fixture_uid" "$fixture_gid" || fail "final cache check: expected inspectable without registry; observed status=$?"
   printf 'registry offline; cached fixture remains inspectable: PASS\n' || fail 'offline verdict output: expected writable diagnostics; observed write failure'
   engine_warmup_run 9s 1s '10 seconds' bash -euo pipefail -c "$(declare -f); warmup_fixture \"\$1\" \"\$2\" \"\$3\"" _ "$reference" "$fixture_uid" "$fixture_gid" || fail "warm-up phase: expected completion; observed status=$?"
   engine_warmup_product_run 9s 1s '10 seconds' bash -euo pipefail -c "$(declare -f); product_warmup_fixture \"\$1\" \"\$2\" \"\$3\"" _ "$built" "$fixture_uid" "$fixture_gid" || fail "warm-up product phase: expected completion; observed status=$?"
+  codex_handoff "$fixture_uid" "$fixture_gid" || fail "codex handoff: expected validated cached image; observed status=$?"
   # Publish as one append, only after the entire protocol succeeded.
   printf 'image=%s\nimage_id=%s\nuid=%s\ngid=%s\n' "$reference" "$built" "$fixture_uid" "$fixture_gid" >>"$GITHUB_OUTPUT" || fail "fixture output publication: expected four step outputs; observed status=$?"
 }
