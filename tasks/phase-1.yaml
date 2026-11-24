@@ -9666,7 +9666,8 @@
     record has selected, completed, duration_ns and outcome. A harness record is
     {"test":<the top-level test's name>,"duration_ns":<n>,"outcome":"passed"|"failed"|"skipped"}.
     Engine records keep their bytes, prefixes and exit rules. features/engine_failure_timings_test.go
-    stays unchanged, so an engineTiming built as it builds one still writes `engine` prefixes.
+    stays unchanged apart from the timing line its TestEngineFailureTimings gains, like every other
+    top-level test, so an engineTiming built as it builds one still writes `engine` prefixes.
 
     The ordinary tier. scenarioSelection gains `records io.Writer`. TestFeatures sets
     `selection.records = timingSink` before its runPreparedFeatures call. When the tier is not
