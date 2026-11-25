@@ -130,3 +130,28 @@ validate_smoke() {
   printf -v expected 'uid=%s gid=%s\nT-20-engine-fixture-ok' "$fixture_uid" "$fixture_gid" || fail 'smoke expectation: expected formatted identity; observed printf failure'
   [[ $observed == "$expected" ]] || fail "smoke output: expected=$(fixture_value "$expected"); observed=$(fixture_value "$observed")"
 }
+
+# Verify the pinned Codex archive and its one member before anything reaches the build context.
+# Every step has its own `|| fail`: set -e is off inside a function called with `||`.
+# The member is staged beside the archive, so no failure leaves anything in the context.
+codex_archive_verify() {
+  local archive=$1 sums=$2 context=$3 name=codex-x86_64-unknown-linux-musl
+  local archive_pin member_pin hash_pattern='^[0-9a-f]{64}$' actual listing
+  local -a pins
+  mapfile -t pins <"$sums" || fail "codex pin file: expected readable $(fixture_value "$sums"); observed status=$?"
+  [[ ${#pins[@]} == 2 && ${pins[0]} == *"  $name.tar.gz" && ${pins[1]} == *"  $name" ]] || fail "codex pin file: expected two lines for $name.tar.gz and $name; observed ${#pins[@]} lines"
+  archive_pin=${pins[0]%%  *}
+  member_pin=${pins[1]%%  *}
+  [[ $archive_pin =~ $hash_pattern && $member_pin =~ $hash_pattern && ${pins[0]} == "$archive_pin  $name.tar.gz" && ${pins[1]} == "$member_pin  $name" ]] || fail "codex pin file: expected 64 lowercase hex digits and two spaces; observed=$(fixture_value "${pins[0]}") $(fixture_value "${pins[1]}")"
+  actual=$(sha256sum --binary <"$archive") || fail "codex archive hash: expected readable archive; observed status=$?"
+  actual=${actual%% *}
+  [[ $actual == "$archive_pin" ]] || fail "codex archive hash: expected=$archive_pin; observed=$(fixture_value "$actual")"
+  listing=$(tar -tzf "$archive") || fail "codex archive members: expected a listable gzip tar; observed status=$?"
+  [[ $listing == "$name" ]] || fail "codex archive members: expected only $name; observed=$(fixture_value "$listing")"
+  tar -xzOf "$archive" "$name" >"$archive.member" || fail "codex member extraction: expected $name; observed status=$?"
+  actual=$(sha256sum --binary <"$archive.member") || fail "codex member hash: expected readable member; observed status=$?"
+  actual=${actual%% *}
+  [[ $actual == "$member_pin" ]] || fail "codex member hash: expected=$member_pin; observed=$(fixture_value "$actual")"
+  chmod 0555 "$archive.member" || fail "codex member mode: expected 0555; observed status=$?"
+  mv -- "$archive.member" "$context/codex" || fail "codex member placement: expected $(fixture_value "$context/codex"); observed status=$?"
+}
