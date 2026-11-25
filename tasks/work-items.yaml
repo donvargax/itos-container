@@ -2245,7 +2245,7 @@ items:
     title: Report the checkout socket backend in doctor
     phase: 1
     owner: donvargax
-    status: todo
+    status: doing
     depends_on: [T-64]
     kind: slice
     why: >
