@@ -59,7 +59,10 @@ func newCodexWorld(t *testing.T, machine string) *codexWorld {
 		`    exit 1`,
 		`  fi`,
 		`  while IFS=$'\t' read -r ref id; do`,
-		`    if [[ $ref == "$3" ]]; then printf '[{"Id":"%s"}]\n' "$id"; exit 0; fi`,
+		`    if [[ $ref == "$3" ]]; then`,
+		`      if [[ -f "$dir/inspection" ]]; then cat "$dir/inspection"; else printf '[{"Id":"%s"}]\n' "$id"; fi`,
+		`      exit 0`,
+		`    fi`,
 		`  done <"$dir/store"`,
 		`  printf 'Error response from daemon: No such image: %s\n' "$3" >&2`,
 		`  exit 1`,
@@ -194,15 +197,59 @@ func TestEngineFixtureCodexCleanup(t *testing.T) {
 	t.Run("mismatched_id", func(t *testing.T) {
 		w := newCodexWorld(t, "x86_64")
 		w.records(t, w.baseRecords(), append(w.pinned(), [2]string{codexTag, codexOtherID})...)
+		before := w.store(t)
 		_, stderr, err := w.run(t)
-		requireFixture(t, err != nil && strings.Contains(stderr, "codex owned-reference identity"), "mismatch accepted or unnamed: %v stderr=%s", err, stderr)
+		requireFixture(t, err != nil && strings.Contains(stderr, "engine-fixture: codex owned-reference identity: expected="+codexBuiltID+"; observed="+codexOtherID), "mismatch accepted or unnamed: %v stderr=%s", err, stderr)
 		for _, line := range w.log(t) {
 			requireFixture(t, !strings.HasPrefix(line, "image rm"), "removed despite mismatch: %q", w.log(t))
 		}
+		after := w.store(t)
+		requireFixture(t, slices.Equal(before, after), "store changed: %q -> %q", before, after)
+	})
+	t.Run("unreadable_tag_record", func(t *testing.T) {
+		w := newCodexWorld(t, "x86_64")
+		records := w.baseRecords()
+		delete(records, "codex.tag")
+		w.records(t, records, append(w.pinned(), [2]string{codexTag, codexBuiltID})...)
+		if err := os.Mkdir(filepath.Join(w.state, "codex.tag"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		before := w.store(t)
+		_, stderr, err := w.run(t)
+		requireFixture(t, err != nil && strings.Contains(stderr, "engine-fixture: codex owned-reference record read:"), "invalid tag record accepted or unnamed: %v stderr=%s", err, stderr)
+		requireFixture(t, len(w.log(t)) == 0, "engine called with invalid tag record: %q", w.log(t))
+		after := w.store(t)
+		requireFixture(t, slices.Equal(before, after), "store changed: %q -> %q", before, after)
 	})
 	t.Run("refusals", testCodexCleanupRefusals)
 	t.Run("archive_verify", testCodexArchiveVerify)
 	t.Run("order_guard", testCodexOrderGuard)
+}
+
+func TestEngineFixtureRejectsAmbiguousCodexInspection(t *testing.T) {
+	matchingImage := `[{"Id":"` + codexBuiltID + `"}]`
+	cases := []struct{ name, response string }{
+		{"multiple_images", `[{"Id":"` + codexBuiltID + `"},{"Id":"` + codexOtherID + `"}]`},
+		{"multiple_documents", matchingImage + "\n" + matchingImage},
+		{"trailing_newline_in_id", `[{"Id":"` + codexBuiltID + `\n"}]`},
+		{"trailing_null_in_id", `[{"Id":"` + codexBuiltID + `\u0000"}]`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			w := newCodexWorld(t, "x86_64")
+			w.records(t, w.baseRecords(), append(w.pinned(), [2]string{codexTag, codexBuiltID})...)
+			if err := os.WriteFile(filepath.Join(w.bin, "inspection"), []byte(c.response), 0o600); err != nil {
+				t.Fatalf("cannot write inspection response: %v", err)
+			}
+			before := w.store(t)
+			_, stderr, err := w.run(t)
+			log := w.log(t)
+			requireFixture(t, slices.Equal(log, []string{"image inspect " + codexTag}), "expected only inspection of the recorded tag, observed %q", log)
+			requireFixture(t, err != nil && strings.Contains(stderr, "reference identity read:"), "invalid inspection accepted or unnamed: %v stderr=%s", err, stderr)
+			after := w.store(t)
+			requireFixture(t, slices.Equal(before, after), "store changed: %q -> %q", before, after)
+		})
+	}
 }
 
 // testCodexCleanupRefusals tampers with one thing at a time, so a cleanup missing that one
@@ -211,28 +258,27 @@ func TestEngineFixtureCodexCleanup(t *testing.T) {
 func testCodexCleanupRefusals(t *testing.T) {
 	foreignRepository := "127.0.0.1:5000/itos-fixture-4242-1"
 	foreignTag := foreignRepository + ":fixture"
-	const owned, inspection = "engine-fixture: codex owned-reference ", "engine-fixture: image inspection: "
 	cases := []struct {
 		name, deny, message string
 		tamper              func(records map[string]string) [2]string
 	}{
-		{"decoy_record", "", owned, func(r map[string]string) [2]string {
+		{"decoy_record", "", "reference tag: expected=" + codexTag + "; observed=" + codexDecoy, func(r map[string]string) [2]string {
 			r["codex.tag"] = codexDecoy
 			return [2]string{codexTag, codexBuiltID}
 		}},
-		{"foreign_repository", "", owned, func(r map[string]string) [2]string {
+		{"foreign_repository", "", "reference repository: expected this attempt's codex repository; observed=" + foreignRepository, func(r map[string]string) [2]string {
 			r["codex.repository"], r["codex.tag"] = foreignRepository, foreignTag
 			return [2]string{foreignTag, codexBuiltID}
 		}},
-		{"invalid_digest_record", "", owned, func(r map[string]string) [2]string {
+		{"invalid_digest_record", "", "reference digest: expected sha256; observed=sha256:short", func(r map[string]string) [2]string {
 			r["codex.digest"] = "sha256:short"
 			return [2]string{codexRepository + "@sha256:short", codexBuiltID}
 		}},
-		{"pinned_input_identity", "", owned, func(r map[string]string) [2]string {
+		{"pinned_input_identity", "", "reference protection: expected derived image; observed built=" + codexBaseID, func(r map[string]string) [2]string {
 			r["codex.build.iid"] = codexBaseID
 			return [2]string{codexTag, codexBaseID}
 		}},
-		{"transport_error", codexTag, inspection, func(r map[string]string) [2]string {
+		{"transport_error", codexTag, "engine-fixture: image inspection: expected image or exact absence for " + codexTag, func(r map[string]string) [2]string {
 			return [2]string{codexTag, codexBuiltID}
 		}},
 	}

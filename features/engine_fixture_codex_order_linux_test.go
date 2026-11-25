@@ -106,10 +106,12 @@ func codexFixtureOrderIssues(driver string) []string {
 		add("codex_fixture: the build must use --iidfile \"$state/codex.build.iid\" and \"$codex_context\"")
 	}
 	digestWrite := write + `digest" >"$state/codex.digest"`
+	const removeTag, removeDigest = `remove_codex_ref tag`, `remove_codex_ref digest`
 	before("codex_fixture", `codex_digest=$(validate_manifest `, digestWrite)
-	before("codex_fixture", digestWrite, `remove_codex_ref tag`)
-	before("codex_fixture", digestWrite, `remove_codex_ref digest`)
-	before("codex_fixture", digestWrite, pull)
+	before("codex_fixture", digestWrite, removeTag)
+	before("codex_fixture", digestWrite, removeDigest)
+	before("codex_fixture", removeTag, pull)
+	before("codex_fixture", removeDigest, pull)
 	before("codex_fixture", pull, `validate_cached "$state/codex-image.json"`)
 	// Preparation: codex_fixture between the two removals, codex_handoff after the product warm-up.
 	call, handoffCall := `codex_fixture "$port" "$fixture_uid" "$fixture_gid"`, `codex_handoff "$fixture_uid" "$fixture_gid"`
@@ -183,8 +185,14 @@ func testCodexOrderGuard(t *testing.T) {
 			return moveCodexLine(t, driver, `>"$state/codex.digest"`, `remove_codex_ref tag || fail`, true)
 		},
 		"digest_after_cold_pull": func() string { return moveCodexLine(t, driver, `>"$state/codex.digest"`, pull, true) },
-		"iidfile_renamed":        func() string { return strings.Replace(driver, iid, `--iidfile "$state/codex.build.id"`, 1) },
-		"reference_before_pull":  func() string { return moveCodexLine(t, driver, `>"$state/codex.reference"`, pull, false) },
+		"tag_removal_after_cold_pull": func() string {
+			return moveCodexLine(t, driver, `remove_codex_ref tag || fail`, pull, true)
+		},
+		"digest_removal_after_cold_pull": func() string {
+			return moveCodexLine(t, driver, `remove_codex_ref digest || fail`, pull, true)
+		},
+		"iidfile_renamed":       func() string { return strings.Replace(driver, iid, `--iidfile "$state/codex.build.id"`, 1) },
+		"reference_before_pull": func() string { return moveCodexLine(t, driver, `>"$state/codex.reference"`, pull, false) },
 		"iid_before_validation": func() string {
 			return moveCodexLine(t, driver, `>"$state/codex.iid"`, `validate_cached "$state/codex-final-image.json"`, false)
 		},

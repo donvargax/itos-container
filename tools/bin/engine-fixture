@@ -98,16 +98,18 @@ remove_image_ref() {
 # Only the recorded codex tag or digest reference is ever removed, and only while the inspected
 # image is exactly the recorded build. An absent record or absent image means nothing to do.
 remove_codex_ref() {
-  local kind=$1 record repository ref built base registry observed status
+  local kind=$1 record record_path repository ref built base registry observed status
   case "$kind" in
     tag) record=codex.tag ;;
     digest) record=codex.digest ;;
     *) fail "codex owned-reference kind: expected tag/digest; observed=$(fixture_value "$kind")" ;;
   esac
-  [[ -f $state/$record ]] || return 0
+  record_path="$state/$record"
+  [[ -e $record_path || -L $record_path ]] || return 0
+  [[ -f $record_path && ! -L $record_path ]] || fail "codex owned-reference record read: expected regular $record; observed invalid record type"
   repository=$(cat "$state/codex.repository") || fail "codex owned-reference repository read: expected codex.repository; observed status=$?"
   [[ $repository =~ ^127\.0\.0\.1:[0-9]{1,5}/itos-fixture-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-codex$ ]] || fail "codex owned-reference repository: expected this attempt's codex repository; observed=$(fixture_value "$repository")"
-  ref=$(cat "$state/$record") || fail "codex owned-reference record read: expected $record; observed status=$?"
+  ref=$(cat "$record_path") || fail "codex owned-reference record read: expected $record; observed status=$?"
   case "$kind" in
     tag) [[ $ref == "$repository:fixture" ]] || fail "codex owned-reference tag: expected=$repository:fixture; observed=$(fixture_value "$ref")"
       ;;
@@ -117,7 +119,12 @@ remove_codex_ref() {
   if inspect_image "$ref" "$state/removing-codex-image.json"; then
     built=$(cat "$state/codex.build.iid") || fail "codex owned-reference built identity read: expected codex.build.iid; observed status=$?"
     digest_valid "$built" || fail "codex owned-reference built identity: expected sha256; observed=$(fixture_value "$built")"
-    observed=$(jq -er '.[0].Id' "$state/removing-codex-image.json") || fail "codex owned-reference identity read: expected image Id; observed invalid inspection (status=$?)"
+    # Check the digest before Bash can discard trailing newlines or NUL bytes.
+    observed=$(jq -ers '
+      if length == 1 and (.[0] | type == "array" and length == 1)
+      then .[0][0].Id | strings | select(test("\\Asha256:[0-9a-f]{64}\\z"))
+      else empty end
+    ' "$state/removing-codex-image.json" 2>/dev/null) || fail "codex owned-reference identity read: expected one sha256 image Id; observed invalid inspection (status=$?)"
     [[ $observed == "$built" ]] || fail "codex owned-reference identity: expected=$built; observed=$(fixture_value "$observed")"
     base=$(cat "$state/base.iid") || fail "codex owned-reference base identity read: expected base.iid; observed status=$?"
     registry=$(cat "$state/registry.iid") || fail "codex owned-reference registry identity read: expected registry.iid; observed status=$?"
