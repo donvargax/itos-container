@@ -536,8 +536,14 @@ GitHub manual dispatch also requires the workflow/harness changes on the default
    Substitute whitespace-separated complete tags for `<ids>`. No tag-removal commit, evidence
    branch, smoke edit or draft-guard exception is needed. Ordinary Linux and proof jobs keep their
    normal inputs; only the engine and manual macOS/Windows jobs receive this selector.
-3. The coordinator records the **resolved tested SHA**, input IDs, run URL, runner/tier, scenario
-   ID/outline row and failing **Then** assertion. Infrastructure, setup and undefined-step
+3. Download the red scenario artifacts from the run summary. Jobs that execute eligible
+   scenarios upload Godog's Cucumber JSON as `red-scenarios-engine-shard-<shard>`,
+   `red-scenarios-platform-macos` or `red-scenarios-platform-windows`. Each contains
+   `red-scenarios.json` with the scenario rows, step outcomes and error text. Uploads
+   run after success or failure, and the job logs still show Godog's pretty output.
+   Jobs that skip all selected cases produce no report. The coordinator records the
+   **resolved tested SHA**, input IDs, run URL, runner/tier, scenario ID/outline row and
+   failing **Then** assertion from the report. Infrastructure, setup and undefined-step
    failures and empty or excluded selections are not red proof. A passing run is not red proof
    either; no forced failure or ignored test failure is permitted. Keep the failed run visible.
 4. Remove `@wip` in the behaviour commit and require green CI at the actual pushed head
