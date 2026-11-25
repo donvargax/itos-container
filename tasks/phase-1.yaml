@@ -9672,3 +9672,18 @@
     timing contracts stay unchanged. Broken down from p2-profile-non-engine-feature-suite.
   done_when:
     - run: go test ./features -run 'TestRecoveryLifecycleFixturesWaitOnReadiness'
+- id: T-89
+  type: ci
+  title: The push review gate waits on Codex alone while Cursor Bugbot reviews are paused
+  why: >
+    The person paused Cursor Bugbot reviews on 2026-11-24 for a couple of days, Codex only.
+    push.pr.review_by in itos.yaml names cursor alone (since T-67), so with Bugbot off itos push
+    --ready would wait on a review that never comes. review_by names chatgpt-codex-connector again,
+    Codex stays in reviewers so it is still asked, and the cursor bugbot reviewer is no longer
+    asked. A comment beside the setting says the change is temporary, until about 2026-11-27, when
+    review_by goes back to cursor and the bugbot reviewer returns. Nothing else in the push or proof
+    config changes. Start file: itos.yaml (the push block); model: 08dd3b2, the T-67 change it
+    reverses for now.
+  done_when:
+    - run: "grep -q 'review_by: \\[chatgpt-codex-connector\\]' itos.yaml && grep -q 'login: chatgpt-codex-connector, kind: codex' itos.yaml && ! grep -q '^ *- { login: cursor, kind: bugbot }' itos.yaml && grep -q '2026-11-27' itos.yaml"
+      timeout: 30

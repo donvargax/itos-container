@@ -99,7 +99,7 @@ func (s Registry) Register(ctx context.Context, c port.Candidate, id string, dat
 		exclusive = (*os.Root).Link
 	}
 	d := &sessionDirectory{directoryStore: directoryStore{pin: p, ctx: budget.Lifetime(ctx), public: true, exclusive: exclusive}}
-	controller, failure := d.openLock("controller.lock", true)
+	controller, failure := d.pin.openLock("controller.lock", true)
 	if failure != "" {
 		return nil, failure
 	}
@@ -112,7 +112,7 @@ func (s Registry) Register(ctx context.Context, c port.Candidate, id string, dat
 	if tryLock(controller) != nil {
 		return nil, "state.conflict"
 	}
-	operation, failure := d.openLock("operation.lock", true)
+	operation, failure := d.pin.openLock("operation.lock", true)
 	if failure != "" {
 		return nil, failure
 	}
@@ -160,11 +160,11 @@ func (s Registry) Open(ctx context.Context, c port.Candidate, id string, readOnl
 			d.Close()
 		}
 	}()
-	d.controller, failure = d.openLock("controller.lock", false)
+	d.controller, failure = d.pin.openLock("controller.lock", false)
 	if failure != "" {
 		return nil, failure
 	}
-	d.operation, failure = d.openLock("operation.lock", false)
+	d.operation, failure = d.pin.openLock("operation.lock", false)
 	if failure != "" {
 		return nil, failure
 	}
@@ -203,8 +203,7 @@ func (d *sessionDirectory) Sync(name string, expected []byte) port.Failure {
 	return d.directoryStore.Sync(name, expected)
 }
 
-func (d *sessionDirectory) openLock(name string, create bool) (*os.File, port.Failure) {
-	p := d.pin
+func (p *pin) openLock(name string, create bool) (*os.File, port.Failure) {
 	flags := os.O_RDONLY | noFollow
 	if create {
 		flags = os.O_RDWR | os.O_CREATE | os.O_EXCL | noFollow

@@ -2821,7 +2821,7 @@ items:
     title: The next control-lock holder removes orphaned .intent-<nonce>.tmp files and leaves records and live publishers' temporaries alone
     phase: 1
     owner: donvargax
-    status: todo
+    status: doing
     depends_on: []
     kind: slice
     why: >
@@ -2878,4 +2878,11 @@ items:
     owner: null
     status: todo
     depends_on: [T-86]
+    kind: task
+  - id: T-89
+    title: The push review gate waits on Codex alone while Cursor Bugbot reviews are paused
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
     kind: task

@@ -701,7 +701,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # finishLocalWorkloads and waits for P's run to exit. The first Then passes
   # today. The second Then fails today, because nothing removes the six
   # temporaries.
-  @wip @slice-60 @ID-CONTROL-27 @local-engine-fixture
+  @slice-60 @ID-CONTROL-27 @local-engine-fixture
   Scenario Outline: The next control-lock holder removes orphaned publisher temporaries and keeps each record intact
     Given a control-state fixture for a sweep of the "<location>" session tree by P "<command>"
     When the "<location>" project's fixture run finishes with complete cleanup and the fixture plants a lone and a linked publisher temporary in each of its admission collection, intent directory and session directory
@@ -726,7 +726,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # a 0600 file in W's fixture directory, outside every state tree. "linked" is a
   # 0600 file planted first in W's session directory. The first Then fails today
   # because the two genuine lone temporaries remain.
-  @wip @slice-60 @ID-CONTROL-28 @local-engine-fixture
+  @slice-60 @ID-CONTROL-28 @local-engine-fixture
   Scenario: Names and files Publish never leaves survive the sweep
     Given a control-state fixture for a sweep of the "enrolled" session tree by P "approve"
     When the "enrolled" project's fixture run finishes with complete cleanup and the fixture plants these entries Publish never leaves:
@@ -806,7 +806,7 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # temporary of its own" is read at the end, after W's run has exited: in W's
   # intent directory and session directory, no .intent-*.tmp name remains but
   # the one the fixture planted beside the paused temporary.
-  @wip @slice-60 @ID-CONTROL-29 @local-engine-fixture
+  @slice-60 @ID-CONTROL-29 @local-engine-fixture
   Scenario Outline: A live publisher's temporary survives another holder's sweep
     Given a control-state fixture whose W run will pause before its first "<record>" replacement after registration once that replacement's temporary is durable
     When W pauses there and the fixture plants a lone publisher temporary in W's admission collection and another beside W's paused temporary

@@ -184,6 +184,9 @@ func (s Control) Begin(ctx context.Context, c port.Candidate, write bool) (port.
 		if failure = t.enroll(); failure != "" {
 			return nil, failure
 		}
+		// The next holder of the lock removes what a killed publisher left. This
+		// step never fails the transaction.
+		t.sweepTemporaries(ctx)
 	}
 	if !t.Unchanged() {
 		return nil, "state.path"
