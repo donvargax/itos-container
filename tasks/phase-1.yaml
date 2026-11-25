@@ -9782,9 +9782,10 @@
 
     sink sets the variable with t.Setenv to a fresh path in t.TempDir(). After
     timingSinkFromEnvironment, os.LookupEnv reports the variable absent and the file exists as a
-    regular file of mode 0600 (perm bits only). A second case points it at a file written
-    beforehand with mode 0644 and some text: afterwards the old text is gone and the mode is still
-    0644. In both, a record written through the sink reads back after Close. An empty variable
+    regular file of mode 0600 (perm bits only). A second case points it at a file it writes
+    beforehand with some text and then sets to mode 0644 with os.Chmod, since the process umask
+    filters os.WriteFile's mode: afterwards the old text is gone and the mode is still 0644. In
+    both, a record written through the sink reads back after Close. An empty variable
     gives a nil writer and a nil error and creates nothing. A path in a missing directory gives a
     nil writer and an error.
 
