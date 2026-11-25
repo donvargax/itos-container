@@ -28,6 +28,8 @@ type overlapEngine struct {
 	faultRoot   string
 	createGate  chan struct{}
 	preflight   *overlapRendezvous
+	// cleanExit makes every workload of this daemon exit with status 0 (the default is 7).
+	cleanExit bool
 }
 
 type overlapRequest struct {
@@ -252,7 +254,11 @@ func (a *overlapEngine) serve(out http.ResponseWriter, r *http.Request) {
 		}
 		a.mu.Lock()
 		if r.Context().Err() == nil {
-			_ = json.NewEncoder(out).Encode(map[string]int{"StatusCode": 7})
+			code := 7
+			if a.cleanExit {
+				code = 0
+			}
+			_ = json.NewEncoder(out).Encode(map[string]int{"StatusCode": code})
 		}
 	case len(parts) == 2 && (parts[1] == "kill" || parts[1] == "stop") && r.Method == "POST":
 		c.exit()
