@@ -255,7 +255,7 @@ func (w *world) anchorsFinishStops(args []string) {
 	r.after.wait()
 }
 
-func (w *world) anchorsLoss() {
+func (w *world) anchorsLoss() error {
 	w.anchorsStart()
 	w.anchorsLive()
 	if w.anchors.initial.Sequence > 0 {
@@ -265,9 +265,10 @@ func (w *world) anchorsLoss() {
 	}
 	w.anchorsStatus()
 	w.anchorsStopTwice()
+	return errors.Join(w.anchorsCause(), w.recovery.actionError())
 }
 
-func (w *world) anchorsRetry(child int) {
+func (w *world) anchorsRetry(child int) error {
 	w.anchors.child = &child
 	w.anchorsStart()
 	w.anchorsLive()
@@ -297,9 +298,10 @@ func (w *world) anchorsRetry(child int) {
 	if len(r.retry) > 0 {
 		w.anchorsStopTwice(r.retry...)
 	}
+	return errors.Join(w.anchorsCause(), r.actionError())
 }
 
-func (w *world) anchorsUncertain() {
+func (w *world) anchorsUncertain() error {
 	w.anchorsStart()
 	s := w.anchors
 	if w.anchorsHeldReply() {
@@ -313,6 +315,7 @@ func (w *world) anchorsUncertain() {
 	w.anchorsCapture()
 	w.anchorsStatus()
 	w.anchorsStopTwice()
+	return errors.Join(w.anchorsCause(), w.recovery.actionError())
 }
 
 // The uncertain-startup wait for the recorder to hold the successful reply. An
