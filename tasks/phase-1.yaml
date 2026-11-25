@@ -9950,3 +9950,25 @@
   done_when:
     - run: grep -q 'published red commit' AGENTS.md && grep -q 'published red commit' features/README.md && grep -q 'gh workflow run ci.yml --ref' features/README.md && grep -q 'not red proof' features/README.md
       timeout: 30
+- id: T-92
+  type: ci
+  title: A red_scenarios dispatch uploads a per-scenario results report from each job that runs scenarios
+  why: >
+    Run 45557542073's red evidence could be read only from the job logs: it uploaded no artifact,
+    and godog prints only its pretty format to stdout (features/features_test.go:92-94). A reader
+    cannot tell per scenario and outline row which step failed, and the coordinating loop cannot
+    check red evidence from a report. When the harness runs in the red dispatch context, the one
+    where it already reads ITOS_CONTAINER_RED_SCENARIOS (CI, GitHub Actions and workflow_dispatch
+    established, features/features_test.go:135 and README 'Manual red-first evidence'), it also
+    writes godog's cucumber JSON report for the scenarios it ran to a file the workflow names. Each
+    engine shard and the manual macOS and Windows Tests jobs then upload that file with
+    actions/upload-artifact, pinned to a full commit SHA like the workflow's other actions, under a
+    name that says the job and shard. The step runs on success or failure, only for
+    workflow_dispatch with a nonempty red_scenarios. Pretty output to the log stays as it is.
+    Nothing changes for PR, push or local runs, and the report holds only scenario names, tags,
+    steps, statuses and error text, never environment or engine data beyond what the log already
+    prints. features/engine_workflow_test.go's pins and README's manual procedure describe the new
+    step. Decided by the coordinator on 2026-11-25.
+  done_when:
+    - run: grep -q 'actions/upload-artifact@[0-9a-f]\{40\}' .github/workflows/ci.yml && grep -q 'red_scenarios' .github/workflows/ci.yml && go test ./features -run '^(TestEngineWorkflow|TestEngineSelection)' -count=1
+      timeout: 600
