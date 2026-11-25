@@ -2883,6 +2883,6 @@ items:
     title: The push review gate waits on Codex alone while Cursor Bugbot reviews are paused
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
