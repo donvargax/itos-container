@@ -19,10 +19,11 @@ does not take an item. Report gaps and follow-up ideas with why they matter to t
 ## Changes and commits
 
 - Specify behavior before building it. Features and fixes follow black-box scenarios. Commit
-  their step definitions red first in a test commit while scenarios remain `@wip`. Require
-  failing-then-passing evidence with `@wip` removed for the run: locally for non-engine
-  scenarios, only in CI for real-engine scenarios. Each must fail at its behavior assertion
-  before implementing and pass after implementation.
+  their step definitions red first in a test commit while scenarios remain `@wip`. Run
+  non-engine scenarios locally with `@wip` temporarily removed. Record real-engine red in CI,
+  either at a stop after the step commit or at landing on the published red commit before
+  the fix commit is published. Each scenario must fail at its behavior assertion on the
+  tree without the implementation and pass after implementation.
   Undefined steps are not evidence. Never add unspecified behavior or bend scenarios to code.
 - Foundation and other non-behavior work name a ledger task and its checks. Decide each
   commit's type and paths before editing.

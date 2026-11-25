@@ -1992,7 +1992,7 @@ items:
     phase: 1
     owner: donvargax
     status: todo
-    depends_on: []
+    depends_on: [slice-40, slice-31, slice-53]
     kind: slice
     why: >
       Was p1-exec-owned-session.
@@ -2839,8 +2839,6 @@ items:
       refusal-log copy temporaries and how long session state is kept, which both stay with
       p3-session-state-retention. Broken down from p3-registration-before-intent.
     refs: [docs/decisions/0038-slice-60-s-cancelled-sweep-test-pairs-its-absence-check-with-a-live-context-positive-control.md, docs/decisions/0034-the-next-control-lock-holder-deletes-orphaned-temporaries-in-protected-state.md]
-    deferred: >
-      waits for the person to choose how its branch is reset after a red-first refusal
   - id: T-83
     title: Record the open decision on what evidence lets recovery retire an uncertain create
     phase: 1
@@ -2859,7 +2857,7 @@ items:
     title: The non-engine feature tier writes a timing record for every scenario row and every harness regression test
     phase: 1
     owner: donvargax
-    status: doing
+    status: todo
     depends_on: []
     kind: task
   - id: T-86
@@ -2901,20 +2899,35 @@ items:
     title: Real-engine red evidence may be recorded in CI at landing, on the published red commit
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: T-92
     title: A red_scenarios dispatch uploads a per-scenario results report from each job that runs scenarios
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: T-93
     title: A step that hits a harness failure fails at that step, so a report never shows it as the first Then's failure
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
+  - id: p3-antigravity-interactive-harness
+    title: Run Antigravity in an owned session, for the person's own interactive use
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-39]
+    kind: idea
+    why: >
+      The person, 2026-11-25: harness support goes OpenCode (slice-40), Claude Code (slice-31 and
+      its children), Codex (slice-48 to slice-53), then exec and TTY into an owned session
+      (slice-38, slice-39), then Antigravity. Antigravity's terms allow only the person's own
+      interactive use, so it needs the interactive TTY attachment first, and nothing here may run it
+      unattended or as an agent's workload. A later item specifies how it starts with its own
+      isolated home and how its login reaches one approved container run, as the earlier harnesses
+      do. Grok Build may be added where it fits once its terms and needs are known.
