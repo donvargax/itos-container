@@ -9811,6 +9811,3 @@
     review_by goes back to cursor and the bugbot reviewer returns. Nothing else in the push or proof
     config changes. Start file: itos.yaml (the push block); model: 08dd3b2, the T-67 change it
     reverses for now.
-  done_when:
-    - run: "grep -q 'review_by: \\[chatgpt-codex-connector\\]' itos.yaml && grep -q 'login: chatgpt-codex-connector, kind: codex' itos.yaml && ! grep -q '^ *- { login: cursor, kind: bugbot }' itos.yaml && grep -q '2026-11-27' itos.yaml"
-      timeout: 30
