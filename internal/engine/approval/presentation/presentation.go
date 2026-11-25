@@ -183,6 +183,9 @@ func harnessLines(effective any) []string {
 	home, _ := s["home"].(map[string]any)
 	harnesses, _ := home["harnesses"].([]any)
 	var lines []string
+	if codex, _ := home["harness"].(map[string]any); codex["kind"] == "codex" {
+		lines = append(lines, codexLines(codex)...)
+	}
 	for _, entry := range harnesses {
 		harness, _ := entry.(map[string]any)
 		if harness["name"] != "opencode" {
@@ -205,6 +208,21 @@ func harnessLines(effective any) []string {
 		lines = append(lines, "No OpenCode login is delivered by this setting. The profile is no network or credential grant.")
 	}
 	return lines
+}
+
+// codexLines state what the approved Codex default binds, from the validated
+// candidate: the seed and where it lands, what it sets, what it leaves to the
+// worker, the reserved name and what it does not deliver.
+func codexLines(codex map[string]any) []string {
+	seed, target := terminalText(fmt.Sprint(codex["seed"])), terminalText(fmt.Sprint(codex["target"]))
+	return []string{
+		fmt.Sprintf("Codex harness: seed %s at %s.", seed, target),
+		fmt.Sprintf("Each run sets CODEX_HOME=%s and rewrites only config.toml there from the fixed %s seed.", target, seed),
+		"The seed turns off Codex update checks, analytics and plugins, and Codex's own sandbox; this container is the sandbox.",
+		fmt.Sprintf("Codex sessions, history and other files under %s are hostile worker data kept for the next run; run does not read, reset or remove them.", target),
+		"CODEX_HOME is reserved: the manifest's containerEnv cannot set it.",
+		"No Codex login is delivered by this setting. The seed is no network or credential grant.",
+	}
 }
 
 func networkMode(s map[string]any) any {

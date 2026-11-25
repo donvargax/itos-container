@@ -7,6 +7,7 @@ import (
 	"github.com/donvargax/itos-container/internal/engine/approval/port"
 	"github.com/donvargax/itos-container/internal/engine/approval/port/porttest"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -224,6 +225,35 @@ func TestReportShowsTheOpenCodeProfileForPlainDoctor(t *testing.T) {
 			t.Fatal("doctor omits", want, text)
 		}
 	}
+	plain := UI{}.Report(port.View{Inspection: porttest.Ready(), Candidate: port.Candidate{Canonical: `{"profile":"offline-home-v1","home":{"storage":"volume"}}`}})
+	if len(plain.RequestedText) != 0 {
+		t.Fatal(plain.RequestedText)
+	}
+}
+
+func TestCodexHarnessIsDisclosedBeforeConsentAndByPlainDoctor(t *testing.T) {
+	want := []string{
+		"Codex harness: seed codex-v1 at /home/itos/.codex.",
+		"Each run sets CODEX_HOME=/home/itos/.codex and rewrites only config.toml there from the fixed codex-v1 seed.",
+		"The seed turns off Codex update checks, analytics and plugins, and Codex's own sandbox; this container is the sandbox.",
+		"Codex sessions, history and other files under /home/itos/.codex are hostile worker data kept for the next run; run does not read, reset or remove them.",
+		"CODEX_HOME is reserved: the manifest's containerEnv cannot set it.",
+		"No Codex login is delivered by this setting. The seed is no network or credential grant.",
+	}
+	canonical := `{"profile":"offline-home-v1","home":{"harness":{"kind":"codex","seed":"codex-v1","target":"/home/itos/.codex"},"harnesses":[{"name":"opencode","profile":"opencode-v1"}],"storage":"volume"},"host":{"uid":"2001","gid":"3001"},"policy":{"network":{"mode":"offline"}}}`
+	var out bytes.Buffer
+	ui := UI{In: strings.NewReader("n\n"), Out: &out, Err: io.Discard}
+	ui.Review(port.View{Inspection: porttest.Ready(), Candidate: port.Candidate{Canonical: canonical}})
+	lines := strings.Split(strings.SplitN(out.String(), "y/N", 2)[0], "\n")
+	at := slices.Index(lines, want[0])
+	if at < 3 || !strings.HasPrefix(lines[at-3], "Harness home:") || !slices.Equal(lines[at:at+len(want)], want) || !strings.HasPrefix(lines[at+len(want)], "OpenCode harness:") {
+		t.Fatal("the review omits or misplaces the Codex disclosure", out.String())
+	}
+	report := UI{}.Report(port.View{Inspection: porttest.Ready(), Candidate: port.Candidate{Canonical: canonical}})
+	if !slices.Equal(report.RequestedText[:len(want)], want) {
+		t.Fatal("doctor omits the Codex disclosure", report.RequestedText)
+	}
+	// Without the harness nothing is said about Codex.
 	plain := UI{}.Report(port.View{Inspection: porttest.Ready(), Candidate: port.Candidate{Canonical: `{"profile":"offline-home-v1","home":{"storage":"volume"}}`}})
 	if len(plain.RequestedText) != 0 {
 		t.Fatal(plain.RequestedText)

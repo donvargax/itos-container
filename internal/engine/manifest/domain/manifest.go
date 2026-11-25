@@ -11,7 +11,10 @@ import (
 
 // Inspect validates only the selected file and workspace. Image lookup, host
 // readiness and approval are deliberately absent from its dependencies.
-func Inspect(path string, files port.Files, parser port.Parser, references port.References) port.Result {
+//
+// The reserved names are upper-case containerEnv names a selection reserves besides the fixed
+// ones, each matched under ASCII case folding.
+func Inspect(path string, files port.Files, parser port.Parser, references port.References, reserved ...string) port.Result {
 	result := port.Result{Path: path}
 	data, failure := files.Read(path)
 	if failure != port.None {
@@ -60,7 +63,7 @@ func Inspect(path string, files port.Files, parser port.Parser, references port.
 				settings.WorkspaceFolder = value.Text
 			}
 		case "containerEnv":
-			settings.ContainerEnv, issues = environment(value, path)
+			settings.ContainerEnv, issues = environment(value, path, reserved)
 			result.Issues = append(result.Issues, issues...)
 		case "containerUser", "remoteUser":
 			failure := identity(value)

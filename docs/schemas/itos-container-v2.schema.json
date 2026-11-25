@@ -83,6 +83,11 @@
           "type": "string",
           "const": "volume"
         },
+        "harness": {
+          "type": "string",
+          "const": "codex",
+          "description": "Selects the explicit Codex defaults, the codex-v1 seed at /home/itos/.codex. Accepted only beside storage volume, and reserves CODEX_HOME in the manifest's containerEnv. It grants no network access or credentials."
+        },
         "harnesses": {
           "type": "array",
           "minItems": 1,
