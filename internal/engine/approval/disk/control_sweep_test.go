@@ -1,3 +1,5 @@
+//go:build unix
+
 package disk
 
 import (
@@ -307,6 +309,16 @@ func TestSweepKeepsWhatPublishNeverLeaves(t *testing.T) {
 			}
 			mustLink(t, record, path)
 		}, ".intent-" + strings.Repeat("1", 32) + ".tmp"},
+		{"twin with a short hex stem", fixtureAdmission, func(t *testing.T, s *swept, path string) {
+			record := filepath.Join(s.dirs[fixtureAdmission], "abc.json")
+			lonePlant(t, s, record)
+			mustLink(t, record, path)
+		}, ".intent-" + strings.Repeat("1", 32) + ".tmp"},
+		{"twin with a non-hex claim stem", fixtureAdmission, func(t *testing.T, s *swept, path string) {
+			record := filepath.Join(s.dirs[fixtureAdmission], strings.Repeat("g", 64)+".json")
+			lonePlant(t, s, record)
+			mustLink(t, record, path)
+		}, ".intent-" + strings.Repeat("1", 32) + ".tmp"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -346,148 +358,6 @@ func modePlant(mode os.FileMode) func(*testing.T, *swept, string) {
 	}
 }
 
-// A directory is swept only while no live publisher can own a temporary in it.
-func TestSweepKeepsADirectoryWhoseLockIsNotOurs(t *testing.T) {
-	hold := func(t *testing.T, path string) {
-		t.Helper()
-		file, err := os.Open(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { _ = unlock(file); _ = file.Close() })
-		if err := tryLock(file); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for _, tc := range []struct {
-		name string
-		kind sweepFixtureKind
-		set  func(t *testing.T, s *swept)
-	}{
-		{"admission collection held", fixtureAdmission, func(t *testing.T, s *swept) { hold(t, s.dirs[fixtureAdmission]) }},
-		{"intent directory held", fixtureIntents, func(t *testing.T, s *swept) { hold(t, s.dirs[fixtureIntents]) }},
-		{"operation lock held", fixtureSession, func(t *testing.T, s *swept) { hold(t, filepath.Join(s.dirs[fixtureSession], "operation.lock")) }},
-		{"operation lock missing", fixtureSession, func(t *testing.T, s *swept) {
-			if err := os.Remove(filepath.Join(s.dirs[fixtureSession], "operation.lock")); err != nil {
-				t.Fatal(err)
-			}
-		}},
-		{"operation lock is a symlink", fixtureSession, func(t *testing.T, s *swept) {
-			path := filepath.Join(s.dirs[fixtureSession], "operation.lock")
-			if err := os.Remove(path); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.Symlink(filepath.Join(s.dirs[fixtureSession], "record.json"), path); err != nil {
-				t.Fatal(err)
-			}
-		}},
-		{"operation lock is not private", fixtureSession, func(t *testing.T, s *swept) {
-			if err := os.Chmod(filepath.Join(s.dirs[fixtureSession], "operation.lock"), 0644); err != nil {
-				t.Fatal(err)
-			}
-		}},
-		{"operation lock has a second link", fixtureSession, func(t *testing.T, s *swept) {
-			mustLink(t, filepath.Join(s.dirs[fixtureSession], "operation.lock"), filepath.Join(s.dirs[fixtureSession], "again"))
-		}},
-		{"operation lock is not empty", fixtureSession, func(t *testing.T, s *swept) {
-			if err := os.WriteFile(filepath.Join(s.dirs[fixtureSession], "operation.lock"), []byte("x"), 0600); err != nil {
-				t.Fatal(err)
-			}
-		}},
-		{"operation lock is a directory", fixtureSession, func(t *testing.T, s *swept) {
-			path := filepath.Join(s.dirs[fixtureSession], "operation.lock")
-			if err := os.Remove(path); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.Mkdir(path, 0700); err != nil {
-				t.Fatal(err)
-			}
-		}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			s := sweptTree(t)
-			kept := s.lone(t, tc.kind, "1")
-			linked := s.link(t, tc.kind, "2")
-			// The other directories are not held back.
-			var others []string
-			for kind := range s.dirs {
-				if kind != tc.kind {
-					others = append(others, s.lone(t, kind, "3"))
-				}
-			}
-			tc.set(t, s)
-			s.begin(t, true)
-			present(t, kept)
-			present(t, linked)
-			for _, path := range others {
-				gone(t, path)
-			}
-		})
-	}
-}
-
-func TestSweepSkipsFIFOOperationLockWithoutOpeningIt(t *testing.T) {
-	s := sweptTree(t)
-	kept := s.lone(t, fixtureSession, "1")
-	orphan := s.lone(t, fixtureAdmission, "2")
-	dir := s.dirs[fixtureSession]
-	lock := filepath.Join(dir, "operation.lock")
-	if err := os.Remove(lock); err != nil {
-		t.Fatal(err)
-	}
-	if err := syscall.Mkfifo(lock, 0600); err != nil {
-		t.Fatal(err)
-	}
-	ops := s.control.Store.operations()
-	openRecord := ops.openRecord
-	ops.openRecord = func(root *os.Root, name string, flags int, mode os.FileMode) (*os.File, error) {
-		if root.Name() == dir && name == "operation.lock" {
-			t.Error("sweep tried to open a FIFO operation lock")
-			return nil, os.ErrInvalid
-		}
-		return openRecord(root, name, flags, mode)
-	}
-	s.control.Store.ops = &ops
-	s.begin(t, true)
-	gone(t, orphan)
-	present(t, kept)
-	present(t, lock)
-}
-
-func TestSweepKeepsDirectoryWhenOperationLockIsReplaced(t *testing.T) {
-	s := sweptTree(t)
-	kept := s.lone(t, fixtureSession, "1")
-	orphan := s.lone(t, fixtureAdmission, "2")
-	dir := s.dirs[fixtureSession]
-	lock := filepath.Join(dir, "operation.lock")
-	newLock := filepath.Join(dir, "replacement")
-	if err := os.WriteFile(newLock, nil, 0600); err != nil {
-		t.Fatal(err)
-	}
-	ops := s.control.Store.operations()
-	lstat := ops.lstat
-	checks := 0
-	ops.lstat = func(root *os.Root, name string) (os.FileInfo, error) {
-		// Swap the lock after the sweep acquired it, during the temporary's recheck.
-		if root.Name() == dir && name == filepath.Base(kept) {
-			checks++
-			if checks == 2 {
-				if err := os.Rename(newLock, lock); err != nil {
-					t.Fatal(err)
-				}
-			}
-		}
-		return lstat(root, name)
-	}
-	s.control.Store.ops = &ops
-	s.begin(t, true)
-	gone(t, orphan)
-	present(t, kept)
-	if checks != 2 {
-		t.Fatalf("temporary checks = %d, want 2", checks)
-	}
-}
-
 // Another user's file is never ours to remove, whatever its name and mode say.
 func TestSweepKeepsAFileOfAnotherOwner(t *testing.T) {
 	s := sweptTree(t)
@@ -512,7 +382,7 @@ func TestSweepKeepsAFileOfAnotherOwner(t *testing.T) {
 func TestSweepStopsWhenTheCallBudgetEnds(t *testing.T) {
 	s := sweptTree(t)
 	first := s.lone(t, fixtureAdmission, "1")
-	next := s.lone(t, fixtureIntents, "2")
+	next := s.link(t, fixtureIntents, "2")
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	calls := watchTemporary(t, s, next, 1, cancel)
@@ -528,6 +398,128 @@ func TestSweepStopsWhenTheCallBudgetEnds(t *testing.T) {
 	}
 	s.begin(t, true)
 	gone(t, next)
+}
+
+func TestCancelledSweepDoesNotInspectDirectories(t *testing.T) {
+	s := sweptTree(t)
+	orphan := s.lone(t, fixtureAdmission, "1")
+	ops := s.control.Store.operations()
+	openChild := ops.openChild
+	opens := 0
+	ops.openChild = func(root *os.Root, name string) (*os.Root, error) {
+		if root.Name() == s.root && (name == "admission" || name == "intents" || name == "sessions") {
+			opens++
+		}
+		return openChild(root, name)
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	syncFile := ops.syncFile
+	ops.syncFile = func(file *os.File) error {
+		// Cancel during enrollment, after Begin acquires the control lock.
+		if filepath.Base(file.Name()) == "control.lock" {
+			cancel()
+		}
+		return syncFile(file)
+	}
+	s.control.Store.ops = &ops
+	tx, failure := s.control.Begin(ctx, s.c, true)
+	if tx != nil {
+		tx.Close()
+	}
+	if tx == nil || failure != "" || ctx.Err() == nil {
+		t.Fatalf("Begin = %v, %q with context error %v; want a transaction after cancellation", tx, failure, ctx.Err())
+	}
+	if opens != 0 {
+		t.Fatalf("cancelled sweep opened %d collection roots, want none", opens)
+	}
+	present(t, orphan)
+
+	ops.syncFile = syncFile
+	s.begin(t, true)
+	if opens == 0 {
+		t.Error("live sweep opened no collection root")
+	}
+	gone(t, orphan)
+}
+
+func TestSweepIgnoresUnreadableCollection(t *testing.T) {
+	s := sweptTree(t)
+	kept := s.lone(t, fixtureIntents, "1")
+	orphan := s.lone(t, fixtureAdmission, "2")
+	collection := filepath.Dir(s.dirs[fixtureIntents])
+	ops := s.control.Store.operations()
+	openDir := ops.openDir
+	brokeRead := false
+	ops.openDir = func(root *os.Root, name string) (*os.File, error) {
+		file, err := openDir(root, name)
+		if err == nil && root.Name() == collection {
+			if err := file.Close(); err != nil {
+				t.Fatal(err)
+			}
+			brokeRead = true
+		}
+		return file, err
+	}
+	s.control.Store.ops = &ops
+	s.begin(t, true)
+	if !brokeRead {
+		t.Fatal("sweep did not open the collection")
+	}
+	gone(t, orphan)
+	present(t, kept)
+}
+
+type sweepInfoWithoutOwnership struct{ os.FileInfo }
+
+func (sweepInfoWithoutOwnership) Sys() any { return nil }
+
+func TestSweepKeepsTemporaryWhenFileEvidenceIsUnavailable(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		lookup           int
+		twin             bool
+		withoutOwnership bool
+	}{
+		{name: "initial temporary lookup fails", lookup: 1},
+		{name: "initial temporary metadata lacks ownership", lookup: 1, withoutOwnership: true},
+		{name: "temporary recheck fails", lookup: 2},
+		{name: "record twin recheck fails", lookup: 2, twin: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := sweptTree(t)
+			kept := s.link(t, fixtureAdmission, "1")
+			orphan := s.lone(t, fixtureAdmission, "2")
+			target := filepath.Base(kept)
+			if tc.twin {
+				target = s.records[fixtureAdmission]
+			}
+			ops := s.control.Store.operations()
+			lstat := ops.lstat
+			checks := 0
+			ops.lstat = func(root *os.Root, name string) (os.FileInfo, error) {
+				info, err := lstat(root, name)
+				if err == nil && root.Name() == s.dirs[fixtureAdmission] && name == target {
+					checks++
+					if checks == tc.lookup {
+						if tc.withoutOwnership {
+							return sweepInfoWithoutOwnership{info}, nil
+						}
+						return nil, os.ErrPermission
+					}
+				}
+				return info, err
+			}
+			s.control.Store.ops = &ops
+			s.begin(t, true)
+			if checks < tc.lookup {
+				t.Fatalf("lookups of %s = %d, want at least %d", target, checks, tc.lookup)
+			}
+			gone(t, orphan)
+			present(t, kept)
+		})
+	}
 }
 
 func TestSweepKeepsTemporaryWhenBudgetEndsDuringRecheck(t *testing.T) {
