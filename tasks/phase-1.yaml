@@ -9972,3 +9972,28 @@
   done_when:
     - run: grep -q 'actions/upload-artifact@[0-9a-f]\{40\}' .github/workflows/ci.yml && grep -q 'red_scenarios' .github/workflows/ci.yml && go test ./features -run '^(TestEngineWorkflow|TestEngineSelection)' -count=1
       timeout: 600
+- id: T-93
+  type: test
+  title: A step that hits a harness failure fails at that step, so a report never shows it as the first Then's failure
+  why: >
+    In run 45557542073 the native exec When steps stored their action's error in the world and
+    returned nothing, and each first Then returned that stored error first, so godog marked the Then
+    failed for 'controller exited 2 before the barrier' (exec_native_steps_test.go and
+    exec_native_fixture_test.go on slice-38's branch, which say 'A process exit or missing barrier
+    is an observation for Then'). A report then cannot tell a harness failure from a behavior
+    assertion, and red evidence needs that difference. The rule: a Given or When that cannot finish
+    its own setup or action, a fixture that fails, a barrier or readiness that is never reached, a
+    timeout or an engine call that errors, returns that error itself, so the report marks that step
+    failed and later steps skipped. A step keeps for a Then only what the product was observed to
+    do: its exit status, streams, receipts and records, including a refusal or an early exit that
+    the scenario's Then asserts. Write a harness regression test, TestHarnessFailureFailsAtItsStep,
+    that runs a small godog fixture through the cucumber formatter and shows both cases: a When
+    whose barrier is never reached is reported failed at the When with its Then skipped, and a When
+    whose process exits with a refusal is reported passed, with the Then asserting the refusal. Then
+    apply the rule to the native step definitions on main that stash an action error for a later
+    Then, keeping every scenario's meaning, tags and assertions. Report each file changed.
+    slice-38's exec steps are not on main; its re-take follows the same rule. Decided by the
+    coordinator on 2026-11-25.
+  done_when:
+    - run: "go test ./features -run '^TestHarnessFailureFailsAtItsStep$' -count=1 -v 2>&1 | grep -q -- '--- PASS: TestHarnessFailureFailsAtItsStep '"
+      timeout: 300
