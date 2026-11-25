@@ -9550,7 +9550,7 @@
     a protected mount anchor held through startup and recovery, and refuse overlapping worker
     checkouts.
 - id: T-81
-  type: test
+  type: build
   title: engine-fixture prepares, hands off and cleans up a verified pinned Codex 0.167.0 fixture image
   why: >
     Native real-Codex evidence needs the rust-v0.167.0 asset codex-x86_64-unknown-linux-musl.tar.gz.
