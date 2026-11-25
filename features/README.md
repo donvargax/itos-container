@@ -517,13 +517,17 @@ excluded selection reports its IDs, reasons and count, runs no setup and supplie
 Eligible selections must finish all expected cases successfully for the test command to pass;
 actual failures stay failed.
 
-Draft PRs skip automatic CI. The coordinator dispatches on the item branch after it contains the
-complete step commit and the workflow/harness changes, which must also be on the default branch
-for GitHub manual dispatch.
+Draft PRs skip automatic CI. The coordinating loop dispatches on the item branch once its
+published red commit contains the complete step definitions and the workflow/harness changes.
+GitHub manual dispatch also requires the workflow/harness changes on the default branch.
 
 1. The behaviour implementer commits complete step definitions in a `test` commit while cases
-   remain `@wip`, retaining `@engine` wherever setup, steps or cleanup need it. The agent stops.
-2. The loop publishes the item branch and invokes the coordinator-only command:
+   remain `@wip`, retaining `@engine` wherever setup, steps or cleanup need it. The implementer
+   stops after that commit only when red evidence will not be recorded at landing.
+2. The loop publishes the red commit, dispatches on it and records the result before publishing
+   the fix commit.
+   When it records red at landing, that red commit consists of the item's base, its tests and
+   any stubs needed for the red tree to build. The loop invokes the coordinator-only command:
 
    ```sh
    gh workflow run ci.yml --ref <item> -f 'red_scenarios=<ids>'
@@ -542,7 +546,7 @@ for GitHub manual dispatch.
    failing **Then** assertion from the report. Infrastructure, setup and undefined-step
    failures and empty or excluded selections are not red proof. A passing run is not red proof
    either; no forced failure or ignored test failure is permitted. Keep the failed run visible.
-4. Implement, remove `@wip` in the behaviour commit and require green CI at the actual pushed head
+4. Remove `@wip` in the behaviour commit and require green CI at the actual pushed head
    **with no red input**. Expected-red dispatches are never merge/closure prerequisites or
    substitutes for that green run. The loop alone publishes, dispatches, reads results and closes.
 
