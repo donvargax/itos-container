@@ -185,6 +185,12 @@ func (p *pin) sweepExclusion(kind sweepKind) (sweepLock, bool) {
 	if kind != sweepSession {
 		return sweepLock{file: p.dir}, tryLock(p.dir) == nil
 	}
+	// Skip unsafe entries before opening them. openLock still opens with
+	// O_NONBLOCK on Unix and checks the inode in case the entry was replaced.
+	info, err := p.ops.lstat(p.root(), sweepOperationLock)
+	if err != nil || recordSafety(info, p.uid) != "" || info.Size() != 0 {
+		return sweepLock{}, false
+	}
 	file, failure := p.openLock(sweepOperationLock, false)
 	if failure != "" {
 		return sweepLock{}, false

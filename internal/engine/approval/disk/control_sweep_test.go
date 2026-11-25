@@ -426,6 +426,34 @@ func TestSweepKeepsADirectoryWhoseLockIsNotOurs(t *testing.T) {
 	}
 }
 
+func TestSweepSkipsFIFOOperationLockWithoutOpeningIt(t *testing.T) {
+	s := sweptTree(t)
+	kept := s.lone(t, fixtureSession, "1")
+	orphan := s.lone(t, fixtureAdmission, "2")
+	dir := s.dirs[fixtureSession]
+	lock := filepath.Join(dir, "operation.lock")
+	if err := os.Remove(lock); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Mkfifo(lock, 0600); err != nil {
+		t.Fatal(err)
+	}
+	ops := s.control.Store.operations()
+	openRecord := ops.openRecord
+	ops.openRecord = func(root *os.Root, name string, flags int, mode os.FileMode) (*os.File, error) {
+		if root.Name() == dir && name == "operation.lock" {
+			t.Error("sweep tried to open a FIFO operation lock")
+			return nil, os.ErrInvalid
+		}
+		return openRecord(root, name, flags, mode)
+	}
+	s.control.Store.ops = &ops
+	s.begin(t, true)
+	gone(t, orphan)
+	present(t, kept)
+	present(t, lock)
+}
+
 func TestSweepKeepsDirectoryWhenOperationLockIsReplaced(t *testing.T) {
 	s := sweptTree(t)
 	kept := s.lone(t, fixtureSession, "1")
@@ -440,7 +468,8 @@ func TestSweepKeepsDirectoryWhenOperationLockIsReplaced(t *testing.T) {
 	lstat := ops.lstat
 	checks := 0
 	ops.lstat = func(root *os.Root, name string) (os.FileInfo, error) {
-		if root.Name() == dir && name == "operation.lock" {
+		// Swap the lock after the sweep acquired it, during the temporary's recheck.
+		if root.Name() == dir && name == filepath.Base(kept) {
 			checks++
 			if checks == 2 {
 				if err := os.Rename(newLock, lock); err != nil {
@@ -455,7 +484,7 @@ func TestSweepKeepsDirectoryWhenOperationLockIsReplaced(t *testing.T) {
 	gone(t, orphan)
 	present(t, kept)
 	if checks != 2 {
-		t.Fatalf("operation lock checks = %d, want 2", checks)
+		t.Fatalf("temporary checks = %d, want 2", checks)
 	}
 }
 
