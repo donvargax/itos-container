@@ -674,6 +674,36 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # reaches: an operation.lock that is missing, unsafe or held, a three-link
   # record, and an owner other than the effective UID.
   #
+  # Cancelled sweeps (decision 0038, the coordinator, 2026-11-24). A test that
+  # only asserts absence passes on a tree with no sweep, so it is not red
+  # evidence. control_sweep_test.go keeps TestCancelledSweepDoesNotInspectDirectories
+  # and pairs its absence check with a live-context positive control in that
+  # same test, on the same sweptTree. Hook the store's ops.openDir and ops.lstat
+  # to count every call. First, with a live context, a write Begin opens the
+  # managed root's admission collection and removes a lone .intent-<nonce>.tmp
+  # planted there. Then take the transaction a live write Begin returns (a
+  # *controlTransaction inside the package), and only after that Begin plant a
+  # fresh lone temporary, reset the counters and call its sweepTemporaries with
+  # an already cancelled
+  # context before Close: it makes no openDir or lstat call and the temporary is
+  # still there. Without the sweep the positive control fails, because the
+  # first temporary remains; with it the test passes. The same pairing holds for
+  # each cancel check the sweep makes after it has started, which the two budget
+  # tests do not reach. For each, one test cancels exactly there through an
+  # ops.openDir or ops.lstat hook, sees the temporary that check guards kept,
+  # and in the same test sees a live-context sweep of the same tree remove it:
+  #   sweepDirectory's check before it pins a directory: with two intent
+  #     directories L/intents/<P1> and L/intents/<P2>, each holding a lone
+  #     temporary, cancel at the lstat of <P1>'s temporary, so <P2> is never
+  #     pinned and its temporary is kept;
+  #   sweepNames' check before its first batch: cancel while the directory
+  #     itself is opened, so no name is read from it;
+  #   sweepTwin's check between record candidates: cancel at the lstat of a
+  #     record that is not the twin, in an intent directory holding a linked
+  #     temporary whose twin sorts after that record, so the twin is never
+  #     found and the linked temporary is kept.
+  # These are disk-adapter unit tests. They add no scenario and no step.
+  #
   # Fixture. All step sentences in this block are new. Reuse controlSafe's
   # "state path shares only a textual prefix with W" layout, so P's selected tree
   # stays disjoint from W's checkout, and the overlap fixture's start, stop and
