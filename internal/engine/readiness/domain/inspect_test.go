@@ -38,7 +38,7 @@ func fixture() (Inspector, port.Input, *porttest.Engine, *porttest.Checkout) {
 
 func TestInspectSnapshot(t *testing.T) {
 	i, input, e, c := fixture()
-	started := time.Now()
+	e.Session.DeadlineValue = time.Date(2030, time.January, 2, 3, 4, 5, 0, time.UTC)
 	result := i.Inspect(input)
 	if !result.Ready || len(result.Issues) != 0 || *result.Checkout != c.Identity || result.Engine.ID != "engine-A" || result.Engine.Architecture != "amd64" || result.Image.Reference != porttest.Reference || !result.Manifest.Metadata.Checked || *result.Manifest.Metadata.Present {
 		t.Fatalf("snapshot = %#v", result)
@@ -46,8 +46,8 @@ func TestInspectSnapshot(t *testing.T) {
 	if c.Opened || !e.Session.Closed || e.Budget != 5*time.Second || e.Selection != input.Host || e.Root != input.Root || e.Session.InfoReads != 2 || !reflect.DeepEqual(e.Session.ImageReads, []string{porttest.Reference}) {
 		t.Fatalf("capability lifecycle = %#v, %#v, %#v", c, e, e.Session)
 	}
-	if result.EngineDeadline.Before(started.Add(e.Budget)) || result.EngineDeadline.After(time.Now().Add(e.Budget)) {
-		t.Fatalf("engine deadline %v falls outside the inspection budget", result.EngineDeadline)
+	if result.EngineDeadline != e.Session.DeadlineValue {
+		t.Fatalf("engine deadline = %v, want the session deadline %v", result.EngineDeadline, e.Session.DeadlineValue)
 	}
 }
 

@@ -139,6 +139,11 @@ type session struct {
 	socket                   fs.FileInfo
 }
 
+func (s *session) Deadline() time.Time {
+	deadline, _ := s.ctx.Deadline()
+	return deadline
+}
+
 func (s *session) Endpoint() string { return "unix://" + s.path }
 
 func (s *session) Version() (port.Version, port.Failure) {

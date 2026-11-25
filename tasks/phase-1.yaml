@@ -9929,3 +9929,71 @@
     workflows' itos action pins with it: donvargax/itos at the v8.49.0 commit in
     .github/workflows/ci.yml and release.yml. Nothing else changes; a release note asking for more
     is reported, not done here.
+- id: T-91
+  type: docs
+  title: Real-engine red evidence may be recorded in CI at landing, on the published red commit
+  why: >
+    AGENTS.md:20-25 and features/README.md's 'Manual red-first evidence' (steps 1-3, about lines
+    520-541) make the implementer stop after the step commit so that the coordinator dispatches
+    red_scenarios before any runtime work. The coordinating loop now records that red at landing
+    instead: it publishes a red commit, the item's base plus its tests and any stubs the red tree
+    needs to build, and dispatches red_scenarios for the engine scenarios on that commit before the
+    fix commit is published. That run is the same red evidence, failing at each scenario's behavior
+    assertion before the implementation exists, and it replaces the separate stop. Change the
+    wording so both are accepted: AGENTS.md's red-first line says real-engine red is recorded in CI,
+    either at a stop after the step commit or at landing on the published red commit, before the fix
+    commit is published. README's manual procedure keeps the dispatch command and the rules for what
+    counts as red proof (the failing Then, never infrastructure, setup or undefined-step failures,
+    never a passing run, never a merge or closure prerequisite), and says the implementer stops for
+    it only when nothing records red at landing. Nothing else in either file changes. Decided by the
+    coordinator on 2026-11-25.
+  done_when:
+    - run: grep -q 'published red commit' AGENTS.md && grep -q 'published red commit' features/README.md && grep -q 'gh workflow run ci.yml --ref' features/README.md && grep -q 'not red proof' features/README.md
+      timeout: 30
+- id: T-92
+  type: ci
+  title: A red_scenarios dispatch uploads a per-scenario results report from each job that runs scenarios
+  why: >
+    Run 45557542073's red evidence could be read only from the job logs: it uploaded no artifact,
+    and godog prints only its pretty format to stdout (features/features_test.go:92-94). A reader
+    cannot tell per scenario and outline row which step failed, and the coordinating loop cannot
+    check red evidence from a report. When the harness runs in the red dispatch context, the one
+    where it already reads ITOS_CONTAINER_RED_SCENARIOS (CI, GitHub Actions and workflow_dispatch
+    established, features/features_test.go:135 and README 'Manual red-first evidence'), it also
+    writes godog's cucumber JSON report for the scenarios it ran to a file the workflow names. Each
+    engine shard and the manual macOS and Windows Tests jobs then upload that file with
+    actions/upload-artifact, pinned to a full commit SHA like the workflow's other actions, under a
+    name that says the job and shard. The step runs on success or failure, only for
+    workflow_dispatch with a nonempty red_scenarios. Pretty output to the log stays as it is.
+    Nothing changes for PR, push or local runs, and the report holds only scenario names, tags,
+    steps, statuses and error text, never environment or engine data beyond what the log already
+    prints. features/engine_workflow_test.go's pins and README's manual procedure describe the new
+    step. Decided by the coordinator on 2026-11-25.
+  done_when:
+    - run: grep -q 'actions/upload-artifact@[0-9a-f]\{40\}' .github/workflows/ci.yml && grep -q 'red_scenarios' .github/workflows/ci.yml && go test ./features -run '^(TestEngineWorkflow|TestEngineSelection)' -count=1
+      timeout: 600
+- id: T-93
+  type: test
+  title: A step that hits a harness failure fails at that step, so a report never shows it as the first Then's failure
+  why: >
+    In run 45557542073 the native exec When steps stored their action's error in the world and
+    returned nothing, and each first Then returned that stored error first, so godog marked the Then
+    failed for 'controller exited 2 before the barrier' (exec_native_steps_test.go and
+    exec_native_fixture_test.go on slice-38's branch, which say 'A process exit or missing barrier
+    is an observation for Then'). A report then cannot tell a harness failure from a behavior
+    assertion, and red evidence needs that difference. The rule: a Given or When that cannot finish
+    its own setup or action, a fixture that fails, a barrier or readiness that is never reached, a
+    timeout or an engine call that errors, returns that error itself, so the report marks that step
+    failed and later steps skipped. A step keeps for a Then only what the product was observed to
+    do: its exit status, streams, receipts and records, including a refusal or an early exit that
+    the scenario's Then asserts. Write a harness regression test, TestHarnessFailureFailsAtItsStep,
+    that runs a small godog fixture through the cucumber formatter and shows both cases: a When
+    whose barrier is never reached is reported failed at the When with its Then skipped, and a When
+    whose process exits with a refusal is reported passed, with the Then asserting the refusal. Then
+    apply the rule to the native step definitions on main that stash an action error for a later
+    Then, keeping every scenario's meaning, tags and assertions. Report each file changed.
+    slice-38's exec steps are not on main; its re-take follows the same rule. Decided by the
+    coordinator on 2026-11-25.
+  done_when:
+    - run: "go test ./features -run '^TestHarnessFailureFailsAtItsStep$' -count=1 -v 2>&1 | grep -q -- '--- PASS: TestHarnessFailureFailsAtItsStep '"
+      timeout: 300

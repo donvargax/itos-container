@@ -98,13 +98,13 @@ func (i Inspector) InspectBeforeEngine(input port.Input, check func(port.Result)
 		return result
 	}
 	const engineBudget = 5 * time.Second
-	result.EngineDeadline = time.Now().Add(engineBudget)
 	session, failure := i.Engine.Open(input.Host, checkout.Root, engineBudget)
 	if failure != port.None {
 		result.Issues = []port.Issue{{Kind: failure, Subject: "DOCKER_HOST"}}
 		return result
 	}
 	defer session.Close()
+	result.EngineDeadline = session.Deadline()
 	i.inspectEngine(&result, session)
 	if i.AllowVersion3 {
 		observation := i.Sources.Inspect(p.Policy.Credentials)

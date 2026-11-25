@@ -2839,6 +2839,8 @@ items:
       refusal-log copy temporaries and how long session state is kept, which both stay with
       p3-session-state-retention. Broken down from p3-registration-before-intent.
     refs: [docs/decisions/0038-slice-60-s-cancelled-sweep-test-pairs-its-absence-check-with-a-live-context-positive-control.md, docs/decisions/0034-the-next-control-lock-holder-deletes-orphaned-temporaries-in-protected-state.md]
+    deferred: >
+      waits for the person to choose how its branch is reset after a red-first refusal
   - id: T-83
     title: Record the open decision on what evidence lets recovery retire an uncertain create
     phase: 1
@@ -2893,5 +2895,26 @@ items:
     phase: 1
     owner: donvargax
     status: done
+    depends_on: []
+    kind: task
+  - id: T-91
+    title: Real-engine red evidence may be recorded in CI at landing, on the published red commit
+    phase: 1
+    owner: donvargax
+    status: doing
+    depends_on: []
+    kind: task
+  - id: T-92
+    title: A red_scenarios dispatch uploads a per-scenario results report from each job that runs scenarios
+    phase: 1
+    owner: donvargax
+    status: doing
+    depends_on: []
+    kind: task
+  - id: T-93
+    title: A step that hits a harness failure fails at that step, so a report never shows it as the first Then's failure
+    phase: 1
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
