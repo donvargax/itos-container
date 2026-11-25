@@ -858,8 +858,8 @@ items:
   - id: T-94
     title: PLAN.md, README and the orchestration docs stop saying proxy egress is outside the scope
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: T-52

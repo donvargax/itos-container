@@ -1,19 +1,20 @@
 # itos-container
 
-A planned `itos container` extension to run a coding agent and every tool it executes in
+An `itos container` extension to run a coding agent and every tool it executes in
 a local container sandbox for one checkout, maintained by donvargax. Core itos retains
 work routing, commit rules and CI proof.
 
 Read [docs/charter.md](docs/charter.md) first for the selected scope and
 [docs/plans/container-pilot.md](docs/plans/container-pilot.md) for the binding contract.
-They are authoritative; [PLAN.md](PLAN.md) describes the path to the first milestone.
+They are authoritative. [PLAN.md](PLAN.md) describes both milestones.
 
 ## What works today
 
-Container commands and isolation are not implemented yet. The current entry point,
-`cmd/itos-container/main.go`, exposes the inherited `itos-container count <file>` example,
-version and shell completion. Count accepts `-` for standard input and prints lines and
-words as text or one JSON object with `--json`.
+v0.1.0 has been published. The entry point dispatches `doctor`, `approve`, `run`,
+`status` and `stop`, alongside `count`, `version` and `completion`. Sandbox claims
+are limited to what the scenarios prove. The inherited `itos-container count <file>`
+example accepts `-` for standard input and prints lines and words as text or one JSON
+object with `--json`.
 
 The counting domain in `internal/slices/count` uses a Files port, a read-only disk adapter and
 an in-memory fake; `internal/cli` maps typed failures to exit codes. Black-box scenarios
@@ -28,16 +29,28 @@ property uses newline-terminated pieces to preserve word boundaries.
 
 ## First milestone: an offline owned run
 
-The planned target is `itos container run -- <argv>` in an approved, hardened container
+This milestone targets `itos container run -- <argv>` in an approved, hardened container
 with no network, the checkout as its only host mount, non-root identity, recorded
 ownership, bounded startup, foreground exit and safe owned cleanup. These properties
 need failing-then-passing scenario evidence before they can be claimed. Foundation work
 comes first, then configuration/doctor/approval, then the offline owned run.
 
-Linux amd64 with native Docker is the target, with no support claim before runtime proof.
-Proxy egress, credentials/accounts, network Git, LAN ingress, Compose services and other
-platforms are outside this milestone. The inherited multi-platform Go checks and release
-tooling do not establish container-host support.
+## Second milestone: a coding agent inside the sandbox
+
+The [charter](docs/charter.md#the-second-milestone-a-coding-agent-inside-the-sandbox)
+sets this order.
+
+1. Egress through an allowlisting proxy.
+2. Credentials passed in, never injected, never in the checkout.
+3. A home for the harness.
+4. Interactive use.
+5. Late host sockets unreachable.
+
+## Milestone limits
+
+Linux amd64 with native Docker is the target. Container-host support claims require
+passing runtime scenarios. The charter's deferred scope includes LAN ingress, Compose
+services, other container platforms and giving any worker the Docker socket.
 
 The threat model assumes hostile checkout code and arbitrary tool execution, including
 dependency scripts and prompt-injected instructions. Hooks and agent instructions are
