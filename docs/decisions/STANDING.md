@@ -168,6 +168,12 @@ coordinator made. A change to a line is the person's, and it replaces the line.
 - `run --tty` selects terminal attachment; stdin alone supplies dimensions; the terminal is
   restored only after the final bounded drain. 2026-11-18.
   `docs/decisions/0031-foreground-terminal.md:10`
+- The person: itos-container stays on v0 until the design is final, with no
+  backwards-compatibility promise. A breaking change to state or schema ships with a
+  documented manual cleanup, never a migration, so old v0.1.0 state gets a documented
+  manual cleanup. The persisted binding device field is dropped with a schema bump, with no
+  filesystem-ID replacement. 2026-11-24.
+  `docs/decisions/0037-control-state-stays-on-v0-with-no-compatibility-promise-old-state-gets-a-documented-manual-cleanup-and-the-persisted-device-field-is-dropped.md:23`
 
 ## Code and CI
 

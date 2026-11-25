@@ -449,7 +449,7 @@ items:
     title: "Architecture drift: reconcile session and runtime evidence status"
     phase: 1
     owner: donvargax
-    status: todo
+    status: done
     depends_on: []
     kind: task
   - id: slice-15
@@ -646,21 +646,9 @@ items:
     title: Profile the non-engine feature suite and cut its roughly 300 s wall time
     phase: 1
     owner: null
-    status: todo
+    status: dropped
     depends_on: []
     kind: idea
-    why: >
-      No item covers this. T-35 recorded 303 s for the uncached `go test ./features -count=1` (1,274
-      scenario rows plus the harness regressions), and the current work step saw 298 s on Linux.
-      T-33 shortens only the engine tier, and T-36 only the coverage pass. Every slice adds rows,
-      and the same suite runs on the Linux, macOS and Windows platform jobs, so each pull request
-      pays it three times, and the loop pays it whenever there is no green base to select from. The
-      charter keeps suite-speed fixes in the first milestone, ahead of milestone 2. First measure
-      per-scenario and per-harness-test durations in the non-engine tier, reusing T-33's
-      timing-record approach. Then cut only demonstrated harness overhead, such as redundant fixture
-      builds or fixed waits in the recovery and lifecycle fixtures. Keep every row, assertion and
-      cleanup, and add no sharding or reduced selection. Phase p2: nothing blocks the current step,
-      and no CI job's limit is near 300 s.
   - id: p2-control-state-upgrade-contract
     title: Specify the upgrade contract for existing control state, and drop the persisted device field with it
     phase: 1
@@ -857,6 +845,9 @@ items:
       leaves a recovery record with the exact retry command, and stop recovers it without touching
       foreign resources. It builds on the run-through-proxy slice, so it comes last. Broken down
       from p1-egress-allowlist-proxy.
+    deferred: >
+      the queue's fresh draft cannot be posted now that the old branch is renamed; resume once the
+      queue can redraft it from current main
   - id: T-41
     title: The overlap scenarios' after hook stops timing out under the code proof's coverage run
     phase: 1
@@ -2191,9 +2182,11 @@ items:
       entries. Specify what one grant authorizes, how unrelated entries stay outside it, what
       approval shows, how updates or refreshes and cleanup work, and how the staged login stays out
       of the checkout, engine configuration and logs. Use synthetic markers and fake endpoints for
-      the scenarios. Name any unresolved account decision explicitly. Specification first;
-      implementation follows the Codex and Claude slices. Real credential use is subject to decision
-      0025 question 5.
+      the scenarios. Name any unresolved account decision explicitly. Specification first. Real
+      credentials follow decision 0035: OpenCode issues no subscription token, so the one grant is
+      the OpenCode Go provider entry from auth.json. Any harness may be the first in the container
+      (the person, 2026-11-24), so this slice need not wait for the Codex and Claude slices.
+    refs: [docs/decisions/0039-slice-40-s-redraft-may-reuse-the-earlier-spec-on-slice-40-old-and-the-partial-implementation-on-slice-40-d9e5a2d.md]
   - id: slice-41
     title: Start OpenCode headless with isolated home and configuration
     phase: 1
@@ -2253,7 +2246,7 @@ items:
     title: Report the checkout socket backend in doctor
     phase: 1
     owner: donvargax
-    status: todo
+    status: doing
     depends_on: [T-64]
     kind: slice
     why: >
@@ -2829,7 +2822,7 @@ items:
     title: The next control-lock holder removes orphaned .intent-<nonce>.tmp files and leaves records and live publishers' temporaries alone
     phase: 1
     owner: donvargax
-    status: doing
+    status: todo
     depends_on: []
     kind: slice
     why: >
@@ -2845,15 +2838,58 @@ items:
       names that only look similar are kept (see admission_leftover_test.go's cases). Out of scope:
       refusal-log copy temporaries and how long session state is kept, which both stay with
       p3-session-state-retention. Broken down from p3-registration-before-intent.
+    refs: [docs/decisions/0038-slice-60-s-cancelled-sweep-test-pairs-its-absence-check-with-a-live-context-positive-control.md, docs/decisions/0034-the-next-control-lock-holder-deletes-orphaned-temporaries-in-protected-state.md]
   - id: T-83
     title: Record the open decision on what evidence lets recovery retire an uncertain create
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: done
     depends_on: []
     kind: task
   - id: T-84
     title: credentials-run-native.feature joins the offline engine shard whole, before slice-31 lands
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-85
+    title: The non-engine feature tier writes a timing record for every scenario row and every harness regression test
+    phase: 1
+    owner: donvargax
+    status: todo
+    depends_on: []
+    kind: task
+  - id: T-86
+    title: "Record the non-engine suite's measured profile: slowest scenario rows, harness tests and fixture setup, with their shares of wall time"
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-85]
+    kind: task
+  - id: T-87
+    title: Fixtures in the non-engine tier build each product or probe binary once per suite run, not once per fixture or row
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-86]
+    kind: task
+  - id: T-88
+    title: Recovery and lifecycle fixtures wait on observed readiness instead of fixed sleeps, wherever the profile shows the sleep dominating a row
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-86]
+    kind: task
+  - id: T-89
+    title: The push review gate waits on Codex alone while Cursor Bugbot reviews are paused
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
+    kind: task
+  - id: T-90
+    title: Move to itos 8.49.0
     phase: 1
     owner: donvargax
     status: done

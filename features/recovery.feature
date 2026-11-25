@@ -14,10 +14,13 @@ Feature: Inspect and stop owned offline sessions
   # Dependency baseline inspected for this spec: main 9efa67c and slice-10 fe02965.
   # Slice-9's intents, original snapshots and full-ID reconciliation already exist.
   # Slice-10 adds Runner and foreground cleanup. The person's q-7 split assigns
-  # OFFLINE-01/04/05/15 to slice-13 and OFFLINE-08..12/14/16 to slice-14, still wip.
-  # These specifications are prerequisites to consume, not evidence they pass.
-  # Slice-12 owns signal/cancellation and retained-isolation-through-loss proof;
-  # this file owns discovery after loss and the public recovery action. Its totals
+  # OFFLINE-01/04/05/15 to slice-13 and OFFLINE-08..12/14/16 to slice-14; all are
+  # live, and slice-14's seven engine rows are the native isolation proof (q-6).
+  # offline.feature records the native CI results and positive controls.
+  # Slice-12 owns budgets, cancellation and controller-loss handling.
+  # ID-LIFECYCLE-15 in lifecycle.feature verifies isolation after controller loss.
+  # Its owner, slice-15, depends on slice-12 and slice-14 (q-11).
+  # This file owns discovery after loss and the public recovery action. Its totals
   # still apply: 10 s per call, 30 s per stop attempt, including locks and durability,
   # without resetting on retry/reconnect. Status has a 10 s whole-invocation budget.
   # No deadline is a workload lifetime limit. No local Docker or mutation run.
@@ -788,8 +791,9 @@ Feature: Inspect and stop owned offline sessions
     And status retains workload exit 7 while checkout edits approvals snapshots and unrelated native resources survive
     And the product creates no replacement worker and harness cleanup is not counted as product completion
 
-  # This case proves discovery/action after loss. Slice-12 separately proves the
-  # network/filesystem boundary still holds; a heartbeat is not isolation evidence.
+  # This case proves discovery/action after loss. Slice-15's ID-LIFECYCLE-15
+  # separately proves the network/filesystem boundary still holds, reusing slice-14's
+  # probes; a heartbeat is not isolation evidence.
   @slice-11 @ID-RECOVERY-22 @engine
   Scenario: A fresh status finds a native worker whose foreground controller was killed
     Given a CI recovery checkout with the cached image and a long-lived heartbeat workload
