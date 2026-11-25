@@ -38,5 +38,6 @@ file and leaves this list, which itos decision record writes.
 - [ADR-0035: Real credentials for container runs: a subscription token where the provider issues one, else its auth file shared](0035-real-credentials-for-container-runs-a-subscription-token-where-the-provider-issues-one-else-its-auth-file-shared.md)
 - [ADR-0036: What evidence lets recovery retire an uncertain create](0036-what-evidence-lets-recovery-retire-an-uncertain-create.md)
 - [ADR-0037: Control state stays on v0 with no compatibility promise: old state gets a documented manual cleanup, and the persisted device field is dropped](0037-control-state-stays-on-v0-with-no-compatibility-promise-old-state-gets-a-documented-manual-cleanup-and-the-persisted-device-field-is-dropped.md)
+- [ADR-0038: slice-60's cancelled-sweep test pairs its absence check with a live-context positive control](0038-slice-60-s-cancelled-sweep-test-pairs-its-absence-check-with-a-live-context-positive-control.md)
 
 <!-- itos:decisions:end -->
