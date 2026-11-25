@@ -181,6 +181,9 @@ func (w *world) hardlinkNativeTwice() error {
 			return err
 		}
 		w.hardlinks.native = append(w.hardlinks.native, r)
+		if r.err != nil {
+			return r.err
+		}
 	}
 	return nil
 }

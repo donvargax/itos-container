@@ -30,7 +30,7 @@ func (w *world) anchorRetentionAction(child int) error {
 	// in the control's baseline; its cleanup must leave them alone as well.
 	control.anchor.err = errors.Join(control.anchor.err, control.offlineCheckpoint())
 	control.anchorExecute("checkout root replaced by real directory")
-	return nil
+	return errors.Join(w.anchor.err, control.anchor.err)
 }
 
 // The checkpoint is taken while the actual workload is alive, after snapshots

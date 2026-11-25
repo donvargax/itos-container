@@ -31,8 +31,7 @@ func (w *world) homeNativeEndingSteps(sc *godog.ScenarioContext) {
 		if err := w.homeNativeReapprove("2"); err != nil {
 			return err
 		}
-		w.homeNativeCompleted("read", "alpha", "beta")
-		return nil
+		return w.homeNativeCompleted("read", "alpha", "beta").err
 	})
 	sc.Step(`^the later worker reads the original home marker and cannot read the old temporary marker$`, func() error {
 		f := w.home.native
@@ -66,7 +65,7 @@ func (w *world) homeNativeReapprove(generation string) error {
 	return os.WriteFile(a.record, approvalJSON(map[string]any{"schema": 1, "project": a.project, "generation": generation, "fingerprint": a.fingerprint, "settings": a.settings}), 0600)
 }
 
-func (w *world) homeNativeEnd() {
+func (w *world) homeNativeEnd() error {
 	f := w.home.native
 	mode := "write"
 	if f.ending == "observed exit seven" {
@@ -85,12 +84,17 @@ func (w *world) homeNativeEnd() {
 			p.run.err = errors.Join(p.run.err, p.cmd.Process.Kill())
 		}
 	}
-	f.runs = append(f.runs, p.finish())
+	run := p.finish()
+	f.runs = append(f.runs, run)
+	if (f.ending == "controller cancellation" || f.ending == "controller death and stop") && p.id == "" {
+		return errors.Join(run.err, fmt.Errorf("home worker did not reach its registered barrier (exit %d)", run.exit))
+	}
 	f.status = w.homeNativeInvoke("status", "--json")
 	if p.id != "" {
 		f.stopped = w.homeNativeInvoke("stop", p.id, "--json")
 	}
 	f.after = w.homeNativeInvoke("status", "--json")
+	return errors.Join(run.err, f.status.err, f.stopped.err, f.after.err)
 }
 
 func homeNativeSession(result homeNativeResult, id string) (homeNativeSessionEntry, error) {
