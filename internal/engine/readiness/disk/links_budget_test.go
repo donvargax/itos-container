@@ -2,6 +2,7 @@ package disk
 
 import (
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -43,6 +44,16 @@ func TestCheckoutScanCountsAllEntriesAcrossDirectoriesAndBatches(t *testing.T) {
 		want    port.Failure
 	}{{395, port.CheckoutUnavailable}, {396, port.None}, {397, port.None}} {
 		s := newFileScan()
+		// Entry accounting is independent of the host's Nlink representation.
+		// Preserve real enumeration and directory identity while supplying the
+		// regular-file metadata this traversal fixture promises on every host.
+		s.lstat = func(root *os.Root, name string) (fs.FileInfo, error) {
+			info, err := root.Lstat(name)
+			if err == nil && info.Mode().IsRegular() {
+				return countedFile{info}, nil
+			}
+			return info, err
+		}
 		s.remaining = tc.entries
 		reads := 0
 		s.readDir = func(f *os.File, n int) ([]os.DirEntry, error) {
@@ -60,6 +71,10 @@ func TestCheckoutScanCountsAllEntriesAcrossDirectoriesAndBatches(t *testing.T) {
 		}
 	}
 }
+
+type countedFile struct{ fs.FileInfo }
+
+func (countedFile) Sys() any { return struct{ Nlink uint64 }{1} }
 
 func TestCheckoutScanDepthBoundaryAndFreshRechecks(t *testing.T) {
 	path := checkoutFixture(t)

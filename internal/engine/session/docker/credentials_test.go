@@ -12,6 +12,7 @@ import (
 	"github.com/moby/moby/api/types/network"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -382,6 +383,9 @@ func credentialDefect(r *container.InspectResponse, fault string) {
 		return
 	case "logging driver":
 		r.HostConfig.LogConfig.Type = "json-file"
+		return
+	case "opencode environment":
+		r.Config.Env = slices.DeleteFunc(r.Config.Env, func(e string) bool { return strings.HasPrefix(e, "OPENCODE_DISABLE_AUTOUPDATE=") })
 		return
 	case "started pid":
 		r.State.Pid = 1234

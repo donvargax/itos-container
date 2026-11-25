@@ -294,3 +294,60 @@ func TestLocalCheckpointRetainsPinAndCanRefuseEngine(t *testing.T) {
 		}
 	}
 }
+
+type admittingObserver struct{}
+
+func (admittingObserver) Boundary() port.CredentialResult { return port.CredentialResult{} }
+func (admittingObserver) Inspect([]policy.Credential) port.CredentialResult {
+	return port.CredentialResult{}
+}
+
+func codexFixture() (Inspector, port.Input, *porttest.Engine, *manifestfake.Files) {
+	i, input, e, _ := fixture()
+	i.Policy = &policyfake.Source{Value: policy.Value{Kind: policy.Object, Fields: map[string]policy.Value{
+		"version": {Kind: policy.Number, Number: policy.Decimal{Coefficient: "1", Exponent: "0"}}, "manifest": {Kind: policy.String, Text: "worker.json"},
+		"home": {Kind: policy.Object, Fields: map[string]policy.Value{"storage": {Kind: policy.String, Text: "volume"}, "harness": {Kind: policy.String, Text: "codex"}}},
+	}}}
+	files := i.Files.(*manifestfake.Files)
+	return i, input, e, files
+}
+
+func TestRunRefusesACodexHarnessBeforeTheManifestAndTheEngine(t *testing.T) {
+	i, input, engine, files := codexFixture()
+	got := i.Inspect(input)
+	want := []policy.Issue{{Kind: policy.HomeHarnessGated, Path: []string{"home", "harness"}, Version: 1}}
+	if got.Ready || got.Policy == nil || got.Policy.Policy != nil || !reflect.DeepEqual(got.Policy.Issues, want) || got.Manifest != nil || len(files.Reads) != 0 || engine.Opens != 0 {
+		t.Fatalf("run was not gated: %#v, reads %v, opens %d", got, files.Reads, engine.Opens)
+	}
+	// A version 3 file keeps its own refusal ahead of the Codex gate.
+	i.Policy = &policyfake.Source{Value: policy.Value{Kind: policy.Object, Fields: map[string]policy.Value{
+		"version": {Kind: policy.Number, Number: policy.Decimal{Coefficient: "3", Exponent: "0"}}, "manifest": {Kind: policy.String, Text: "worker.json"},
+		"home": {Kind: policy.Object, Fields: map[string]policy.Value{"storage": {Kind: policy.String, Text: "volume"}, "harness": {Kind: policy.String, Text: "codex"}}},
+	}}}
+	got = i.Inspect(input)
+	if got.Policy == nil || !reflect.DeepEqual(got.Policy.Issues, []policy.Issue{{Kind: policy.Version, Path: []string{"version"}, Version: 3}}) {
+		t.Fatalf("version 3 gate lost: %#v", got.Policy)
+	}
+	// A request without the harness is not gated.
+	i, input, _, _ = fixture()
+	if got = i.Inspect(input); !got.Ready {
+		t.Fatalf("a request without the harness is gated: %#v", got)
+	}
+}
+
+func TestInspectionAndApprovalReadACodexHarnessAndReserveItsName(t *testing.T) {
+	i, input, _, _ := codexFixture()
+	i.AllowVersion3 = true
+	i.Sources = admittingObserver{}
+	i.Parser = &manifestfake.Parser{Value: manifest.Value{Kind: manifest.Object, Fields: map[string]manifest.Value{
+		"image": {Kind: manifest.String, Text: porttest.Reference}, "containerUser": {Kind: manifest.String, Text: "1000"}, "remoteUser": {Kind: manifest.String, Text: "1000"},
+		"containerEnv": {Kind: manifest.Object, Fields: map[string]manifest.Value{"Codex_Home": {Kind: manifest.String, Text: "/x"}}},
+	}}}
+	got := i.Inspect(input)
+	if got.Policy == nil || got.Policy.Policy == nil || got.Policy.Policy.Home.Harness != "codex" || len(got.Policy.Issues) != 0 {
+		t.Fatalf("doctor did not read the harness: %#v", got.Policy)
+	}
+	if got.Ready || got.Manifest == nil || !reflect.DeepEqual(got.Manifest.Issues, []manifest.Issue{{Kind: manifest.Reserved, Path: []string{"containerEnv", "Codex_Home"}}}) {
+		t.Fatalf("CODEX_HOME is not reserved: %#v", got.Manifest)
+	}
+}

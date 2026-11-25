@@ -159,8 +159,11 @@ func binding(r approval.Record, f approval.Frozen) port.Binding {
 			ContainerEnv    json.RawMessage `json:"containerEnv"`
 		}
 		Profile string
-		Home    *struct{ Storage string }
-		Policy  struct {
+		Home    *struct {
+			Storage   string
+			Harnesses []struct{ Name string }
+		}
+		Policy struct {
 			Network struct {
 				Mode  string
 				Allow []string
@@ -175,6 +178,8 @@ func binding(r approval.Record, f approval.Frozen) port.Binding {
 	b.Checkout.GitDevice, b.Checkout.GitInode = settings.Checkout.GitDevice, settings.Checkout.GitInode
 	b.Workspace, b.Environment = settings.Manifest.WorkspaceFolder, string(settings.Manifest.ContainerEnv)
 	b.Home = settings.Home != nil
+	// FrozenRecord has already refused any harness but the approved OpenCode one.
+	b.OpenCode = settings.Home != nil && len(settings.Home.Harnesses) > 0
 	if settings.Profile == "allowlist-v1" || settings.Profile == "allowlist-home-v1" {
 		b.Egress.Names = strings.Join(settings.Policy.Network.Allow, "\n")
 	}

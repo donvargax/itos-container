@@ -41,7 +41,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
-      - uses: donvargax/itos@9ef058985451a656893d16d28b22eeeece3f6fab # v8.46.4
+      - uses: donvargax/itos@ba19f5b59555a2032211a6513f91ea40232347d4 # v8.49.0
       - name: Range
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
@@ -55,26 +55,27 @@ jobs:
       - run: itos ci run "$FROM" "$TO"
 
   # The engine tier runs in four shards (T-45, T-59), each on its own native runner and
-  # daemon and each of whole feature files, so that no shard's step passes 180 seconds. A
+  # daemon and each of whole feature files, aiming at a 180-second step; a slower step warns, and
+  # only a passing step over 600 seconds fails (decision 0024, Soft budget). A
   # feature moves between shards only on measured shard times, and is never split.
   # The preflight is read-only; it does not acquire images or create containers.
   engine-shard:
     name: Engine shard (${{ matrix.shard }})
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         include:
           - shard: offline
-            features: offline.feature harness-home.feature
+            features: offline.feature harness-home.feature credentials-run-native.feature
           - shard: lifecycle
             features: lifecycle.feature
           - shard: other
-            features: anchors.feature checkout-overlap.feature doctor.feature exec.feature hardlinks.feature recovery.feature session.feature sockets.feature
+            features: anchors.feature checkout-overlap.feature claude-home.feature doctor.feature exec.feature hardlinks.feature recovery.feature run_terminal.feature session.feature sockets.feature
           - shard: egress
-            features: egress.feature
+            features: egress.feature credentials-run.feature
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -99,11 +100,12 @@ jobs:
         timeout-minutes: 4
         run: tools/bin/engine-fixture prepare
       - name: Engine scenarios
-        timeout-minutes: 5
+        timeout-minutes: 11
         shell: bash
         env:
           ITOS_CONTAINER_ENGINE_TESTS: "1"
           ITOS_CONTAINER_ENGINE_FEATURES: ${{ matrix.features }}
+          ITOS_CONTAINER_ENGINE_SHARD: ${{ matrix.shard }}
           ITOS_CONTAINER_RED_SCENARIOS: ${{ github.event_name == 'workflow_dispatch' && inputs.red_scenarios || '' }}
           ITOS_CONTAINER_ENGINE_FIXTURE_IMAGE: ${{ steps.fixture.outputs.image }}
           ITOS_CONTAINER_ENGINE_FIXTURE_ID: ${{ steps.fixture.outputs.image_id }}
@@ -119,11 +121,17 @@ jobs:
           }
           engine_started=''
           engine_finish() {
-            local result=$? finished elapsed=unknown outcome=failed
+            local result=$? finished elapsed=unknown outcome=failed shard=${ITOS_CONTAINER_ENGINE_SHARD:-unknown}
             trap - EXIT
             if finished=$(engine_now) && [[ -n $engine_started ]] && (( finished >= engine_started )); then
               elapsed=$(((finished - engine_started) * 10))
-              if (( elapsed > 180000 && result == 0 )); then result=1; fi
+              if (( elapsed > 180000 )); then
+                printf '::warning::Engine shard %s took %s ms, over the 180000 ms soft budget\n' "$shard" "$elapsed"
+              fi
+              if (( elapsed > 600000 )); then
+                printf '::error::Engine shard %s took %s ms, over the 600000 ms hang guard\n' "$shard" "$elapsed"
+              fi
+              if (( elapsed > 600000 && result == 0 )); then result=1; fi
             elif (( result == 0 )); then
               result=1
             fi
@@ -153,7 +161,7 @@ jobs:
           set +e
           # Run 42233015284 traced no product/harness process-group signals; the step died
           # from outside that tree. Isolate tests from CI runner/Docker session signals.
-          setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=4m -test.paniconexit0 -test.run '^TestFeatures$' 2>&1 | tee "$RUNNER_TEMP/slice-11-features.log"
+          setsid --wait "$RUNNER_TEMP/slice-11-features.test" -test.count=1 -test.v -test.timeout=10m -test.paniconexit0 -test.run '^TestFeatures$' 2>&1 | tee "$RUNNER_TEMP/slice-11-features.log"
           results=("${PIPESTATUS[@]}")
           set -e
           test_status=${results[0]}

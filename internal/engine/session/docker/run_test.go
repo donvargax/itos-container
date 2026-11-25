@@ -25,12 +25,22 @@ type runAPI struct {
 	mu            sync.Mutex
 	resource      *container.InspectResponse
 	attached      net.Conn
+	attach        []attachEscapeWire
 	defect        func(*container.InspectResponse)
 	readInput     bool
 	closeInput    bool
 	input         []byte
 	signals       []string
 	signalTargets []string
+	resizes       []string
+}
+
+// attachEscapeWire is one attach request's escape-sequence request as the
+// daemon would read it: whether a detachKeys parameter was sent at all, and
+// its exact value.
+type attachEscapeWire struct {
+	value string
+	sent  bool
 }
 
 func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
@@ -78,6 +88,7 @@ func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
 			}
 			_ = json.NewEncoder(w).Encode(observed)
 		case strings.HasSuffix(path, "/attach"):
+			a.attach = append(a.attach, attachEscapeWire{value: r.URL.Query().Get("detachKeys"), sent: r.URL.Query().Has("detachKeys")})
 			conn, buf, err := w.(http.Hijacker).Hijack()
 			if err != nil {
 				t.Error(err)
@@ -100,8 +111,12 @@ func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
 					t.Error(err)
 				}
 			}
-			writeFrame(a.attached, 1, []byte("stdout\x00\xff"))
-			writeFrame(a.attached, 2, []byte("stderr\x00\xfe"))
+			if a.resource.Config.Tty {
+				_, _ = a.attached.Write([]byte("stdout\x00\xffstderr\x00\xfe"))
+			} else {
+				writeFrame(a.attached, 1, []byte("stdout\x00\xff"))
+				writeFrame(a.attached, 2, []byte("stderr\x00\xfe"))
+			}
 			if a.closeInput {
 				_ = a.attached.(*net.UnixConn).CloseWrite()
 			} else {
@@ -110,6 +125,9 @@ func runSDKFixture(t *testing.T) (Engine, sp.Binding, *runAPI) {
 			w.WriteHeader(204)
 		case strings.HasSuffix(path, "/wait"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"StatusCode": 7})
+		case strings.HasSuffix(path, "/resize"):
+			a.resizes = append(a.resizes, r.URL.RawQuery)
+			w.WriteHeader(200)
 		case strings.HasSuffix(path, "/kill"):
 			a.signals = append(a.signals, r.URL.Query().Get("signal"))
 			a.signalTargets = append(a.signalTargets, strings.TrimSuffix(strings.TrimPrefix(path, "/containers/"), "/kill"))

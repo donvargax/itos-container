@@ -188,10 +188,19 @@ mutation:
       line_text: answer := make(chan bool, 1)
     - file: cmd/itos-container/main.go
       function: github.com/donvargax/itos-container/cmd/itos-container#run
-      hash: 3a774b65f8844ebd
+      hash: 741c4959f91f3dd1
       line_in_function: 21
       column: 15
       original: ">"
       replacement: ">="
       reason: run replaces an empty args with the one-element --help line before anything parses, so len(args) is at least one wherever this guard is evaluated. Both len(args) > 0 and the mutant len(args) >= 0 are therefore always true there, and the args[0] comparison plus every following completion, parse and dispatch path is identical for every input, including an empty command line. No observable result can differ, so no test can fail on the mutant.
       line_text: if len(args) > 0 && args[0] == "__complete" {
+    - file: internal/slices/workerinit/landlock/landlock_linux.go
+      function: github.com/donvargax/itos-container/internal/slices/workerinit/landlock#realCalls
+      hash: 286cabc65bc78460
+      line_in_function: 20
+      column: 93
+      original: "0"
+      replacement: "1"
+      reason: landlock_restrict_self takes two arguments, the ruleset descriptor and the flags. The Go syscall.Syscall wrapper always passes three words, so the trailing 0 is the unused third argument, which the kernel never reads. Replacing it with 1 hands the kernel the same two arguments and the same descriptor and flags, so the restriction applied, its error and every later result are identical. No test can observe an argument the kernel ignores.
+      line_text: _, _, e := syscall.Syscall(unix.SYS_LANDLOCK_RESTRICT_SELF, uintptr(fd), uintptr(flags), 0) //nolint:gosec // a descriptor number fits uintptr

@@ -159,6 +159,24 @@ and one `run.json-unsupported` problem containing `exit: 2`, a message and guida
 to remove both requests. The diagnostic also goes to stderr. Terminal and redirected
 streams receive the same refusal.
 
+`itos container run --tty -- <command> [arguments...]` explicitly attaches a
+terminal. Stdin and stdout must both be terminals; otherwise run exits 2 with
+`run.terminal-required`. Acquisition or invalid initial dimensions exits 3 with
+`run.terminal-unavailable`. These checks follow JSON and argv validation and
+precede preflight. Stdin supplies the initial size and later resizes. Distinct
+stdout gets its own saved-state lease without supplying dimensions. Control keys,
+including Ctrl-C and Ctrl-D, go to the workload as bytes; Docker's own default
+Ctrl-P Ctrl-Q detach sequence does too, because run pins one long escape
+sequence the daemon cannot refuse (ctrl-^,ctrl-_,ctrl-^,ctrl-_,ctrl-^,ctrl-_,
+ctrl-^,ctrl-_) and that exact sequence alone detaches. Both worker output
+streams share one raw stream on stdout; controller diagnostics stay on stderr.
+
+Terminal state is restored on every return. Losing either terminal stops the owned
+workload through the existing bounded cleanup path. Terminal disconnect,
+observation, resize and restoration failures have separate `run.terminal-*`
+diagnostics and return 75 unless an observed nonzero workload exit takes priority.
+Terminal mode changes no approved settings and inherits no host terminal environment.
+
 Usage and JSON refusals above precede policy, engine and approval inspection.
 A valid invocation checks local policy, manifest, host identity and approval before
 contacting the engine. Locally decidable refusals make no engine connection; daemon
@@ -173,7 +191,7 @@ unsafe or conflicting state refuses, and an uncertain write yields no startup in
 Every invocation revalidates prerequisites and approval, even if the snapshot exists.
 Successful publication now creates one owned unstarted worker from the frozen
 image config ID. Run durably records its inspected full ID, verifies the approved
-offline or allowlist boundary, attaches separate stdin/stdout/stderr, then starts
+offline or allowlist boundary, attaches streams (merged output for `--tty`), then starts
 the literal argv.
 There is no implicit shell, image acquisition, helper execution or approval prompt.
 An explicit shell executes inside the worker. HOME and TMPDIR use `/tmp` tmpfs;
@@ -236,6 +254,32 @@ profile yet. The profile binds the sorted allowlist and pinned proxy image; chan
 any name or the proxy digest needs new consent. Offline retains `offline-v1`; changing
 policy version also needs consent. Run's changed-approval diagnostic lists sorted
 JSON-pointer paths, never their values.
+
+When a home requests the OpenCode harness, each output shows it differently. `doctor --json`
+gains no field: `approval.effective` carries the home object with
+`harnesses: [{"name":"opencode","profile":"opencode-v1"}]`, `approval.differences` lists
+`/home/harnesses` in the sorted order, and `approval.fingerprint` is the new digest. JSON
+names the profile only; the environment is bound by the profile ID. Plain `doctor` and
+bare `approve`'s review print the shared home disclosure, which then adds the line
+`OpenCode harness: profile opencode-v1.`, one `NAME=value` line per profile environment
+entry in sorted order and the disclosure sentences (where OpenCode keeps its state, which
+configuration layers apply and which override the profile, that the image's other
+`OPENCODE_*` defaults stay in effect and can redirect or turn off configuration layers,
+who chooses the provider and model, which providers are reachable, and that no login is
+delivered). Plain `doctor` prints no difference lines; only the review adds
+`/home/harnesses: null -> [...]`.
+
+When a home selects the Codex harness (`home: {storage: volume, harness: codex}`), `doctor --json`
+again gains no field: `approval.effective` carries the home object with
+`harness: {"kind":"codex","seed":"codex-v1","target":"/home/itos/.codex"}`, `approval.differences`
+lists `/home/harness` and `approval.fingerprint` is the new digest. Plain `doctor` and bare
+`approve`'s review print six lines after the home disclosure and before any OpenCode lines: the
+seed and its target, that each run sets `CODEX_HOME` and rewrites only `config.toml`, what the seed
+turns off, that other files under the target are hostile worker data kept for the next run, that
+`CODEX_HOME` is reserved and that no login, network or credential grant is delivered. Only the
+review adds `/home/harness: null -> {...}`. The matching `--fingerprint` shows no review. Until a run
+can seed the home, `run` refuses the selection as `policy.home_harness` (exit 2) before any engine
+connection; see [CONFIG](CONFIG.md#codex-harness-defaults).
 
 An unsandboxed agent on the host can fake a terminal; the offline fingerprint route
 also permits automation. Approval records what was approved, not who. See
@@ -443,6 +487,22 @@ cleanup. Its diagnostic names the exact session and original state-root selectio
 An interrupted action retains its exact home ID and action as a retry, requiring
 fresh consent. Repeating a completed action cannot affect its successor. Missing
 storage is never recreated implicitly, and toggling policy does not undo deletion.
+
+### OpenCode harness request
+
+`home: {storage: volume, harnesses: [opencode]}` also binds the `opencode-v1` worker
+environment (see [CONFIG](CONFIG.md#opencode-harness-profile)). Ordinary `doctor` and bare
+`approve` show, before any consent, the harness, its profile, every environment name and
+value, that OpenCode's global configuration, data and state live in `/home/itos`, that the checkout's own OpenCode configuration applies, that managed configuration in the approved image overrides the profile, that the image's
+other `OPENCODE_*` defaults stay in effect and can redirect or turn off configuration
+layers, that the argv and the checkout choose the provider and model, that a provider is reachable only
+through the approved allowlist (for an offline policy, that none is) and that no OpenCode
+login is delivered. The sorted differences list `/home/harnesses`. Adding or removing the
+harness needs a fresh approval, and `run` reports the mismatch as `run.approval-changed`
+at `/home/harnesses` before any engine connection. Run adds no flag, model, prompt or
+wrapper: `opencode --standalone run --format json` is the person's own argv, and its JSON
+event lines reach stdout unchanged while run's diagnostics go to stderr. Run starts no
+OpenCode, claims no OpenCode compatibility and delivers no login.
 
 Local contracts cover these decisions. Native isolation and initialization remain
 subject to the CI engine scenarios at the pushed head.

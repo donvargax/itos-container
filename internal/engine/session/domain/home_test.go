@@ -333,6 +333,26 @@ func TestHomeChangedRootBeforeFinalStartRefuses(t *testing.T) {
 	}
 }
 
+// The verification before start only checks. A root the first verification
+// found initialized and a concurrent change left uninitialized is refused, not
+// repaired, so no worker starts on a home this run did not set up.
+func TestHomeUninitializedRootBeforeFinalStartRefuses(t *testing.T) {
+	x := domainHomeFixture()
+	x.seed()
+	x.engine.After = func(event string) {
+		if event == "attach" {
+			key := x.store.Scope(x.b)
+			s := x.store.Scopes[key]
+			s.Generations[0].Initialized = false
+			x.store.Scopes[key] = s
+		}
+	}
+	r := x.run(t)
+	if r.Outcome != port.HomeRefused || r.Started || slices.Contains(x.engine.HomeEvents, "initialize") {
+		t.Fatal(r, x.engine.HomeEvents)
+	}
+}
+
 func TestHomeUnallocatedSuccessorCannotBeRetired(t *testing.T) {
 	x := domainHomeFixture()
 	g := x.seed()

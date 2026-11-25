@@ -431,6 +431,12 @@ func runHomeLocalCase(t *testing.T, id, given string) {
 		homeClaimFence(t, parameter)
 	case "HOME-22":
 		homeRetirementFault(t, parameter)
+	case "HOME-28":
+		openCodeLaunch(t)
+	case "HOME-29":
+		// The defect text may hold quotes of its own, so it is the whole span between
+		// the row's fixed words, not up to its first closing quote.
+		openCodeBoundary(t, strings.TrimSuffix(strings.TrimPrefix(given, "an OpenCode launch fixture whose worker inspection has \""), "\" and an independent correct OpenCode control"))
 	case "HOME-24":
 		homeInvalidAction(t, parameter)
 	default:

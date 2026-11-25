@@ -1,4 +1,4 @@
-# T-45: the engine tier runs in three shards of whole features, each inside 180 seconds
+# T-45: the engine tier runs in three shards of whole features, each aiming at 180 seconds
 
 Recorded for T-45 on 2026-11-09. This overrides the part of [arc42](../architecture/arc42.md),
 **Future behaviour evidence**, that describes one dedicated `Engine scenarios (Linux amd64)`
@@ -88,6 +88,84 @@ home engine rows across `ID-HOME-13`, `14`, `15` and `23`, all still `@wip`. Nor
 counts remain 24/19/32; manual red selection assigns the nine home rows only to offline.
 The workflow, negative-control inventory and selector regression use that placement.
 No home runtime timing or red behaviour evidence is claimed by this assignment.
+
+### Credentials-run placement, 2026-11-21
+
+The person agreed on 2026-11-21 that slice-31's `credentials-run.feature` stays whole and joins
+a shard through this repository's own pull request, before slice-31 lands. It goes to
+**egress**. The "Engine scenarios" step on eight green main runs (44931447744 to 44959728012,
+2026-11-21) took 27 to 34 seconds in egress, 41 to 81 in offline, 46 to 116 in lifecycle and 76 to
+167 in other, so egress has the most room under the 180-second target. The file's five `@engine`
+rows, `ID-CREDRUN-08` to `-12`, are all `@wip` on slice-31.
+
+The file is not on this tree, and the harness refuses a listed name that no feature file with an
+`@engine` case bears. So `pendingEngineFeatures` in `features/features_test.go` is one reviewed
+map from a pending basename to the item that brings it, holding `credentials-run.feature` for
+slice-31 alone. `selectScenarios` skips such a name while no file of that name is on the tree and
+logs one line naming it and the item. Once the file exists it is ordinary: its `@engine` case is
+required and its rows are selected, and slice-31 removes the entry in its own test commit. Any
+other absent or `@engine`-less name is refused as before, and `TestEngineShards` fails a pending
+name in any shard but egress. The egress pinned set always holds `credentials-run.feature`. No
+scenario, assertion or limit changes, and no timing is claimed for the new rows until slice-31
+lands.
+
+### Claude-home placement, 2026-11-21
+
+slice-36's reviewed spec branch (PR 65) places its new `claude-home.feature` in the **other**
+shard, in `.github/workflows/ci.yml` and in `shardOtherFiles`. The agent that implements slice-36
+may not edit workflows, so the placement lands on main first, as T-77 did, and byte-identical to
+the branch so its merge of main stays clean. Any other shard would list the file twice after that
+merge. The file's `@engine` rows are `ID-CLAUDEHOME-09`, `-10` and `-11`. The measured times in
+the credentials-run placement above would favour offline (41 to 81 seconds against other's 76 to
+167); this record allows a later whole-file move on measured times once slice-36's rows run.
+
+The file is not on this tree, so `claude-home.feature` joins the reviewed pending map. Each entry
+now carries its item and its one permitted shard: `credentials-run.feature` for slice-31 in
+egress, `claude-home.feature` for slice-36 in other. `TestEngineShards` fails a pending name in
+any shard but its own and names that shard. Every existing pending behaviour stays: an absent
+pending name is skipped and logged, a present one is ordinary, and any other absent name is
+refused. slice-36 removes its entry in its own test commit. No scenario, assertion or limit
+changes, and no timing is claimed for the new rows until slice-36 lands.
+
+### Credentials-run-native placement, 2026-11-24
+
+slice-31's breakdown adds `credentials-run-native.feature`, and the agent that implements it may
+not edit workflows. The person approved on 2026-11-24 placing the whole file in the **offline**
+shard, so the placement lands on main first, as T-77 and T-78 did, in `.github/workflows/ci.yml`
+and in `shardOfflineFiles` (now three names, sorted). The last four green main runs measured the
+`Engine scenarios` step at 69 to 96 seconds in offline, 36 to 56 in egress, 106 to 128 in
+lifecycle and 143 to 176 in other, against the unchanged 180-second budget. Offline has the most
+room after egress, and egress already holds `credentials-run.feature`.
+
+The file is not on this tree, so it joins the reviewed pending map as `credentials-run-native.feature`
+for slice-31 in offline, beside the two existing entries. `TestEngineShards` fails it in any
+other shard and names offline. slice-31 removes its entry in its own test commit. No scenario,
+assertion or limit changes, and no timing is claimed for the new rows until slice-31 lands.
+
+### Soft budget, 2026-11-20
+
+T-69 supersedes this record's 180-second failure and its 4, 5 and 10 minute limits, on the
+person's standing rule that caps are soft and warn and only a hang guard stops. 180 seconds is
+now a target for each shard's step.
+
+- Every run prints `engine step timing: duration_ms=... outcome=...`. Above 180 seconds the
+  step prints a `::warning::` naming the shard and its time and does not fail. Above 600 seconds
+  it also prints an `::error::` naming the hang guard. Both annotations follow elapsed time
+  alone and print whatever the outcome.
+- The only time-based failure is a run that otherwise passed and took more than 600 seconds;
+  exactly 600 seconds passes, and a run that failed keeps its own exit status.
+- There is no watchdog. The guard runs when the step ends, so it is not a timer. A real hang is
+  stopped by Go's `-test.timeout=10m`, counted from the test program's start, at about 606
+  seconds with the compile time added. That run fails with Go's `running tests:` panic and keeps
+  its own status. The 600-second guard therefore fails only a passing run that ended past 600
+  seconds, in practice between 600 and about 606.
+- The Go test timeout becomes 10 minutes, the Engine scenarios step 11 and the shard job 15.
+  Fifteen minutes are enough in practice, since a hang ends near 10.1 minutes; they are not a
+  sum of every cap at its limit. Fixture preparation keeps its 4 minutes.
+- If a shard keeps warning, the person decides whether to move a feature whole to another
+  shard; no warning moves one.
+
+The history above stays as written.
 
 ## Alternatives left
 

@@ -1,11 +1,11 @@
-# Shared commit rules and checks. Stack branches add language gates with the
-# code they prove; the root remains language-neutral.
+# itos-container's commit rules and checks: its Go gates, its scenarios and its code
+# proof.
 version: 1
 
 # The source project's pin and checksum, copied with its workflow action.
 pin:
-  version: "8.46.4"
-  checksums: "3332e2bfc6a6291598cf85edf3c04d172d53b9de5bd71c56b0eb8bd70e092990" # SHA-256 of checksums.txt
+  version: "8.49.0"
+  checksums: "aa9513a6568572e1d103193d9464d5bce57db708d84049cd7313c840369b7c65" # SHA-256 of checksums.txt
 
 ledger:
   files: "tasks/phase-{group}.yaml"
@@ -31,9 +31,9 @@ commits:
       validate_for: [feat, fix]
       must_be_live: true
       read_at: commit
-    # What a user of a project made from this template must change for the commit, or none
-    # (itos commit --upgrading none): feat and fix are what a user can feel, and the release
-    # notes quote it.
+    # What a user of itos-container (its released binary, its commands or its
+    # itos-container.yaml) must change for the commit, or none (itos commit --upgrading
+    # none): feat and fix are what a user can feel, and the release notes quote it.
     Upgrading:
       source: text
       required_for: [feat, fix]
@@ -133,9 +133,12 @@ push:
     draft: true
     update: merge
     review_stall: 900
+    # The person paused Cursor Bugbot reviews from 2026-11-24 until about 2026-11-27.
+    # Then restore review_by: [cursor] and uncomment the Bugbot reviewer below.
     review_by: [chatgpt-codex-connector]
     reviewers:
       - { login: chatgpt-codex-connector, kind: codex }
+      # - { login: cursor, kind: bugbot }
     direct:
       types: [docs]
       except: ["features/**"]

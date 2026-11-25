@@ -31,7 +31,14 @@ type Runner struct {
 // whose operation-lock budget expired. Teardown must settle it before return.
 const waitUnreconciled port.Outcome = "wait-unreconciled"
 
-func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string, streams port.Streams) port.RunResult {
+func (s Runner) Run(ctx context.Context, frozen approval.Durable, argv []string, streams port.Streams) (result port.RunResult) {
+	if streams.Terminal != nil {
+		defer func() {
+			if streams.Terminal.Close().RestoreErr != nil {
+				result.Restore = port.TerminalRestore
+			}
+		}()
+	}
 	if s.Sources != nil {
 		s.sourceOwner = make(chan struct{}, 1)
 		s.sourceOwner <- struct{}{}
