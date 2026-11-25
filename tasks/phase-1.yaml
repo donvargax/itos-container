@@ -9992,32 +9992,100 @@
   type: docs
   title: PLAN.md, README and the orchestration docs stop saying proxy egress is outside the scope
   why: >
-    Blocks the charter's milestone two, step 1 (egress through an allowlisting proxy). The charter
-    (ef653e7, 2026-11-09) says to specify and start it, but PLAN.md's milestone limits ("Proxy
-    egress, credentials/accounts, Git over the network... remain outside this milestone"),
-    README.md:38 and docs/ORCHESTRATING.md:12 still say it is deferred or unauthorized. AGENTS.md
-    sends every agent to the charter and then PLAN.md, so each drafter and reviewer of T-38 and
-    slice-25 to slice-28 meets two authorities that disagree, and may stop or refuse. Update PLAN.md
-    (current state, order of work, milestone limits), README and ORCHESTRATING to match the charter:
-    milestone two's steps in the charter's order, egress first and the rest when reached, while LAN
-    ingress, Compose, other platforms and the Docker socket stay out. Do not touch the charter.
-    Leave the 'deferred' headers in docs/CONFIG.md and docs/CLI.md to slice-25, which edits those
-    files for the allowlist field. Leave arc42's deferral text to T-38's decision record, per the
-    charter's architecture rule. AGENTS.md's opening paragraph is also stale ("container commands
-    and isolation are not implemented yet", v0.1.0 is published), but whether to edit AGENTS.md is
-    the person's. Documentation only: it touches no proof.code path. This item is already a
-    documentation-only edit of docs/ORCHESTRATING.md, whose empty 'Lessons' section is the
-    repository's place for this. Add one lesson there: a docs task whose checks read documents
-    declares `prose: true` on each such check, because on a prose-only range CI leaves out any other
-    late check and `itos work done` never runs one. Evidence: the T-38 spec review's P1 (itos
-    8.46.4); T-26 and T-6 had the same gap. Give it the section's required fields (recorded date,
-    last-seen date, and permanent status or the exit item). Its exit is the upstream itos fix, so
-    say that. The lesson is measured, not invented. It touches no proof.code path and is too small
-    to be its own item. The item already edits PLAN.md, README.md and docs/ORCHESTRATING.md to match
-    the charter's milestone two. Its text covers egress first and 'the rest when reached', but its
-    why and title name only egress. Widen it so the milestone-limits sentence 'credentials/accounts,
-    Git over the network... remain outside this milestone' is also replaced by the charter's steps 2
-    to 4 in order. The charter is not touched. Drafters of slice-29 to slice-33 and T-48 would
-    otherwise meet two disagreeing authorities, as T-38's did.
+    Problem. AGENTS.md sends every agent to the charter and then to PLAN.md and its milestone
+    limits. The charter's second milestone, a coding agent inside the sandbox, has five steps,
+    egress through an allowlisting proxy first, and the charter has said to specify and start
+    step 1 since ef653e7 (2026-11-09). PLAN.md, README.md and docs/ORCHESTRATING.md still say
+    the opposite. PLAN.md's milestone limits say "Proxy egress, credentials/accounts, Git over
+    the network ... remain outside this milestone" and that the pilot "does not authorize
+    building them here yet". README.md:38 says the same. docs/ORCHESTRATING.md:11-13 says "the
+    broader pilot authorizes no later slice here" and that egress and credentials "stay
+    deferred". All three also say container commands and isolation are not implemented
+    (PLAN.md:15-16, README.md:13, docs/ORCHESTRATING.md:18). Yet the entry point now dispatches
+    doctor, approve, run, status and stop, and v0.1.0 has been published. Every drafter and
+    reviewer of a milestone-two item meets two authorities that disagree, and may stop or
+    refuse. That happened to T-38's drafters and reviewers, and it still faces the drafters of
+    slice-28, slice-31, slice-36, slice-38 to slice-47 and the Codex slices.
+
+    The rule. The three documents follow the charter as it stands. They add no scope and claim
+    nothing the charter or a scenario does not. The charter is not touched.
+
+    PLAN.md. "Current state" names the commands cmd/itos-container/main.go dispatches today
+    (doctor, approve, run, status and stop, beside the inherited count, version and completion).
+    Take that list from the code, not from this entry. Say that v0.1.0 is published and that no
+    property is claimed beyond what its scenarios prove. Point to the registry (`itos work`) for
+    which milestone-two items have landed, rather than listing them. The counting example stays,
+    described as the inherited example. The T-3/T-4 paragraph may stay or shrink. "Order of work"
+    keeps the first milestone's three steps, marked as the first milestone. It adds the second
+    milestone's five steps in the charter's order, one line each, named as the charter names
+    them: 1 egress through an allowlisting proxy, 2 credentials passed in, never injected, never
+    in the checkout, 3 a home for the harness, 4 interactive use, 5 late host sockets
+    unreachable. Each line points to the charter for that step's rules. Where a line says more
+    than the step's name, it agrees with docs/decisions/STANDING.md. The phrase "allowlisting
+    proxy" appears there. "Milestone limits" keeps its heading, because AGENTS.md:5 and
+    docs/ORCHESTRATING.md:8 link #milestone-limits. Its "remain outside" and "does not authorize"
+    sentences give way to the charter's "Not yet" list: LAN ingress, Compose services, platforms
+    other than Linux amd64 with native Docker, the Docker socket for any worker, and any support
+    claim beyond what a scenario proves. GitHub credentials stay on the host, which pushes and
+    lands (charter step 2, STANDING.md:36). So network Git is not written as a step or as
+    in scope; the section may say where it stands in those terms. The threat-model paragraph and
+    "Deferred research" stay as they are.
+
+    README.md. "What works today" replaces its first sentence with the built commands, in the
+    same terms and with the same no-claim limit as PLAN.md. In the milestone section, the
+    line-38 sentence gives way to the second milestone's steps in the charter's order, egress
+    through the allowlisting proxy first, and the same "Not yet" list. The section's heading and
+    its opening line, which says PLAN.md describes the path to the first milestone, may change to
+    cover both milestones. The checks, hooks, working and licence sections stay unchanged.
+
+    docs/ORCHESTRATING.md. In "Start of a session", the first bullet says the charter selects the
+    offline owned run and then the second milestone's five steps in its order. The second bullet
+    gives the "Not yet" list in place of "stay deferred", and keeps its sentences on runtime
+    evidence, open security decisions and hostile checkout code. The third bullet names the built
+    commands as PLAN.md does. "Lessons" gains one lesson, as a list item: a docs task whose checks
+    read documents declares `prose: true` on each such check. On a prose-only range (itos.yaml's
+    ci.prose.paths), CI keeps only a task's static checks and those declaring prose: true, and
+    `itos work done` runs no late check, so an undeclared check never runs. It was measured, not
+    invented: the T-38 spec review's P1 found it under itos 8.46.4, and T-26 and T-6 had the same
+    gap. It carries the section's required fields. It is recorded on the date of the commit that
+    adds it and was last seen on 2026-11-09, in T-38's spec. It is not permanent: it exits with
+    the upstream itos fix, which no registry item holds, and it says so in those words.
+
+    Size. docs/ORCHESTRATING.md is 6124 bytes and tools/bin/doc-caps caps it at 6144. CI runs
+    doc-caps on every range, prose-only ones included. The lesson alone needs about 300 bytes. Make
+    room by deleting the T-8 history in "Inspect and brief": the sentences from "T-8's completion
+    checks included a full mutation measurement." through "results and environment.", and "T-8 is
+    a historical test task example: its generated proof procedure was superseded by T-13.". T-8 is
+    done, so these are history, and the T-8 ledger entry and the Proof section's link to its report
+    keep it. Reword what remains of that bullet so it no longer leans on T-8. For example: "Do not
+    infer commands from a closed task's empty `done_when`, reopen the task or run a measurement
+    merely to draft a brief." Word the changed bullets tightly. Do not raise the cap, which is a
+    decision and not a fix, and cut no other rule. If no wording that states every rule above
+    fits, stop and report it.
+
+    Bounds. Change only PLAN.md, README.md and docs/ORCHESTRATING.md. Leave docs/charter.md and
+    the pilot contract alone. Leave AGENTS.md alone: its opening paragraph ("container commands
+    and isolation are not implemented yet") is stale too, but editing it is the person's call,
+    and the check does not read it. Leave docs/CONFIG.md, docs/CLI.md, arc42 and the decision
+    records alone. The items that change those features keep their texts, and T-38's record owns
+    arc42's deferral text under the charter's architecture rule. Change no code, scenario,
+    workflow, itos.yaml or tool. Name no new step, dependency or support claim.
+
+    Commits and proof. One docs commit with Item: T-94 carries the three files. No proof.code
+    path changes, so there is no mutation proof and none is fabricated. The range is prose-only
+    (**/*.md). On such a range CI keeps only a task's static checks and those declaring prose:
+    true, and itos work done runs no late check, so the check declares prose: true. It uses only
+    POSIX sh and grep, as on ubuntu-latest. The implementer may commit freely in its workspace.
+    The host makes the landing commits and runs itos, submission, publication and review.
+
+    How the check fails today. Its negated grep matches nine lines: PLAN.md:16, 50 and 52,
+    README.md:13 and 38, and docs/ORCHESTRATING.md:11, 12, 13 and 18. "allowlisting proxy" is
+    absent from PLAN.md, and `prose: true` is absent from docs/ORCHESTRATING.md. "LAN ingress"
+    already matches PLAN.md:51, and it fails if the rewrite drops LAN ingress from the "Not
+    yet" list. The patterns catch only today's phrasings. A deferral that is reworded or
+    reflowed passes them, and so does a wrong statement of what is built. Review of the diff
+    against this entry and the charter judges those. doc-caps is not part of this check, but
+    CI's prose steps run it, and it fails if docs/ORCHESTRATING.md passes 6144 bytes.
   done_when:
     - run: "! grep -nE 'Proxy egress, credentials/accounts|Egress, credentials, *$|stay deferred|authorizes no later slice|does not authorize building them|not implemented yet|commands and isolation are unimplemented' PLAN.md README.md docs/ORCHESTRATING.md && grep -q 'allowlisting proxy' PLAN.md && grep -q 'LAN ingress' PLAN.md && grep -q 'prose: true' docs/ORCHESTRATING.md"
+      prose: true
