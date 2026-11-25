@@ -2887,3 +2887,10 @@ items:
     status: done
     depends_on: []
     kind: task
+  - id: T-90
+    title: Move to itos 8.49.0
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: task

@@ -9682,3 +9682,19 @@
     review_by goes back to cursor and the bugbot reviewer returns. Nothing else in the push or proof
     config changes. Start file: itos.yaml (the push block); model: 08dd3b2, the T-67 change it
     reverses for now.
+- id: T-90
+  type: ci
+  title: Move to itos 8.49.0
+  why: >
+    itos 8.49.0 is out, and the pinned 8.46.4 now refuses commits until the project moves to it
+    (itos commit: 'itos 8.49.0 is out (this repository pins 8.46.4) ... itos upgrade moves this
+    repository to it'). Move the project the way T-22 moved it to 8.46.4: run itos upgrade 8.49.0,
+    which edits only what each release between them fixes exactly (itos.yaml's pin version and
+    checksums, the install script's version and sums, and any config key a release renames or
+    removes), and read each release's breaking changes and Upgrading footers it prints. Move the
+    workflows' itos action pins with it: donvargax/itos at the v8.49.0 commit in
+    .github/workflows/ci.yml and release.yml. Nothing else changes; a release note asking for more
+    is reported, not done here.
+  done_when:
+    - run: "grep -q 'version: \"8.49.0\"' itos.yaml && ! grep -q '8\\.46\\.4' itos.yaml && grep -q '# v8.49.0' .github/workflows/ci.yml && grep -q '# v8.49.0' .github/workflows/release.yml && ! grep -q '# v8.46.4' .github/workflows/ci.yml .github/workflows/release.yml"
+      timeout: 30
