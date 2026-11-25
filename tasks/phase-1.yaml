@@ -10019,5 +10019,3 @@
     Git over the network... remain outside this milestone' is also replaced by the charter's steps 2
     to 4 in order. The charter is not touched. Drafters of slice-29 to slice-33 and T-48 would
     otherwise meet two disagreeing authorities, as T-38's did.
-  done_when:
-    - run: "! grep -nE 'Proxy egress, credentials/accounts|Egress, credentials, *$|stay deferred|authorizes no later slice|does not authorize building them|not implemented yet|commands and isolation are unimplemented' PLAN.md README.md docs/ORCHESTRATING.md && grep -q 'allowlisting proxy' PLAN.md && grep -q 'LAN ingress' PLAN.md && grep -q 'prose: true' docs/ORCHESTRATING.md"

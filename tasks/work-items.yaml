@@ -859,7 +859,7 @@ items:
     title: PLAN.md, README and the orchestration docs stop saying proxy egress is outside the scope
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: T-52
