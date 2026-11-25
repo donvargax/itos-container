@@ -449,7 +449,7 @@ items:
     title: "Architecture drift: reconcile session and runtime evidence status"
     phase: 1
     owner: donvargax
-    status: todo
+    status: doing
     depends_on: []
     kind: task
   - id: slice-15
@@ -2878,4 +2878,11 @@ items:
     owner: null
     status: todo
     depends_on: [T-86]
+    kind: task
+  - id: T-89
+    title: The push review gate waits on Codex alone while Cursor Bugbot reviews are paused
+    phase: 1
+    owner: donvargax
+    status: done
+    depends_on: []
     kind: task
