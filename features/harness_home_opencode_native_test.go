@@ -123,7 +123,7 @@ type openCodeReport struct {
 type openCodeRunResult struct {
 	exit           int
 	stdout, stderr []byte
-	err            error
+	err, reportErr error
 	events         []map[string]any
 	report         openCodeReport
 	prompt         string
@@ -219,7 +219,11 @@ func (w *world) homeOpenCodeNativeSteps(sc *godog.ScenarioContext) {
 	})
 	sc.Step(`^two fresh product runs invoke the stand-in as "/workspace/opencode --standalone run --format json" with a prompt, the first exiting zero and the second exiting seven$`, func() error {
 		for _, prompt := range prompts {
-			native.runs = append(native.runs, w.openCodeProductRun([]string{"/workspace/opencode", "--standalone", "run", "--format", "json", prompt}, prompt))
+			run := w.openCodeProductRun([]string{"/workspace/opencode", "--standalone", "run", "--format", "json", prompt}, prompt)
+			native.runs = append(native.runs, run)
+			if run.err != nil {
+				return run.err
+			}
 		}
 		return nil
 	})
@@ -228,8 +232,8 @@ func (w *world) homeOpenCodeNativeSteps(sc *godog.ScenarioContext) {
 			return errors.New("both runs were not made")
 		}
 		for i, run := range native.runs {
-			if run.err != nil {
-				return run.err
+			if run.reportErr != nil {
+				return run.reportErr
 			}
 			argv := []string{"/workspace/opencode", "--standalone", "run", "--format", "json", prompts[i]}
 			if err := w.openCodeCheckReport(run.report, argv, ""); err != nil {
@@ -454,17 +458,20 @@ func (w *world) openCodeProductRun(argv []string, prompt string) openCodeRunResu
 	if err != nil && !errors.As(err, &exited) {
 		run.err = err
 	}
+	if ctx.Err() != nil {
+		run.err = errors.Join(run.err, ctx.Err())
+	}
 	// The home persists; track it so the harness can remove it afterwards.
 	if _, _, observed := w.homeNativeObserve(); observed != nil {
 		run.err = errors.Join(run.err, observed)
 	}
 	run.events, err = openCodeEvents(run.stdout)
 	if err != nil {
-		run.err = errors.Join(run.err, fmt.Errorf("%w; exit %d, stderr %s", err, run.exit, run.stderr))
+		run.reportErr = fmt.Errorf("%w; exit %d, stderr %s", err, run.exit, run.stderr)
 		return run
 	}
 	if data, marshalErr := json.Marshal(run.events[0]); marshalErr == nil {
-		run.err = errors.Join(run.err, json.Unmarshal(data, &run.report))
+		run.reportErr = json.Unmarshal(data, &run.report)
 	}
 	return run
 }

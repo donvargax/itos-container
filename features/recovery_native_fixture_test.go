@@ -255,7 +255,7 @@ func (w *world) recoveryAwaitWorker() {
 	for {
 		select {
 		case <-r.run.done:
-			// Refusal is product data for the positive Then, not a setup error.
+			r.err = errors.Join(r.run.err, fmt.Errorf("native worker exited before the heartbeat barrier (exit %d)", r.run.exit))
 			return
 		case <-deadline.C:
 			r.err = errors.New("native worker did not reach the bounded heartbeat barrier")
@@ -296,7 +296,7 @@ func (w *world) recoveryDiscover() {
 
 var recoveryRetryPattern = regexp.MustCompile(`(?:^|\n)[^\n]*\bitos container stop ([0-9a-f]{64})(?:\r?\n|$)`)
 
-func (w *world) recoveryRetryAction() {
+func (w *world) recoveryRetryAction() error {
 	r := w.recovery
 	r.run = w.recoveryStart("run", "--", "/workspace/slice-11-probe", "exit")
 	r.run.wait()
@@ -317,12 +317,16 @@ func (w *world) recoveryRetryAction() {
 	}
 	r.after = w.recoveryStart("status", "--json")
 	r.after.wait()
+	return r.actionError()
 }
 
-func (w *world) recoveryLossAction() {
+func (w *world) recoveryLossAction() error {
 	r := w.recovery
 	r.run = w.recoveryStart("run", "--", "/workspace/slice-11-probe", "heartbeat")
 	w.recoveryAwaitWorker()
+	if r.err != nil {
+		return r.err
+	}
 	if r.worker != "" {
 		r.err = errors.Join(r.err, r.run.killController())
 		r.run.wait()
@@ -337,13 +341,17 @@ func (w *world) recoveryLossAction() {
 	}
 	r.after = w.recoveryStart("status", "--json")
 	r.after.wait()
+	return r.actionError()
 }
 
-func (w *world) recoveryPairAction() {
+func (w *world) recoveryPairAction() error {
 	other := w.recovery.second
 	for _, project := range []*world{w, other} {
 		project.recovery.run = project.recoveryStart("run", "--", "/workspace/slice-11-probe", "heartbeat")
 		project.recoveryAwaitWorker()
+		if project.recovery.err != nil {
+			return project.recovery.err
+		}
 	}
 	r := w.recovery
 	if offlineHex(r.id) {
@@ -354,7 +362,9 @@ func (w *world) recoveryPairAction() {
 		select {
 		case <-w.offline.api.removeReady:
 		case <-first.done:
+			r.err = errors.Join(first.err, fmt.Errorf("first stop exited before the removal barrier (exit %d)", first.exit))
 		case <-timer.C:
+			r.err = errors.New("first stop did not reach the removal barrier")
 		}
 		timer.Stop()
 		second := w.recoveryStart("stop", r.id, "--json")
@@ -371,6 +381,7 @@ func (w *world) recoveryPairAction() {
 		project.recovery.after = project.recoveryStart("status", "--json")
 		project.recovery.after.wait()
 	}
+	return errors.Join(r.actionError(), other.recovery.actionError())
 }
 
 func (w *world) recoveryLaterHeartbeat() {
@@ -452,4 +463,18 @@ func main() {
 func recoveryJSONEqual(data string, want map[string]any) bool {
 	var got map[string]any
 	return json.Unmarshal([]byte(data), &got) == nil && string(approvalJSON(got)) == string(approvalJSON(want))
+}
+
+// Only read errors from processes that have published their results. Some
+// recovery actions deliberately leave a worker running for Then assertions.
+func (r *recoveryNative) actionError() error {
+	err := r.err
+	for _, p := range r.processes {
+		select {
+		case <-p.done:
+			err = errors.Join(err, p.err)
+		default:
+		}
+	}
+	return err
 }

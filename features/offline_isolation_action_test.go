@@ -34,7 +34,11 @@ func (w *world) isolationAction() error {
 		if s.mode == "exit" {
 			s.removeFault = n == 1
 		}
-		s.runs = append(s.runs, s.execute(c))
+		run := s.execute(c)
+		s.runs = append(s.runs, run)
+		if run.err != nil {
+			return fmt.Errorf("workload observation failed (controller exit %d): %w", run.exit, run.err)
+		}
 	}
 	var err error
 	s.after, err = s.protected()
@@ -57,7 +61,7 @@ func (w *world) isolationAction() error {
 		s.controlsAfter, err = s.routeControls(true)
 	}
 	s.controlError = errors.Join(s.controlError, err)
-	return nil // every early product exit is judged by the named Then
+	return s.controlError
 }
 
 func (s *isolationWorld) execute(c isolationConfig) *isolationRun {

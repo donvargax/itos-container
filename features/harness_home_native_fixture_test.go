@@ -126,8 +126,11 @@ func (w *world) homeNativeRuns() error {
 	for _, mode := range []string{"write", "read"} {
 		run := w.homeNativeRun(mode)
 		w.home.native.runs = append(w.home.native.runs, run)
+		if run.err != nil {
+			return run.err
+		}
 	}
-	return nil // early refusal and a missing report are observations for Then
+	return nil
 }
 
 func (w *world) homeNativeRun(mode string) homeNativeRun {
