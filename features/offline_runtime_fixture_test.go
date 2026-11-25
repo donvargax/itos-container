@@ -151,12 +151,12 @@ func (w *world) offlineExecute(argv []string, handshake bool) error {
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		o.err = err
-		return nil
+		return err
 	}
 	defer func() { _ = stdin.Close() }()
 	if err = cmd.Start(); err != nil {
 		o.err = err
-		return nil
+		return err
 	}
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
@@ -167,7 +167,7 @@ func (w *world) offlineExecute(argv []string, handshake bool) error {
 		for {
 			select {
 			case err = <-done:
-				done <- err // early refusal is data, never a missing-barrier setup failure
+				done <- err
 				break waiting
 			case <-ctx.Done():
 				break waiting
@@ -178,7 +178,9 @@ func (w *world) offlineExecute(argv []string, handshake bool) error {
 					o.handshake = o.api.running()
 					if o.handshake {
 						_, err = stdin.Write(offlineInput)
-						o.inputClosed = err == nil && stdin.Close() == nil
+						inputErr := errors.Join(err, stdin.Close())
+						o.inputClosed = inputErr == nil
+						o.err = errors.Join(o.err, inputErr)
 					}
 					break waiting
 				}
@@ -195,11 +197,14 @@ func (w *world) offlineExecute(argv []string, handshake bool) error {
 		if errors.As(err, &status) {
 			o.exit = status.ExitCode()
 		} else {
-			o.err = err
+			o.err = errors.Join(o.err, err)
 		}
 	}
 	if ctx.Err() != nil {
-		o.err = fmt.Errorf("offline product invocation exceeded its fixture deadline")
+		o.err = errors.Join(o.err, fmt.Errorf("offline product invocation exceeded its fixture deadline"))
+	}
+	if handshake && !o.handshake {
+		o.err = errors.Join(o.err, fmt.Errorf("offline worker did not reach the stream barrier (exit %d)", o.exit))
 	}
 	// Record absence before any harness cleanup; closeOfflineRuntime never
 	// supplies evidence to these observations.
@@ -208,7 +213,7 @@ func (w *world) offlineExecute(argv []string, handshake bool) error {
 	o.err = errors.Join(o.err, err)
 	o.resourcesAfter, err = w.doctor.real.snapshotResources()
 	o.err = errors.Join(o.err, err)
-	return nil
+	return o.err
 }
 
 func (w *world) closeOfflineRuntime() error {

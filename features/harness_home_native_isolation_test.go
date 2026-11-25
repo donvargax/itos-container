@@ -13,13 +13,18 @@ import (
 
 func (w *world) homeNativeIsolationSteps(sc *godog.ScenarioContext) {
 	sc.Step(`^two CI home checkouts with equal basenames and the same approved image and host UID GID$`, w.homeNativePairFixture)
-	sc.Step(`^their product workers write distinct private home markers and each checkout is run again$`, func() {
+	sc.Step(`^their product workers write distinct private home markers and each checkout is run again$`, func() error {
 		for i, project := range w.homeNativeProjects() {
-			project.homeNativeCompleted("write", homeNativeMarker(i), homeNativeMarker(1-i))
+			if run := project.homeNativeCompleted("write", homeNativeMarker(i), homeNativeMarker(1-i)); run.err != nil {
+				return run.err
+			}
 		}
 		for i, project := range w.homeNativeProjects() {
-			project.homeNativeCompleted("read", homeNativeMarker(i), homeNativeMarker(1-i))
+			if run := project.homeNativeCompleted("read", homeNativeMarker(i), homeNativeMarker(1-i)); run.err != nil {
+				return run.err
+			}
 		}
+		return nil
 	})
 	sc.Step(`^each later worker reads only its own retained home marker from a different owned volume$`, w.homeNativeSeparated)
 	sc.Step(`^neither worker can read the other home or the synthetic host-home sentinel and a same-home read control succeeds$`, func() error {

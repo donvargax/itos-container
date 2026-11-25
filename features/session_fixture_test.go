@@ -179,22 +179,18 @@ func (w *world) sessionProtected() (map[string]string, error) {
 
 func (w *world) sessionRun(recovering bool) error {
 	s := w.session
-	// Observation failures are data for Then; the action still records early
-	// unavailable/preflight outcomes rather than manufacturing a setup failure.
 	result, err := w.sessionProbe("create", "", func() error {
 		var err error
 		s.before, err = w.sessionProtected()
 		return err
 	})
 	if err != nil {
-		s.fixtureError = err
-		return nil
+		return err
 	}
 	s.create = result
 	s.owned, err = sessionReadRecord(w.sessionRecordPath())
 	if err != nil {
-		s.fixtureError = err
-		return nil
+		return err
 	}
 	if recovering {
 		// The named write fault remains active for creation, including any
@@ -204,8 +200,7 @@ func (w *world) sessionRun(recovering bool) error {
 	s.cleanupStart = len(s.api.requests)
 	s.cleanup, err = w.sessionProbe("cleanup", result.Reference, nil)
 	if err != nil {
-		s.fixtureError = err
-		return nil
+		return err
 	}
 	s.final, err = sessionReadRecord(w.sessionRecordPath())
 	if err == nil {
@@ -214,8 +209,7 @@ func (w *world) sessionRun(recovering bool) error {
 	if err == nil && w.doctor.real != nil {
 		s.resourcesAfter, err = w.doctor.real.snapshotResources()
 	}
-	s.fixtureError = err
-	return nil
+	return err
 }
 
 func (w *world) closeSession() error {

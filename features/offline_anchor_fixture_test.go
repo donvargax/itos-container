@@ -180,7 +180,7 @@ func (w *world) buildAnchorProbe(destination string) error {
 func (w *world) anchorRace(replacement string) error {
 	w.anchorExecute(replacement)
 	w.anchor.control.anchorExecute("")
-	return nil // all action failures are observations for Then
+	return errors.Join(w.anchor.err, w.anchor.control.anchor.err)
 }
 
 func (w *world) anchorSubstitute(kind string) error {

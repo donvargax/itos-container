@@ -286,7 +286,6 @@ func (w *world) egressIsolationProbes(table *godog.Table, known map[string][]str
 	if len(iso.rows) != len(known) {
 		return fmt.Errorf("%d of the %d defined rows were asked for", len(iso.rows), len(known))
 	}
-	// An unavailable control is kept for Then: it fails there, never skips.
 	iso.before, iso.controlErr = iso.s.routeControls(false)
 	iso.planBefore, err = iso.controlPlan("b")
 	iso.controlErr = errors.Join(iso.controlErr, err)
@@ -306,5 +305,5 @@ func (w *world) egressIsolationProbes(table *godog.Table, known map[string][]str
 	resolv, err := os.ReadFile("/etc/resolv.conf")
 	iso.controlErr = errors.Join(iso.controlErr, err)
 	iso.resolvAfter = string(resolv)
-	return nil
+	return iso.controlErr
 }

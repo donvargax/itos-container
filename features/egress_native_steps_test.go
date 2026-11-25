@@ -198,11 +198,8 @@ func (w *world) egressWidenDuringRun() error {
 	if err = run.start(); err != nil {
 		return err
 	}
-	// A product that never brings the worker to a barrier has returned or is
-	// stuck: either way its result is read now and left for Then.
 	if !run.await("attach", 150*time.Second) {
-		run.finish(10 * time.Second)
-		return nil
+		return run.missingBarrier("attach")
 	}
 	run.observe("attach")
 	run.attach(run.observed["attach"])
@@ -212,8 +209,7 @@ func (w *world) egressWidenDuringRun() error {
 		return err
 	}
 	if !run.await("edit", 2*time.Minute) {
-		run.finish(10 * time.Second)
-		return nil
+		return run.missingBarrier("edit")
 	}
 	wider := []string{"first.example", "later.example"}
 	if err = os.WriteFile(w.doctor.checkout+"/itos-container.yaml", []byte(egressAllowlistPolicy(wider, "")), 0600); err != nil {
@@ -224,8 +220,7 @@ func (w *world) egressWidenDuringRun() error {
 		return err
 	}
 	if !run.await("approve", 2*time.Minute) {
-		run.finish(10 * time.Second)
-		return nil
+		return run.missingBarrier("approve")
 	}
 	// The oracle now describes the wider request; the review is answered yes.
 	w.approval.allow, n.names = wider, wider
@@ -246,5 +241,5 @@ func (w *world) egressWidenDuringRun() error {
 	// the independent controls repeated after the worker's attempts.
 	run.finish(3 * time.Minute)
 	n.controlAll()
-	return approveErr
+	return errors.Join(approveErr, run.err, run.observed["attach"].err, run.observed["edit"].err, run.observed["approve"].err)
 }

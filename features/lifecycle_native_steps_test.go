@@ -20,8 +20,8 @@ func (w *world) lifecycleNativeSteps(sc lifecycleStepRegistrar) {
 	sc.Step(`^a CI lifecycle checkout with a ready signal-handling probe that exits (\d+)$`, func(child int) error {
 		return w.lifecycleFixture("handle", "", "", child, 0)
 	})
-	sc.Step(`^run launches the probe and the harness sends "([^"]*)" to the controller after the ready frame$`, func(signal string) {
-		w.lifecycleSignalAction(signal, false)
+	sc.Step(`^run launches the probe and the harness sends "([^"]*)" to the controller after the ready frame$`, func(signal string) error {
+		return w.lifecycleSignalAction(signal, false)
 	})
 	sc.Step(`^the worker records exactly one "([^"]*)" and the product returns the observed exit (\d+) after confirmed cleanup$`, func(signal string, child int) error {
 		return errors.Join(w.lifecycleReceipts(signal, child), w.lifecycleComplete())
@@ -44,8 +44,8 @@ func (w *world) lifecycleNativeSteps(sc lifecycleStepRegistrar) {
 	sc.Step(`^a CI lifecycle checkout with a ready signal-recording probe that keeps running and a signal acknowledgement delayed (\d+) percent of grace$`, func(delay int) error {
 		return w.lifecycleFixture("ignore", "", "", 17, delay)
 	})
-	sc.Step(`^run launches the probe and the harness sends "([^"]*)" followed by repeated SIGINT and SIGTERM during grace$`, func(signal string) {
-		w.lifecycleSignalAction(signal, true)
+	sc.Step(`^run launches the probe and the harness sends "([^"]*)" followed by repeated SIGINT and SIGTERM during grace$`, func(signal string) error {
+		return w.lifecycleSignalAction(signal, true)
 	})
 	sc.Step(`^the worker records only the first "([^"]*)" and native observations show it alive before the configured grace expires$`, func(signal string) error {
 		if err := w.lifecycleResult(137); err != nil {
