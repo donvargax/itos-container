@@ -137,6 +137,9 @@ type Result struct {
 	Issues      []Issue
 	Ready       bool
 	Credentials *CredentialResult
+
+	// EngineDeadline also bounds doctor observations that follow engine readiness.
+	EngineDeadline time.Time
 }
 
 // ContextEngine separates establishment from the retained inspection lifetime.

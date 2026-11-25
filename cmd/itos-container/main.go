@@ -360,8 +360,8 @@ func doctorSockets(input readinessport.Input) inspection.Sockets {
 	return inspection.Sockets{
 		Platform: socketsport.Platform{OS: input.OS, Architecture: input.Architecture},
 		Kernel:   socketsnative.New(),
-		Runtimes: func(checkout string) socketsport.Runtimes {
-			return socketsdocker.Runtimes{Readiness: docker.Engine{}, Selection: input.Host, Checkout: checkout}
+		Runtimes: func(checkout string, engine readinessport.EngineIdentity) socketsport.Runtimes {
+			return socketsdocker.Runtimes{Readiness: docker.Engine{}, Selection: input.Host, Checkout: checkout, Expected: engine}
 		},
 	}
 }

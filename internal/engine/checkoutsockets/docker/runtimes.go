@@ -45,6 +45,8 @@ import (
 type Runtimes struct {
 	Readiness           rp.ContextEngine
 	Selection, Checkout string
+	// Expected binds the lookup to an endpoint and daemon already inspected by the caller.
+	Expected rp.EngineIdentity
 }
 
 // Runsc reports the registration of the runtime named runsc.
@@ -60,6 +62,9 @@ func (r Runtimes) Runsc(ctx context.Context) (port.Registration, port.Failure) {
 		return unreadable(ctx)
 	}
 	defer pin.Close()
+	if r.Expected.Endpoint != "" && pin.Endpoint() != r.Expected.Endpoint {
+		return unreadable(ctx)
+	}
 	// The session keeps the lifetime its establishment was given, which can
 	// outlast this call: only a view bound to the call's context ends with it.
 	requests, ok := pin.(rp.ContextSession)
@@ -70,6 +75,9 @@ func (r Runtimes) Runsc(ctx context.Context) (port.Registration, port.Failure) {
 	version, versionFailure := inspect.Version()
 	info, infoFailure := inspect.Info()
 	if versionFailure != rp.None || infoFailure != rp.None || readiness.ValidateEngine(version, info) != rp.None {
+		return unreadable(ctx)
+	}
+	if r.Expected.ID != "" && info.ID != r.Expected.ID {
 		return unreadable(ctx)
 	}
 	socket := strings.TrimPrefix(pin.Endpoint(), "unix://")

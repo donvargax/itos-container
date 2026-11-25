@@ -57,6 +57,35 @@ func TestUnknownReadinessFailureCannotSucceed(t *testing.T) {
 	}
 }
 
+func TestReadyDoctorOmitsCredentialFailureGrantList(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	r := &porttest.Readiness{Result: port.Result{
+		Ready: true,
+		Policy: &policy.Result{Policy: &policy.Policy{
+			Version: 3,
+			Credentials: []policy.Credential{
+				{Kind: "claude-token", Source: "/example/claude.json"},
+			},
+		}},
+		Credentials: &port.CredentialResult{},
+	}}
+	c := CLI{Readiness: r, JSON: true}
+	if code := c.Run(&cli.UI{Stdout: &stdout, Stderr: &stderr}); code != 0 {
+		t.Fatalf("ready doctor returned exit %d: %s", code, stderr.String())
+	}
+	var body struct {
+		OK          bool
+		Problems    []readinessProblem
+		Credentials json.RawMessage
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if !body.OK || len(body.Problems) != 0 || body.Credentials != nil {
+		t.Fatalf("successful inspection must omit the credential failure grant list: %s", stdout.String())
+	}
+}
+
 func TestUnsupportedHostReadinessDiagnostic(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	r := &porttest.Readiness{Result: port.Result{

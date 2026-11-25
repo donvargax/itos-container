@@ -188,7 +188,7 @@ mutation:
       line_text: answer := make(chan bool, 1)
     - file: cmd/itos-container/main.go
       function: github.com/donvargax/itos-container/cmd/itos-container#run
-      hash: 741c4959f91f3dd1
+      hash: 6a67c65ed216ab38
       line_in_function: 21
       column: 15
       original: ">"

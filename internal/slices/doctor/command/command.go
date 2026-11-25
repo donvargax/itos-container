@@ -11,7 +11,7 @@ import (
 
 // CLI is the doctor command, with its inspection capability injected by main.
 type CLI struct {
-	Approval        approval.Inspector    `kong:"-"`
+	Approval        port.Approval         `kong:"-"`
 	Presentation    approval.Presentation `kong:"-"`
 	Policies        port.Policies         `kong:"-"`
 	RootPolicies    port.Policies         `kong:"-"` // reads through the root Credentials pins
@@ -69,12 +69,13 @@ func (c CLI) Run(ui *cli.UI) int {
 		return presentCredentials(ui, requestedCredentials(policy), *result, c.JSON)
 	}
 	if !c.ManifestOnly {
-		if c.Approval != nil {
-			view := c.Approval.Inspect()
-			return presentApprovalReadiness(ui, view, c.Presentation, c.JSON, c.detectSockets(view.Inspection))
-		}
 		result := domain.InspectReadiness(c.Readiness)
-		return presentReadiness(ui, result, c.JSON, c.detectSockets(result))
+		sockets := c.detectSockets(result)
+		if c.Approval != nil {
+			view := c.Approval.InspectReadiness(result)
+			return presentApprovalReadiness(ui, view, c.Presentation, c.JSON, sockets)
+		}
+		return presentReadiness(ui, result, c.JSON, sockets)
 	}
 	policy, manifest := domain.InspectManifest(c.Policies, c.Manifests)
 	if manifest == nil {

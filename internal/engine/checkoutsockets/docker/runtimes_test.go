@@ -197,6 +197,28 @@ func TestRunscRegistration(t *testing.T) {
 			t.Errorf("opened %q, %q %d times", e.selection, e.checkout, e.opens)
 		}
 	})
+	t.Run("previously_inspected_engine", func(t *testing.T) {
+		for _, name := range []string{"same engine", "changed endpoint", "changed daemon"} {
+			t.Run(name, func(t *testing.T) {
+				d := serve(t, reply(withRunsc(`{"path":"runsc"}`)))
+				lookup := adapter(newEngine(d.endpoint))
+				lookup.Expected = rp.EngineIdentity{Endpoint: d.endpoint, ID: "engine-A"}
+				want, requests := gvisor, int32(1)
+				switch name {
+				case "changed endpoint":
+					lookup.Expected.Endpoint = "unix:///run/other.sock"
+					want, requests = unread, 0
+				case "changed daemon":
+					lookup.Expected.ID = "engine-B"
+					want, requests = unread, 0
+				}
+				got, failure := lookup.Runsc(t.Context())
+				if (result{got, failure}) != want || d.requests.Load() != requests {
+					t.Fatalf("observed %v, %v after %d requests, want %+v after %d", got, failure, d.requests.Load(), want, requests)
+				}
+			})
+		}
+	})
 	t.Run("validated_daemon", func(t *testing.T) {
 		for name, mutate := range map[string]func(*engine){
 			"readiness open failure":  func(e *engine) { e.failure = rp.EngineUnavailable },

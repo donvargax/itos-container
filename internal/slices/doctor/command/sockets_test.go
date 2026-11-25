@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/donvargax/itos-container/internal/cli"
 	sockets "github.com/donvargax/itos-container/internal/engine/checkoutsockets/port"
@@ -16,10 +17,11 @@ import (
 // succeeded, as detection requires.
 func inspected(issues ...port.Issue) port.Result {
 	return port.Result{
-		Checkout: &port.CheckoutIdentity{Root: "/checkout"},
-		Engine:   &port.EngineIdentity{ID: "engine-A"},
-		Issues:   issues,
-		Ready:    len(issues) == 0,
+		EngineDeadline: time.Now().Add(5 * time.Second),
+		Checkout:       &port.CheckoutIdentity{Root: "/checkout"},
+		Engine:         &port.EngineIdentity{ID: "engine-A"},
+		Issues:         issues,
+		Ready:          len(issues) == 0,
 	}
 }
 
@@ -53,21 +55,40 @@ func TestDoctorNamesTheConfirmedBackend(t *testing.T) {
 		{sockets.GVisor, "gvisor", "checkout socket backend: gvisor"},
 		{sockets.Neither, "neither", "checkout socket backend: neither; late host sockets reachable"},
 	} {
-		code, _, _, fake, body := runSockets(t, inspected(), sockets.Selection{Backend: c.backend}, true)
+		result := inspected()
+		code, _, _, fake, body := runSockets(t, result, sockets.Selection{Backend: c.backend}, true)
 		if code != 0 || !body.OK || body.Inspection["ready"] != true || len(body.Problems) != 0 {
 			t.Fatalf("%s: exit %d, %+v", c.name, code, body)
 		}
 		if got := body.Inspection["checkout_sockets"]; !jsonEqual(got, map[string]any{"backend": c.name}) {
 			t.Fatalf("%s: checkout_sockets = %#v", c.name, got)
 		}
-		if len(fake.Checkouts) != 1 || fake.Checkouts[0] != "/checkout" || fake.Ended[0] || !fake.Deadline {
+		if len(fake.Checkouts) != 1 || fake.Checkouts[0] != "/checkout" || fake.Ended[0] || fake.Deadline.IsZero() {
 			t.Fatalf("%s: detection ran %+v, want once for the validated checkout under the bound", c.name, fake)
+		}
+		if len(fake.Engines) != 1 || fake.Engines[0] != *result.Engine {
+			t.Fatalf("%s: detection used engine identities %+v, want %v", c.name, fake.Engines, *result.Engine)
 		}
 		code, stdout, _, _, _ := runSockets(t, inspected(), sockets.Selection{Backend: c.backend}, false)
 		lines := strings.Split(stdout, "\n")
 		if code != 0 || !contains(lines, c.line) || !contains(lines, "runtime isolation is not established") || !contains(lines, "inspection ready") {
 			t.Fatalf("%s: exit %d, %q", c.name, code, stdout)
 		}
+	}
+}
+
+func TestDoctorUsesTheEngineInspectionDeadlineForSocketDetection(t *testing.T) {
+	result := inspected()
+	result.EngineDeadline = time.Now().Add(time.Second)
+	code, _, _, fake, _ := runSockets(t, result, sockets.Selection{Backend: sockets.Landlock}, true)
+	if code != 0 || !fake.Deadline.Equal(result.EngineDeadline) {
+		t.Fatalf("exit %d, detection deadline %v, want %v", code, fake.Deadline, result.EngineDeadline)
+	}
+
+	result.EngineDeadline = time.Now().Add(-time.Second)
+	code, _, _, _, body := runSockets(t, result, sockets.Selection{Backend: sockets.Landlock}, true)
+	if code != 75 || body.OK || body.Inspection["ready"] != false || body.Inspection["checkout_sockets"] != nil || len(body.Problems) != 1 || body.Problems[0].Rule != "doctor.engine.timeout" {
+		t.Fatalf("expired engine inspection reported exit %d and %+v", code, body)
 	}
 }
 

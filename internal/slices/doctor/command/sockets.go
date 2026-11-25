@@ -2,14 +2,10 @@ package command
 
 import (
 	"context"
-	"time"
 
 	sockets "github.com/donvargax/itos-container/internal/engine/checkoutsockets/port"
 	"github.com/donvargax/itos-container/internal/engine/readiness/port"
 )
-
-// socketsBound is the engine inspection bound, which detection runs inside.
-const socketsBound = 5 * time.Second
 
 // socketsReport is the confirmed backend, exactly one member.
 type socketsReport struct {
@@ -45,15 +41,15 @@ func (c CLI) detectSockets(result port.Result) *socketsOutcome {
 	if c.Sockets == nil || !detectable(result) {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), socketsBound)
+	ctx, cancel := context.WithDeadline(context.Background(), result.EngineDeadline)
 	defer cancel()
-	selection := c.Sockets.Detect(ctx, result.Checkout.Root)
-	if selection.Confirmed() {
-		return confirmed(selection.Backend)
-	}
-	if selection.Failure == sockets.Cancelled {
+	selection := c.Sockets.Detect(ctx, result.Checkout.Root, *result.Engine)
+	if ctx.Err() != nil || selection.Failure == sockets.Cancelled {
 		p := readinessDiagnostic(port.Issue{Kind: port.EngineTimeout, Subject: "DOCKER_HOST"})
 		return &socketsOutcome{problem: &p}
+	}
+	if selection.Confirmed() {
+		return confirmed(selection.Backend)
 	}
 	// Unsupported, NoProbe, ABIInvalid and a zero selection cannot reach a
 	// correctly assembled doctor; each is an unreadable kernel answer.
