@@ -53,6 +53,8 @@ type workflowStep struct {
 	With            map[string]string `yaml:"with"`
 }
 
+func validFixtureEnvironment(env map[string]string) bool { return maps.Equal(env, fixtureEnvironment) }
+
 func TestEngineWorkflow(t *testing.T) {
 	data, err := os.ReadFile("../.github/workflows/ci.yml")
 	if err != nil {
@@ -313,7 +315,7 @@ func engineWorkflowIssues(data []byte) []string {
 	require(engine.Timeout == 15 && !engine.ContinueOnError && len(engine.Needs) == 0, "engine job budget and independence")
 	require(len(engine.Env) == 0, "engine switch must be step-local")
 	enabledPath := ""
-	require(len(engine.Steps) == 7, "engine must have checkout, setup-go, preflight, preparation, scenarios, failure diagnostics and cleanup only")
+	require(len(engine.Steps) == 8, "engine must have checkout, setup-go, preflight, preparation, scenarios, failure diagnostics, cleanup and red report upload only")
 	if len(engine.Steps) >= 3 {
 		checkout, setup, preflight := engine.Steps[0], engine.Steps[1], engine.Steps[2]
 		require(checkout.Uses == "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" && checkout.With["ref"] == "${{ env.TO }}", "checkout head and pin")
@@ -524,6 +526,15 @@ func TestEngineRedWorkflow(t *testing.T) {
 		{"conditional test step", "failure propagation", func(w *engineWorkflow) {
 			changeStep(w, "platform-windows", "Tests", func(s *workflowStep) { s.If = "false" })
 		}},
+		{"missing report destination", "step-local red report path", func(w *engineWorkflow) {
+			changeStep(w, "platform-windows", "Tests", func(s *workflowStep) { delete(s.Env, redReportVariable) })
+		}},
+		{"upload skips failures", "red report upload guard", func(w *engineWorkflow) {
+			changeStep(w, "engine-shard", redUploadStep, func(s *workflowStep) { s.If = strings.ReplaceAll(s.If, "always()", "success()") })
+		}},
+		{"colliding shard artifact names", "red report upload inputs", func(w *engineWorkflow) {
+			changeStep(w, "engine-shard", redUploadStep, func(s *workflowStep) { s.With["name"] = "red-scenarios-engine-shard" })
+		}},
 	} {
 		t.Run("reject "+tc.name, func(t *testing.T) {
 			var broken engineWorkflow
@@ -561,55 +572,4 @@ func validRedDispatch(node yaml.Node) bool {
 	description, ok := input["description"].(string)
 	description = strings.ToLower(description)
 	return len(input) == 4 && input["type"] == "string" && input["required"] == false && input["default"] == "" && ok && strings.Contains(description, "whitespace-separated") && strings.Contains(description, "complete scenario tags") && strings.Contains(description, "expected-red")
-}
-
-func engineRedWorkflowIssues(data []byte) []string {
-	var w engineWorkflow
-	if err := yaml.Unmarshal(data, &w); err != nil {
-		return []string{err.Error()}
-	}
-	var issues []string
-	require := func(ok bool, issue string) {
-		if !ok {
-			issues = append(issues, issue)
-		}
-	}
-	require(validRedDispatch(w.On["workflow_dispatch"]), "exact optional red dispatch inputs")
-	allowed := map[string]bool{}
-	for job, name := range map[string]string{"engine-shard": "Engine scenarios", "platform-macos": "Tests", "platform-windows": "Tests"} {
-		j := w.Jobs[job]
-		require(!j.ContinueOnError, "job failure propagation for "+job)
-		found := 0
-		for i, step := range j.Steps {
-			if step.Name != name {
-				continue
-			}
-			found++
-			allowed["jobs."+job+".steps."+strconv.Itoa(i)+".env."+redVariable] = true
-			require(step.Env[redVariable] == redDispatchExpression, "step-local red selection for "+job)
-			run := "go test ./... -count=1 -timeout=20m"
-			if job == "engine-shard" {
-				run = engineInvocation
-			}
-			require(step.Run == run, "unchanged test command for "+job)
-			require(!step.ContinueOnError && step.If == "", "step failure propagation for "+job)
-		}
-		require(found == 1, "exactly one selected test step for "+job)
-	}
-	var node yaml.Node
-	if err := yaml.Unmarshal(data, &node); err != nil {
-		return append(issues, err.Error())
-	}
-	seen := 0
-	walkFixtureScalars(&node, "", func(path, value string) {
-		if strings.HasPrefix(path, "on.workflow_dispatch.inputs.red_scenarios.") {
-			return
-		}
-		if strings.Contains(path, redVariable) || strings.Contains(value, redVariable) || strings.Contains(value, "red_scenarios") {
-			require(allowed[path] && value == redDispatchExpression, "leaked red selection at "+path)
-			seen++
-		}
-	})
-	require(seen == 3, "exactly three step-local red selection values")
-	return issues
 }

@@ -66,7 +66,8 @@ const (
 )
 
 func TestFeatures(t *testing.T) {
-	selection, err := selectScenarios(*scenarios, ".", readFeatureEnvironment(os.Getenv, runtime.GOOS, runtime.GOARCH))
+	env := readFeatureEnvironment(os.Getenv, runtime.GOOS, runtime.GOARCH)
+	selection, err := selectScenarios(*scenarios, ".", env)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +91,7 @@ func TestFeatures(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := runPreparedFeatures(selection, root, godog.Options{
-		Format:      "pretty",
+		Format:      env.reportFormat(),
 		Output:      os.Stdout,
 		Paths:       []string{"."},
 		Strict:      true,
@@ -123,7 +124,9 @@ func runPreparedFeatures(selection scenarioSelection, root string, options godog
 
 // Environment and platform values enter the policy as data. Harness entry points
 // supply the real lookup; regression fixtures never enable engine access.
-type featureEnvironment struct{ engine, ci, actions, event, red, shard, os, arch string }
+type featureEnvironment struct{ engine, ci, actions, event, red, redReport, shard, os, arch string }
+
+const redReportVariable = "ITOS_CONTAINER_RED_REPORT"
 
 func readFeatureEnvironment(lookup func(string) string, hostOS, arch string) featureEnvironment {
 	env := featureEnvironment{
@@ -134,7 +137,17 @@ func readFeatureEnvironment(lookup func(string) string, hostOS, arch string) fea
 	if env.manualDispatch() {
 		env.red = lookup("ITOS_CONTAINER_RED_SCENARIOS")
 	}
+	if env.redRequested() {
+		env.redReport = lookup(redReportVariable)
+	}
 	return env
+}
+
+func (env featureEnvironment) reportFormat() string {
+	if env.redReport != "" {
+		return "pretty,cucumber:" + env.redReport
+	}
+	return "pretty"
 }
 
 func (env featureEnvironment) manualDispatch() bool {
