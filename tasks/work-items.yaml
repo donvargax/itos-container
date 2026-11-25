@@ -2899,7 +2899,7 @@ items:
     title: Real-engine red evidence may be recorded in CI at landing, on the published red commit
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: T-92
