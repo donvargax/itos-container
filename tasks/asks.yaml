@@ -402,3 +402,4 @@ questions:
   - id: q-99
     item: "slice-38"
     question: "slice-38 and slice-39 (exec and TTY into an owned session): should they wait for harness support in the container?"
+    answer: "Yes. The person, 2026-11-25: slice-38 and slice-39 come after harness support in the container: OpenCode (slice-40), Claude Code (slice-31 and the children it is broken into), Codex (slice-48 to slice-53), and later possibly further harnesses. They are neither deferred nor dropped. slice-38 depends on slice-40, slice-31 and slice-53 (slice-53 ends the Codex chain), and slice-39 already waits on slice-38. When slice-31's breakdown names its children, slice-38 depends on those instead."
