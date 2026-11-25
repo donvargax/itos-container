@@ -123,7 +123,7 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 		// A model kong refuses is a bug, reported as one.
 		return ui.Fail(err, wantsJSON(args))
 	}
-	if len(args) > 0 && args[0] == "__complete" {
+	if args[0] == "__complete" {
 		for _, line := range cli.Complete(parser.Model, args[1:]) {
 			_, _ = fmt.Fprintln(stdout, line)
 		}
@@ -161,16 +161,7 @@ func run(args []string, in io.Reader, stdout, stderr io.Writer, options ...kong.
 		if filepath.IsAbs(root) {
 			root = filepath.Clean(root)
 		}
-		state := os.Getenv("XDG_STATE_HOME")
-		if state == "" && filepath.IsAbs(os.Getenv("HOME")) {
-			state = filepath.Join(os.Getenv("HOME"), ".local", "state")
-		}
-		if filepath.IsAbs(state) {
-			state = filepath.Join(state, "itos-container")
-		} else {
-			state = ""
-		}
-
+		state := readinesssource.SelectedState(os.Getenv("XDG_STATE_HOME"), os.Getenv("HOME"))
 		c.Doctor.RootPolicies, c.Doctor.Credentials = credentialInspection(readinessport.CredentialInput{
 			Root: root, State: state, OS: runtime.GOOS, Architecture: runtime.GOARCH, UID: int64(os.Geteuid()),
 		})

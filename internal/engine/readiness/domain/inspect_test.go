@@ -51,6 +51,21 @@ func TestInspectSnapshot(t *testing.T) {
 	}
 }
 
+func TestImageRefusalRetainsTheEngineInspectionDeadline(t *testing.T) {
+	i, input, engine, _ := fixture()
+	deadline := time.Date(2030, time.January, 2, 3, 4, 5, 0, time.UTC)
+	engine.Session.DeadlineValue = deadline
+	delete(engine.Session.Images, porttest.Reference)
+
+	got := i.Inspect(input)
+	if got.Engine == nil || got.Ready || len(got.Issues) != 1 || got.Issues[0].Kind != port.ImageMissing {
+		t.Fatalf("expected a validated engine with a missing image, got %#v", got)
+	}
+	if got.EngineDeadline != deadline {
+		t.Fatalf("engine deadline = %v, want %v for the follow-up inspection", got.EngineDeadline, deadline)
+	}
+}
+
 func TestCredentialAdmissionWithoutAnObserverFailsBeforeEffects(t *testing.T) {
 	i, input, engine, checkout := fixture()
 	i.AllowVersion3 = true
