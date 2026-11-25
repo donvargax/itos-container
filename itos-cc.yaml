@@ -204,3 +204,12 @@ mutation:
       replacement: "1"
       reason: landlock_restrict_self takes two arguments, the ruleset descriptor and the flags. The Go syscall.Syscall wrapper always passes three words, so the trailing 0 is the unused third argument, which the kernel never reads. Replacing it with 1 hands the kernel the same two arguments and the same descriptor and flags, so the restriction applied, its error and every later result are identical. No test can observe an argument the kernel ignores.
       line_text: _, _, e := syscall.Syscall(unix.SYS_LANDLOCK_RESTRICT_SELF, uintptr(fd), uintptr(flags), 0) //nolint:gosec // a descriptor number fits uintptr
+    - file: internal/engine/readiness/domain/inspect.go
+      function: github.com/donvargax/itos-container/internal/engine/readiness/domain.Inspector#InspectBeforeEngine
+      hash: 10320fef13cb40bf
+      line_in_function: 23
+      column: 21
+      original: "||"
+      replacement: "&&"
+      reason: Policy inspection returns either a complete policy with no issues or a nil policy with at least one issue. Both readiness gates that replace the result likewise return a nil policy with an issue. At this guard the two predicates always have the same truth value, so changing OR to AND preserves every return and subsequent inspection.
+      line_text: if p.Policy == nil || len(p.Issues) != 0 {
