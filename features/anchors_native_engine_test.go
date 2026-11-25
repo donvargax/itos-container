@@ -66,7 +66,7 @@ func (a *offlineAPI) anchorsResponse(r *http.Request, q offlineRequest, status i
 	}
 }
 
-func (w *world) anchorsForeign() {
+func (w *world) anchorsForeign() error {
 	w.anchorsStart()
 	w.anchorsLive()
 	if w.anchors.initial.Sequence > 0 {
@@ -107,6 +107,7 @@ func (w *world) anchorsForeign() {
 	}
 	other.anchorsStatus()
 	other.anchorsStopTwice()
+	return errors.Join(w.anchorsCause(), other.anchorsCause(), r.actionError(), other.recovery.actionError())
 }
 
 func (w *world) anchorsFailedRelease() bool {
@@ -188,7 +189,7 @@ func (w *world) closeAnchorsForeign() error {
 	return w.anchorsDeleteFixtureVolume(w.anchors.foreign)
 }
 
-func (w *world) anchorsPair() {
+func (w *world) anchorsPair() error {
 	r, s := w.recovery, w.anchors
 	other := r.second
 	for _, p := range []*world{w, other} {
@@ -247,4 +248,5 @@ func (w *world) anchorsPair() {
 	}
 	r.after = w.recoveryStart("status", "--json")
 	r.after.wait()
+	return errors.Join(w.anchorsCause(), other.anchorsCause(), r.actionError(), other.recovery.actionError())
 }

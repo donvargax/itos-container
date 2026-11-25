@@ -11,11 +11,10 @@ import (
 	"time"
 )
 
-func (w *world) lifecycleLossAction() {
+func (w *world) lifecycleLossAction() error {
 	l, r := w.loss, w.recovery
 	r.run = w.recoveryStartWithin(150*time.Second, "run", "--", "/workspace/slice-14-probe", "loss", "/workspace/slice-15-challenge.json")
-	// Every product refusal, missing barrier and early exit remains data for
-	// Then. Nothing invokes a second worker or substitutes harness cleanup.
+	// The loss action requires a live controller at the barrier.
 	l.err = w.lossAwait(125*time.Second, true, func() (bool, error) {
 		if !w.offline.api.running() {
 			return false, nil
@@ -24,7 +23,7 @@ func (w *world) lifecycleLossAction() {
 		return offlineHex(r.worker) && offlineHex(r.id), r.err
 	})
 	if l.err != nil {
-		return
+		return errors.Join(l.err, r.actionError())
 	}
 	state := filepath.Join(w.doctor.env["XDG_STATE_HOME"], "itos-container")
 	files := w.offline.isolation.config.Files
@@ -35,16 +34,16 @@ func (w *world) lifecycleLossAction() {
 	files["admission"] = w.admissionPath(r.id)
 	if err := w.lossCollectRound(true); err != nil {
 		l.err = err
-		return
+		return errors.Join(l.err, r.actionError())
 	}
 	if err := r.run.killController(); err != nil {
 		l.err = err
-		return
+		return errors.Join(l.err, r.actionError())
 	}
 	r.run.wait() // the independent tracer reaps its child, reporting SIGKILL
 	if r.run.err != nil || r.run.exit != 137 {
 		l.err = errors.Join(r.run.err, fmt.Errorf("controller loss was not confirmed (exit %d)", r.run.exit))
-		return
+		return errors.Join(l.err, r.actionError())
 	}
 	l.dead = time.Now()
 	// This call generates the nonce only after confirmed death. No stdin or
@@ -69,6 +68,7 @@ func (w *world) lifecycleLossAction() {
 	}
 	r.after = w.recoveryStart("status", "--json")
 	r.after.wait()
+	return errors.Join(l.err, r.actionError())
 }
 
 func (w *world) lossAwait(limit time.Duration, controllerLive bool, observe func() (bool, error)) error {
