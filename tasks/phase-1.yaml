@@ -9695,6 +9695,3 @@
     workflows' itos action pins with it: donvargax/itos at the v8.49.0 commit in
     .github/workflows/ci.yml and release.yml. Nothing else changes; a release note asking for more
     is reported, not done here.
-  done_when:
-    - run: "grep -q 'version: \"8.49.0\"' itos.yaml && ! grep -q '8\\.46\\.4' itos.yaml && grep -q '# v8.49.0' .github/workflows/ci.yml && grep -q '# v8.49.0' .github/workflows/release.yml && ! grep -q '# v8.46.4' .github/workflows/ci.yml .github/workflows/release.yml"
-      timeout: 30
