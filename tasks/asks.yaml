@@ -383,6 +383,7 @@ questions:
   - id: q-95
     item: "slice-38"
     question: "slice-38: its implementer (attempt 2) returned blocked, asking for a dispatched red run of @ID-EXEC-12 to -16 at fb23b67 before runtime work. Does it still wait on that?"
+    answer: "No longer waiting: run 45557542073 shows EXEC-12..16 failing in the When step (exec not implemented), not at the first Then. The re-take fixes the native When steps so a missing or refused exec is recorded and asserted in the Then, and records first-Then red in CI before runtime work. (The coordinator, 2026-11-24, for the person.)"
   - id: q-96
     item: "p2-control-state-upgrade-contract"
     question: "p2-control-state-upgrade-contract: does itos-container owe existing v0.1.0 control state an upgrade path, a migration or a documented manual cleanup, and does a schema bump drop the persisted binding device field or does a stable filesystem ID replace it?"
@@ -393,3 +394,8 @@ questions:
     question: "slice-60: its kept attempt fails the red check only because TestCancelledSweepDoesNotInspectDirectories (internal/engine/approval/disk/control_sweep_test.go) passes on red. How must that test prove the cancelled sweep?"
     answer: "The coordinator, 2026-11-24: TestCancelledSweepDoesNotInspectDirectories only asserts absence (with a cancelled context the sweep opens no directory and finds no names), so an implementation that does nothing passes it on red, and the red check is right to refuse it as proof. Keep the test and pair it, in the same test, with a positive control: the same tree swept with a live context opens the root and removes an orphaned .intent-<nonce>.tmp, and only the cancelled sweep opens nothing and removes nothing. Then it fails on red and passes on green. Fix it in the kept attempt; nothing else in the attempt changes for this."
     decision: 38
+  - id: q-98
+    item: "slice-40"
+    question: "slice-40: its spec is drafted fresh from current main now that its old branch is renamed slice-40-old. What may the drafter and the implementer reuse from the earlier attempt?"
+    answer: "The coordinator, 2026-11-24: the earlier spec is kept on branch slice-40-old. Its scenarios are in the 'test: specify slice-40' commits ending at 4f52914 ('require worker absence before home reuse'). The drafter may reuse any of them that still match slice-40's why and decision 0035, where the one grant is the OpenCode Go provider entry from auth.json. The earlier implementer's work on two of those nine scenarios is commit d9e5a2d ('feat: read the OpenCode login request in policy version 4'), kept on branch slice-40-d9e5a2d. Once the new spec is accepted, the implementer may reuse it where the new spec keeps those two scenarios. Nothing from either branch is reused unread, and the new spec decides."
+    decision: 39
