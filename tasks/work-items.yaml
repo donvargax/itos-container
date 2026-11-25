@@ -2837,6 +2837,7 @@ items:
       names that only look similar are kept (see admission_leftover_test.go's cases). Out of scope:
       refusal-log copy temporaries and how long session state is kept, which both stay with
       p3-session-state-retention. Broken down from p3-registration-before-intent.
+    refs: [docs/decisions/0038-slice-60-s-cancelled-sweep-test-pairs-its-absence-check-with-a-live-context-positive-control.md]
   - id: T-83
     title: Record the open decision on what evidence lets recovery retire an uncertain create
     phase: 1
