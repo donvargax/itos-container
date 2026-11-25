@@ -2914,7 +2914,7 @@ items:
   - id: T-93
     title: A step that hits a harness failure fails at that step, so a report never shows it as the first Then's failure
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
