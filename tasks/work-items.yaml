@@ -2906,7 +2906,7 @@ items:
     title: A red_scenarios dispatch uploads a per-scenario results report from each job that runs scenarios
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: []
     kind: task
   - id: T-93
