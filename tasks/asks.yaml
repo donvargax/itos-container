@@ -391,3 +391,4 @@ questions:
   - id: q-97
     item: "slice-60"
     question: "slice-60: its kept attempt fails the red check only because TestCancelledSweepDoesNotInspectDirectories (internal/engine/approval/disk/control_sweep_test.go) passes on red. How must that test prove the cancelled sweep?"
+    answer: "The coordinator, 2026-11-24: TestCancelledSweepDoesNotInspectDirectories only asserts absence (with a cancelled context the sweep opens no directory and finds no names), so an implementation that does nothing passes it on red, and the red check is right to refuse it as proof. Keep the test and pair it, in the same test, with a positive control: the same tree swept with a live context opens the root and removes an orphaned .intent-<nonce>.tmp, and only the cancelled sweep opens nothing and removes nothing. Then it fails on red and passes on green. Fix it in the kept attempt; nothing else in the attempt changes for this."
