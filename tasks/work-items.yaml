@@ -2735,7 +2735,7 @@ items:
     title: engine-fixture prepares, hands off and cleans up a verified pinned Codex 0.167.0 fixture image
     phase: 1
     owner: donvargax
-    status: todo
+    status: doing
     depends_on: []
     kind: task
   - id: slice-58
@@ -2822,7 +2822,7 @@ items:
     title: The next control-lock holder removes orphaned .intent-<nonce>.tmp files and leaves records and live publishers' temporaries alone
     phase: 1
     owner: donvargax
-    status: todo
+    status: doing
     depends_on: []
     kind: slice
     why: >

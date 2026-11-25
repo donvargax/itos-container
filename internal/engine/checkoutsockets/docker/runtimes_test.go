@@ -140,6 +140,17 @@ func TestRunscRegistration(t *testing.T) {
 			t.Errorf("%d daemon requests, want 1", d.requests.Load())
 		}
 	})
+	t.Run("inventory_request_closes_connection", func(t *testing.T) {
+		d := serve(t, func(w http.ResponseWriter, r *http.Request) {
+			if !r.Close {
+				t.Error("inventory request did not ask the daemon to close the connection")
+			}
+			reply(withRunsc(`{"path":"runsc"}`))(w, r)
+		})
+		if got := observe(t.Context(), newEngine(d.endpoint)); got != gvisor {
+			t.Errorf("observed %+v, want %+v", got, gvisor)
+		}
+	})
 	t.Run("cancelled_read", func(t *testing.T) {
 		arrived, ended := make(chan struct{}), make(chan struct{})
 		d := serve(t, func(_ http.ResponseWriter, r *http.Request) {
