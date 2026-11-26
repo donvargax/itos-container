@@ -4,6 +4,7 @@ phases:
 queue:
   - slice-31
   - slice-40
+  - slice-61
   - T-76
   - slice-48
   - slice-49
@@ -2832,8 +2833,10 @@ items:
     depends_on: []
     kind: task
     deferred: >
-      Resume when the test-stage mount fix lands. The credential filesystem check fails on the
-      stage, so the timing work and its dependent profile must wait.
+      T-85 waits for bug-17. On the timing change, the final-only failures were Final terminal
+      output stays raw while owned cleanup proceeds (child exit -1) and Preparing a checkout already
+      excludes an overlapping run. Recheck both after the fixture watchdog bug is resolved. T-86
+      depends on the T-85 timing work.
   - id: T-86
     title: "Record the non-engine suite's measured profile: slowest scenario rows, harness tests and fixture setup, with their shares of wall time"
     phase: 1
@@ -2842,8 +2845,10 @@ items:
     depends_on: [T-85]
     kind: task
     deferred: >
-      Resume when the test-stage mount fix lands. The credential filesystem check fails on the
-      stage, so the timing work and its dependent profile must wait.
+      T-85 waits for bug-17. On the timing change, the final-only failures were Final terminal
+      output stays raw while owned cleanup proceeds (child exit -1) and Preparing a checkout already
+      excludes an overlapping run. Recheck both after the fixture watchdog bug is resolved. T-86
+      depends on the T-85 timing work.
   - id: T-87
     title: Fixtures in the non-engine tier build each product or probe binary once per suite run, not once per fixture or row
     phase: 1
@@ -2925,3 +2930,35 @@ items:
       stalls is still unknown. Diagnose the stall and make all three existing examples pass with
       their assertions intact.
     refs: [features/run_terminal.feature]
+  - id: slice-61
+    title: Record credential.filesystem as a warning in doctor and run status
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: slice
+    why: >
+      On 2026-11-26 the owner applied the 2026-11-24 rule that security controls must address a real
+      outsider. The local machine, repositories and accounts are trusted. Filesystem type describes
+      the owner's layout, and the approved workload already receives the model credential. Wherever
+      credential.filesystem alone would refuse, continue inspection, approval and run. Keep
+      detection for overlay, FUSE variants, NFS, 9p and other types covered by the existing check.
+      Doctor must show the warning with the affected path and filesystem type. Run must record it so
+      status shows the same path and type, without exposing credential contents. An independent
+      refusal still applies. Update decision 0027's 2026-11-10 amendment and supersede the
+      filesystem-type refusal in q-64 and its standing summary. Update the credential policy and
+      approval scenarios and prove the doctor, run and status outcomes.
+    refs: [docs/decisions/0027-credential-source-inspection.md, docs/decisions/0029-credential-approval.md, features/credentials-policy.feature, features/credentials-approval.feature]
+  - id: p2-readiness-approval-refusal-inventory
+    title: Identify the outsider each readiness and approval refusal stops
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Inventory every fail-closed refusal in readiness and approval. For each, record the
+      diagnostic, the condition that triggers it, and which outsider it stops from doing what. Apply
+      the trust boundary for the local machine, repositories and accounts. Where there is no
+      outsider, list the refusal as a candidate for a recorded warning, with its reason, for a
+      separate decision on changing behavior.
