@@ -2147,7 +2147,7 @@ items:
     depends_on: []
     kind: task
   - id: slice-40
-    title: Deliver an approved OpenCode login to one container run
+    title: Deliver the approved whole OpenCode login file writable at its normal path
     phase: 1
     owner: donvargax
     status: todo
@@ -2163,7 +2163,7 @@ items:
       credentials follow decision 0035: OpenCode issues no subscription token, so the one grant is
       the OpenCode Go provider entry from auth.json. Any harness may be the first in the container
       (the person, 2026-11-24), so this slice need not wait for the Codex and Claude slices.
-    refs: [docs/decisions/0039-slice-40-s-redraft-may-reuse-the-earlier-spec-on-slice-40-old-and-the-partial-implementation-on-slice-40-d9e5a2d.md]
+    refs: [docs/decisions/0040-share-the-approved-whole-opencode-login-file-at-its-normal-path.md, docs/decisions/0039-slice-40-s-redraft-may-reuse-the-earlier-spec-on-slice-40-old-and-the-partial-implementation-on-slice-40-d9e5a2d.md]
   - id: slice-41
     title: Start OpenCode headless with isolated home and configuration
     phase: 1
