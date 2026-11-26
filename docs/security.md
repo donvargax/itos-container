@@ -35,6 +35,10 @@ or sockets. Its CI red was accepted in q-34; runtime green remains required.
 It does not close the race after inspection or provide continuous enforcement.
 Do not treat a socket-free startup check as proof of host IPC isolation.
 
+Ordinary doctor reports which checkout socket backend the host offers (Landlock, gVisor or
+neither, with "late host sockets reachable"). That report is not enforcement: run does not use
+it, and it proves nothing about a worker's reach until the enforcement slices land.
+
 Continuous enforcement is deferred to milestone 2 under
 `p1-checkout-socket-kernel-enforcement`; see the
 [decision](decisions/0019-checkout-socket-milestone-limit.md) and

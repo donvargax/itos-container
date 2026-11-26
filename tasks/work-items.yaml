@@ -2215,14 +2215,9 @@ items:
     title: Report the checkout socket backend in doctor
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [T-64]
     kind: slice
-    why: >
-      Was p1-doctor-checkout-socket-backend.
-      Let the person see which backend a run would use before approving it. Cover Landlock, gVisor
-      and a host with neither backend through doctor’s read-only inspection. Broken down from
-      p1-checkout-socket-kernel-enforcement.
   - id: slice-43
     title: Bind the checkout socket backend to approval
     phase: 1
@@ -2900,3 +2895,20 @@ items:
       unattended or as an agent's workload. A later item specifies how it starts with its own
       isolated home and how its login reaches one approved container run, as the earlier harnesses
       do. Grok Build may be added where it fits once its terms and needs are known.
+  - id: bug-17
+    title: Valid terminal-size retry exits -1 in ID-RUNTTY-05
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: bug
+    why: >
+      On Linux at 10ad047, all three @ID-RUNTTY-05 examples in features/run_terminal.feature fail on
+      the host. A single example also fails in isolation. Reproduce with go test ./features -run
+      '^TestFeatures$' -scenarios='^@ID-RUNTTY-05$'. The first run must refuse invalid dimensions
+      before engine contact. After the fixture sets 113 by 37, the retry should complete owned
+      cleanup and exit zero, preserving the terminal settings and approval. Instead it exits -1. The
+      fixture has a five-second watchdog. A traced replay recorded SIGKILL, but the reason the retry
+      stalls is still unknown. Diagnose the stall and make all three existing examples pass with
+      their assertions intact.
+    refs: [features/run_terminal.feature]

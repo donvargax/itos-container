@@ -11,13 +11,14 @@ import (
 
 // CLI is the doctor command, with its inspection capability injected by main.
 type CLI struct {
-	Approval        approval.Inspector    `kong:"-"`
+	Approval        port.Approval         `kong:"-"`
 	Presentation    approval.Presentation `kong:"-"`
 	Policies        port.Policies         `kong:"-"`
 	RootPolicies    port.Policies         `kong:"-"` // reads through the root Credentials pins
 	Manifests       port.Manifests        `kong:"-"`
 	Readiness       port.Readiness        `kong:"-"`
 	Credentials     port.Credentials      `kong:"-"`
+	Sockets         port.Sockets          `kong:"-"`
 	PolicyOnly      bool                  `name:"policy-only" negatable:"" help:"Validate only itos-container.yaml, without manifest, host or approval checks."`
 	ManifestOnly    bool                  `name:"manifest-only" negatable:"" help:"Validate policy and manifest only; image metadata, host readiness and approval are not checked."`
 	CredentialsOnly bool                  `name:"credentials-only" negatable:"" help:"Inspect source metadata without reading credential contents; does not approve."`
@@ -35,16 +36,20 @@ func (CLI) Help() string {
 		"    --json prints schema 1, ok, problems, effective data and inspection facts.\n" +
 		"    File-only modes identify their scope as policy or manifest.\n" +
 		"    Ordinary inspection reports the fingerprint and current approval status; runtime isolation remains unproven.\n" +
+		"    It also names the checkout socket backend the host offers (landlock, gvisor or neither);\n" +
+		"    naming a backend is not enforcement.\n" +
 		"    Exit codes:\n" +
 		"      0  policy validation succeeded; other requested inspections also succeeded\n" +
 		"      1  unsupported or changed checkout, host, engine or image, or control state that is\n" +
-		"         unsafe, invalid or exposed to a worker checkout; unsafe credential source metadata or location\n" +
+		"         unsafe, invalid or exposed to a worker checkout; unsafe credential source metadata or location;\n" +
+		"         a runsc runtime that cannot be identified as gVisor keeping host sockets unreachable\n" +
 		"      2  invalid policy or command line, or invalid selected manifest, or a state location that\n" +
 		"         is relative or not valid UTF-8 (approval.state.location)\n" +
 		"      3  policy cannot be read, or another required local resource is unavailable,\n" +
 		"         including the account home or retained control state;\n" +
 		"         missing credential source or unavailable credential evidence\n" +
-		"      75 engine inspection failed or exceeded five seconds, or the control-state lock\n" +
+		"      75 engine inspection failed or exceeded five seconds, backend detection included (the\n" +
+		"         kernel's Landlock ABI or the engine's runtime inventory could not be read), or the control-state lock\n" +
 		"         was still held after ten seconds (approval.state.busy; retry the same command)\n"
 }
 
@@ -64,11 +69,13 @@ func (c CLI) Run(ui *cli.UI) int {
 		return presentCredentials(ui, requestedCredentials(policy), *result, c.JSON)
 	}
 	if !c.ManifestOnly {
+		result := domain.InspectReadiness(c.Readiness)
+		sockets := c.detectSockets(result)
 		if c.Approval != nil {
-			view := c.Approval.Inspect()
-			return presentApprovalReadiness(ui, view, c.Presentation, c.JSON)
+			view := c.Approval.InspectReadiness(result)
+			return presentApprovalReadiness(ui, view, c.Presentation, c.JSON, sockets)
 		}
-		return presentReadiness(ui, domain.InspectReadiness(c.Readiness), c.JSON)
+		return presentReadiness(ui, result, c.JSON, sockets)
 	}
 	policy, manifest := domain.InspectManifest(c.Policies, c.Manifests)
 	if manifest == nil {

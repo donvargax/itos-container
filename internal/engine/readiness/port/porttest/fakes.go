@@ -91,6 +91,7 @@ func (e *Engine) OpenCatalog(selection string, budget time.Duration) (port.Sessi
 // shared contract checks the same mapping and error outcomes on the SDK adapter.
 type Session struct {
 	Address                                   string
+	DeadlineValue                             time.Time
 	VersionData                               port.Version
 	InfoData                                  port.Info
 	Images                                    map[string]port.Image
@@ -104,7 +105,8 @@ type Session struct {
 	AfterImage                                func()
 }
 
-func (s *Session) Endpoint() string { return s.Address }
+func (s *Session) Endpoint() string    { return s.Address }
+func (s *Session) Deadline() time.Time { return s.DeadlineValue }
 func (s *Session) Version() (port.Version, port.Failure) {
 	s.VersionReads++
 	if s.VersionFailure != port.None {

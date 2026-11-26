@@ -36,23 +36,25 @@ type inspectionReport struct {
 	Checkout *checkoutReport `json:"checkout,omitempty"`
 	Engine   *engineReport   `json:"engine,omitempty"`
 	Image    *imageReport    `json:"image,omitempty"`
+	// CheckoutSockets is the confirmed backend; a failed detection omits it.
+	CheckoutSockets *socketsReport `json:"checkout_sockets,omitempty"`
 }
 type readinessProblem = port.Problem
 
-func presentReadiness(u *cli.UI, result port.Result, withJSON bool) int {
-	return present(u, result, withJSON, nil, nil)
+func presentReadiness(u *cli.UI, result port.Result, withJSON bool, sockets *socketsOutcome) int {
+	return present(u, result, withJSON, nil, nil, sockets)
 }
 
-func presentApprovalReadiness(u *cli.UI, view approval.View, presentation approval.Presentation, withJSON bool) int {
+func presentApprovalReadiness(u *cli.UI, view approval.View, presentation approval.Presentation, withJSON bool, sockets *socketsOutcome) int {
 	report := presentation.Report(view)
 	var problems []approval.Problem
 	if view.Failure != "" {
 		problems = presentation.Problems(view)
 	}
-	return present(u, view.Inspection, withJSON, &report, problems)
+	return present(u, view.Inspection, withJSON, &report, problems, sockets)
 }
 
-func present(u *cli.UI, result port.Result, withJSON bool, approvalReport *approval.Report, approvalProblems []approval.Problem) int {
+func present(u *cli.UI, result port.Result, withJSON bool, approvalReport *approval.Report, approvalProblems []approval.Problem, sockets *socketsOutcome) int {
 	inspection := inspectionReport{Ready: result.Ready}
 	if c := result.Checkout; c != nil {
 		inspection.Checkout = &checkoutReport{c.Root, c.Device, c.Inode, c.GitDevice, c.GitInode}
@@ -93,6 +95,15 @@ func present(u *cli.UI, result port.Result, withJSON bool, approvalReport *appro
 		code = max(code, p.Exit)
 		u.Line(p.Message + "; " + p.Fix)
 	}
+	if sockets != nil {
+		inspection.CheckoutSockets = sockets.report
+		if p := sockets.problem; p != nil {
+			inspection.Ready = false
+			problems = append(problems, *p)
+			code = max(code, p.Exit)
+			u.Line(p.Message + "; " + p.Fix)
+		}
+	}
 	var requested []credentialGrant
 	if result.Credentials != nil && len(result.Credentials.Issues) > 0 {
 		for _, issue := range result.Credentials.Issues {
@@ -130,9 +141,9 @@ func present(u *cli.UI, result port.Result, withJSON bool, approvalReport *appro
 			Inspection  inspectionReport  `json:"inspection"`
 			Manifest    *manifestReport   `json:"manifest,omitempty"`
 			Credentials []credentialGrant `json:"credentials,omitempty"`
-		}{approvalReport, 1, scope, result.Ready && code == 0, problems, inspection, manifest, requested})
+		}{approvalReport, 1, scope, inspection.Ready && code == 0, problems, inspection, manifest, requested})
 	} else {
-		if result.Ready {
+		if inspection.Ready {
 			_, _ = fmt.Fprintln(u.Stdout, "inspection ready")
 		}
 		if c := inspection.Checkout; c != nil {
@@ -143,6 +154,9 @@ func present(u *cli.UI, result port.Result, withJSON bool, approvalReport *appro
 		}
 		if i := inspection.Image; i != nil {
 			_, _ = fmt.Fprintf(u.Stdout, "image: %s (%s)\n", printable(i.Reference), printable(i.ID))
+		}
+		if sockets != nil && sockets.report != nil {
+			_, _ = fmt.Fprintln(u.Stdout, sockets.line)
 		}
 		if approvalReport != nil {
 			_, _ = fmt.Fprintf(u.Stdout, "approval %s\nfingerprint: %s\n", approvalReport.Status, approvalReport.Fingerprint)
