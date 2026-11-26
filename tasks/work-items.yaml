@@ -2832,6 +2832,11 @@ items:
     status: todo
     depends_on: []
     kind: task
+    deferred: >
+      T-85 waits for bug-17. On the timing change, the final-only failures were Final terminal
+      output stays raw while owned cleanup proceeds (child exit -1) and Preparing a checkout already
+      excludes an overlapping run. Recheck both after the fixture watchdog bug is resolved. T-86
+      depends on the T-85 timing work.
   - id: T-86
     title: "Record the non-engine suite's measured profile: slowest scenario rows, harness tests and fixture setup, with their shares of wall time"
     phase: 1
@@ -2839,6 +2844,11 @@ items:
     status: todo
     depends_on: [T-85]
     kind: task
+    deferred: >
+      T-85 waits for bug-17. On the timing change, the final-only failures were Final terminal
+      output stays raw while owned cleanup proceeds (child exit -1) and Preparing a checkout already
+      excludes an overlapping run. Recheck both after the fixture watchdog bug is resolved. T-86
+      depends on the T-85 timing work.
   - id: T-87
     title: Fixtures in the non-engine tier build each product or probe binary once per suite run, not once per fixture or row
     phase: 1
