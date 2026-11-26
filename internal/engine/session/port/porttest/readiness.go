@@ -28,6 +28,7 @@ func (r *Readiness) OpenCatalog(selection string, budget time.Duration) (rp.Sess
 	return r.Open(selection, "", budget)
 }
 func (r *Readiness) Endpoint() string                  { return r.EndpointValue }
+func (*Readiness) Deadline() time.Time                 { return time.Time{} }
 func (r *Readiness) Version() (rp.Version, rp.Failure) { return r.VersionValue, r.Failure }
 func (r *Readiness) Info() (rp.Info, rp.Failure)       { return r.InfoValue, r.Failure }
 func (*Readiness) Image(string) (rp.Image, rp.Failure) { return rp.Image{}, rp.ImageMissing }

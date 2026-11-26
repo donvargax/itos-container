@@ -22,10 +22,11 @@ var Reference = "worker.test/agent@sha256:" + strings.Repeat("a", 64)
 // HealthySession supplies a native-engine observation, not an approval.
 func HealthySession() *Session {
 	return &Session{
-		Address:     "unix:///fixture.sock",
-		VersionData: port.Version{Product: "Docker Engine - Community", OS: "linux", Architecture: "amd64", Minimum: "1.44", Maximum: "1.56", Negotiated: "1.56", SDKMinimum: "1.40", SDKMaximum: "1.56"},
-		InfoData:    port.Info{ID: "engine-A", OS: "linux", Architecture: "x86_64", OperatingSystem: "Debian"},
-		Images:      map[string]port.Image{Reference: {ID: "sha256:" + strings.Repeat("b", 64), OS: "linux", Architecture: "amd64", User: "1000:1000", RepoDigests: []string{Reference}, ConfigPresent: true, Label: manifest.Label{Present: true, Text: `[{"name":"display"}]`}}},
+		DeadlineValue: time.Date(2030, time.January, 2, 3, 4, 5, 0, time.UTC),
+		Address:       "unix:///fixture.sock",
+		VersionData:   port.Version{Product: "Docker Engine - Community", OS: "linux", Architecture: "amd64", Minimum: "1.44", Maximum: "1.56", Negotiated: "1.56", SDKMinimum: "1.40", SDKMaximum: "1.56"},
+		InfoData:      port.Info{ID: "engine-A", OS: "linux", Architecture: "x86_64", OperatingSystem: "Debian"},
+		Images:        map[string]port.Image{Reference: {ID: "sha256:" + strings.Repeat("b", 64), OS: "linux", Architecture: "amd64", User: "1000:1000", RepoDigests: []string{Reference}, ConfigPresent: true, Label: manifest.Label{Present: true, Text: `[{"name":"display"}]`}}},
 	}
 }
 
@@ -57,6 +58,10 @@ func EngineContract(t Reporter, create func(*Session) (port.Engine, string, stri
 		session, failure := engine.Open(endpoint, root, time.Second)
 		if failure != port.None || session == nil {
 			t.Fatalf("%s open = %v", operation, failure)
+		}
+		deadline := session.Deadline()
+		if deadline.IsZero() {
+			t.Errorf("%s session has no inspection deadline", operation)
 		}
 		if session.Endpoint() != endpoint || !session.Unchanged() {
 			t.Errorf("%s lost endpoint or socket identity", operation)
@@ -101,6 +106,9 @@ func EngineContract(t Reporter, create func(*Session) (port.Engine, string, stri
 		}
 		if _, failure = session.Image(Reference + "missing"); failure != port.ImageMissing {
 			t.Errorf("missing image = %v", failure)
+		}
+		if session.Deadline() != deadline {
+			t.Errorf("image requests changed the inspection deadline")
 		}
 		session.Close()
 	}

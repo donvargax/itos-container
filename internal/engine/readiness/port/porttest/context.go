@@ -25,6 +25,11 @@ type contextualSession struct {
 	ctx context.Context
 }
 
+func (s contextualSession) Deadline() time.Time {
+	deadline, _ := s.ctx.Deadline()
+	return deadline
+}
+
 func (s contextualSession) ForContext(ctx context.Context) port.Session {
 	return contextualSession{s.Session, ctx}
 }
@@ -62,6 +67,9 @@ func ContextEngineContract(t Reporter, create func(*Session) (port.ContextEngine
 		return
 	}
 	defer s.Close()
+	if deadline, _ := phase.Deadline(); s.Deadline() != deadline {
+		t.Errorf("session deadline = %v, want lifetime deadline %v", s.Deadline(), deadline)
+	}
 	contextual, ok := s.(port.ContextSession)
 	if !ok {
 		t.Errorf("session lacks finite request contexts")

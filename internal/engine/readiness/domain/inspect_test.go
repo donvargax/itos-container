@@ -38,12 +38,31 @@ func fixture() (Inspector, port.Input, *porttest.Engine, *porttest.Checkout) {
 
 func TestInspectSnapshot(t *testing.T) {
 	i, input, e, c := fixture()
+	e.Session.DeadlineValue = time.Date(2030, time.January, 2, 3, 4, 5, 0, time.UTC)
 	result := i.Inspect(input)
 	if !result.Ready || len(result.Issues) != 0 || *result.Checkout != c.Identity || result.Engine.ID != "engine-A" || result.Engine.Architecture != "amd64" || result.Image.Reference != porttest.Reference || !result.Manifest.Metadata.Checked || *result.Manifest.Metadata.Present {
 		t.Fatalf("snapshot = %#v", result)
 	}
 	if c.Opened || !e.Session.Closed || e.Budget != 5*time.Second || e.Selection != input.Host || e.Root != input.Root || e.Session.InfoReads != 2 || !reflect.DeepEqual(e.Session.ImageReads, []string{porttest.Reference}) {
 		t.Fatalf("capability lifecycle = %#v, %#v, %#v", c, e, e.Session)
+	}
+	if result.EngineDeadline != e.Session.DeadlineValue {
+		t.Fatalf("engine deadline = %v, want the session deadline %v", result.EngineDeadline, e.Session.DeadlineValue)
+	}
+}
+
+func TestImageRefusalRetainsTheEngineInspectionDeadline(t *testing.T) {
+	i, input, engine, _ := fixture()
+	deadline := time.Date(2030, time.January, 2, 3, 4, 5, 0, time.UTC)
+	engine.Session.DeadlineValue = deadline
+	delete(engine.Session.Images, porttest.Reference)
+
+	got := i.Inspect(input)
+	if got.Engine == nil || got.Ready || len(got.Issues) != 1 || got.Issues[0].Kind != port.ImageMissing {
+		t.Fatalf("expected a validated engine with a missing image, got %#v", got)
+	}
+	if got.EngineDeadline != deadline {
+		t.Fatalf("engine deadline = %v, want %v for the follow-up inspection", got.EngineDeadline, deadline)
 	}
 }
 
