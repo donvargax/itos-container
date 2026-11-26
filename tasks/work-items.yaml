@@ -2,9 +2,16 @@
 phases:
   1: null
 queue:
-  - slice-28
-  - slice-40
   - slice-31
+  - slice-40
+  - T-76
+  - slice-48
+  - slice-49
+  - slice-50
+  - slice-51
+  - slice-52
+  - slice-53
+  - slice-28
   - slice-36
 items:
   - id: T-1
