@@ -13,6 +13,9 @@ coordinator made. A change to a line is the person's, and it replaces the line.
   logins, API keys and credential brokering are for remote sandboxes only; invent no threat
   model for the local case. 2026-11-20. `docs/charter.md:143`
 - Codex uses the ChatGPT subscription, not an API key. 2026-11-20. `docs/charter.md:148`
+- Approval of the host OpenCode auth.json shows all its providers and grants the whole file.
+  Run shares it writable at OpenCode's normal login path for host refreshes. 2026-11-26.
+  `docs/decisions/0040-share-the-approved-whole-opencode-login-file-at-its-normal-path.md:20`
 - Container runs may use real credentials, one form per provider: a long-lived subscription
   token where the provider issues one, else its auth file mounted, shared with the host and
   refreshed in place. Claude gets a `claude setup-token` token, read from
@@ -120,9 +123,9 @@ coordinator made. A change to a line is the person's, and it replaces the line.
 - Credentials are passed in per command, never injected, never in the checkout or in
   `docker inspect`; approval binds kinds and paths, never contents. `docs/charter.md:69`,
   `docs/decisions/0029-credential-approval.md:11`
-- A credential source's filesystem must be ext4, btrfs or xfs; NFS and 9p are refused
-  outright; overlay and FUSE with unmappable backing paths fail closed. 2026-11-15.
-  `docs/decisions/0027-credential-source-inspection.md:75`
+- On the trusted local host, a filesystem type that prevents excluding a backing alias raises
+  a warning with the path and type in doctor and run status. Independent refusals still apply.
+  2026-11-26. `docs/decisions/0041-record-credential-filesystem-type-as-a-warning-on-the-trusted-local-host.md:20`
 - The harness home is a writable volume or tmpfs, never the host home; `/tmp` is executable.
   `docs/charter.md:85`. The opt-in per-checkout named volume was selected by the coordinator
   and waits for the person to ratify. 2026-11-16.

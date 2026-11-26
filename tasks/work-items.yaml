@@ -2156,12 +2156,11 @@ items:
     why: >
       Specify the OpenCode counterpart to slice-32. The source is auth.json under
       ~/.local/share/opencode and may include the OpenCode Go provider key alongside other provider
-      entries. Specify what one grant authorizes, how unrelated entries stay outside it, what
-      approval shows, how updates or refreshes and cleanup work, and how the staged login stays out
-      of the checkout, engine configuration and logs. Use synthetic markers and fake endpoints for
-      the scenarios. Name any unresolved account decision explicitly. Specification first. Real
-      credentials follow decision 0035: OpenCode issues no subscription token, so the one grant is
-      the OpenCode Go provider entry from auth.json. Any harness may be the first in the container
+      entries. Under decisions 0035 and 0040 the person approves the whole file after seeing every
+      provider it holds. Run makes the host file writable at OpenCode's normal login path so
+      refreshes reach the host. Specify cleanup and how the login stays out of the checkout,
+      engine configuration and logs. Use synthetic markers and fake endpoints for the scenarios.
+      Name any unresolved account decision explicitly. Any harness may be the first in the container
       (the person, 2026-11-24), so this slice need not wait for the Codex and Claude slices.
     refs: [docs/decisions/0040-share-the-approved-whole-opencode-login-file-at-its-normal-path.md, docs/decisions/0039-slice-40-s-redraft-may-reuse-the-earlier-spec-on-slice-40-old-and-the-partial-implementation-on-slice-40-d9e5a2d.md]
   - id: slice-41
