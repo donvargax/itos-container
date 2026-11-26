@@ -9802,8 +9802,6 @@
     agents never run prepare. The implementer may commit freely in its workspace. The host makes
     the landing commits and handles itos, submission, publication and review. The check fails
     today: `go test` reports no tests to run and prints no PASS line for the test.
-  done_when:
-    - run: 'out=$(go test ./features -run "^TestEngineFixtureCodexCleanup$" -v 2>&1); status=$?; printf "%s\n" "$out"; test "$status" -eq 0 && printf "%s\n" "$out" | grep -q "^--- PASS: TestEngineFixtureCodexCleanup " && ! printf "%s\n" "$out" | grep -q -- "--- SKIP"'
 - id: T-82
   type: build
   title: Bump go.opentelemetry.io/otel to v1.47.0 for GO-2026-6974
