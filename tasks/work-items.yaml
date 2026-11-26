@@ -1552,6 +1552,7 @@ items:
       an approved grant, or after the source file changes mode or owner, run refuses before creating
       anything. A second worker or project does not receive it. Offline runs without grants are
       unchanged. Broken down from p1-credentials-passed-in.
+    refs: [docs/decisions/0035-real-credentials-for-container-runs-a-subscription-token-where-the-provider-issues-one-else-its-auth-file-shared.md]
   - id: slice-32
     title: run bind-mounts the approved Codex auth.json, and its lock file when present, read-write as single files
     phase: 1
