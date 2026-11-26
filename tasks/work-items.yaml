@@ -2925,3 +2925,22 @@ items:
       stalls is still unknown. Diagnose the stall and make all three existing examples pass with
       their assertions intact.
     refs: [features/run_terminal.feature]
+  - id: slice-61
+    title: Record credential.filesystem as a warning in doctor and run status
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: slice
+    why: >
+      On 2026-11-26 the owner applied the 2026-11-24 rule that security controls must address a real
+      outsider. The local machine, repositories and accounts are trusted. Filesystem type describes
+      the owner's layout, and the approved workload already receives the model credential. Wherever
+      credential.filesystem alone would refuse, continue inspection, approval and run. Keep
+      detection for overlay, FUSE variants, NFS, 9p and other types covered by the existing check.
+      Doctor must show the warning with the affected path and filesystem type. Run must record it so
+      status shows the same path and type, without exposing credential contents. An independent
+      refusal still applies. Update decision 0027's 2026-11-10 amendment and supersede the
+      filesystem-type refusal in q-64 and its standing summary. Update the credential policy and
+      approval scenarios and prove the doctor, run and status outcomes.
+    refs: [docs/decisions/0027-credential-source-inspection.md, docs/decisions/0029-credential-approval.md, features/credentials-policy.feature, features/credentials-approval.feature]
