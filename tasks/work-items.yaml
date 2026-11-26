@@ -2215,14 +2215,9 @@ items:
     title: Report the checkout socket backend in doctor
     phase: 1
     owner: donvargax
-    status: doing
+    status: done
     depends_on: [T-64]
     kind: slice
-    why: >
-      Was p1-doctor-checkout-socket-backend.
-      Let the person see which backend a run would use before approving it. Cover Landlock, gVisor
-      and a host with neither backend through doctor’s read-only inspection. Broken down from
-      p1-checkout-socket-kernel-enforcement.
   - id: slice-43
     title: Bind the checkout socket backend to approval
     phase: 1
