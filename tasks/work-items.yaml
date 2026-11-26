@@ -1979,6 +1979,9 @@ items:
       disconnect, concurrent stop and foreground exit. Specify how an exec process is terminated
       despite the absence of an exec-signal endpoint before implementing. Require black-box
       scenarios and CI-only real-engine evidence. Broken down from p1-interactive-tty.
+    deferred: >
+      Wait for every replacement child of slice-31. Restore those dependencies before resuming this
+      item. The OpenCode and Codex harness dependencies also continue to apply.
   - id: slice-39
     title: Attach an interactive TTY to an owned exec command
     phase: 1
