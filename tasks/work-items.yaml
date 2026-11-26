@@ -2832,9 +2832,6 @@ items:
     status: todo
     depends_on: []
     kind: task
-    deferred: >
-      Resume when the test-stage mount fix lands. The credential filesystem check fails on the
-      stage, so the timing work and its dependent profile must wait.
   - id: T-86
     title: "Record the non-engine suite's measured profile: slowest scenario rows, harness tests and fixture setup, with their shares of wall time"
     phase: 1
@@ -2842,9 +2839,6 @@ items:
     status: todo
     depends_on: [T-85]
     kind: task
-    deferred: >
-      Resume when the test-stage mount fix lands. The credential filesystem check fails on the
-      stage, so the timing work and its dependent profile must wait.
   - id: T-87
     title: Fixtures in the non-engine tier build each product or probe binary once per suite run, not once per fixture or row
     phase: 1
