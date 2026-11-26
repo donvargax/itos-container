@@ -748,7 +748,11 @@ Feature: Review and remember credential grants without delivering them
   # Rule 3, the warning. Each detected row gives the closed object
   # {"rule":"credential.filesystem","path":P,"filesystem":F}.
   #   P is the row's decoded mount point when that is valid UTF-8 holding no
-  #   U+0000 to U+001F or U+007F. Otherwise P is the text "(unprintable)".
+  #   U+0000 to U+001F or U+007F and is at most 512 bytes long. A mount point
+  #   that fails the first two conditions gives the text "(unprintable)",
+  #   whatever its length. A printable mount point longer than 512 bytes gives
+  #   the text "(too long)". The 512-byte cap is what keeps rule 6's record
+  #   within the session parser's limit.
   #   F is the row's decoded type when that is 1 to 64 bytes, each byte from
   #   0x21 to 0x7E. Otherwise F is "(unprintable)".
   # Rows that give an equal (P, F) give one warning. This holds across both
@@ -758,12 +762,18 @@ Feature: Review and remember credential grants without delivering them
   # number of the rest is the omitted count, from 1 to 32760, because two
   # tables of at most 16384 rows each hold at most 32768 distinct rows.
   # A command reports the warnings of its last completed source observation.
-  # For ordinary doctor that is the one after engine inspection, for approve
-  # the last one it made, and for credentials-only and the run preflight
-  # their only one.
+  # The shared inspector (readiness domain Inspect) observes sources twice:
+  # once before Engine.Open and again after engine inspection. Ordinary
+  # doctor and the run preflight both report the second observation, which
+  # is the one view.Inspection.Credentials holds. Approve reports the last
+  # observation it made, and credentials-only reports its only one.
   #
-  # Rule 4, doctor and approve output. Readiness port's CredentialResult gains
-  # Warnings and WarningsOmitted beside Issues. The following holds only when
+  # Rule 4, doctor and approve output. Readiness port gains the type
+  # CredentialWarning {Rule, Path, Filesystem string} and a fixed-storage list
+  # type: 8 CredentialWarning entries, a used-entry count and the omitted
+  # count. Fixed storage keeps every type that holds the list comparable with
+  # ==, as Binding.Credentials [2] already is. CredentialResult carries this
+  # list beside Issues. The following holds only when
   # there is at least one warning; with none, every byte of today's output is
   # unchanged, and the credentials-only envelope keeps its 5 members.
   #  - doctor --json and doctor --credentials-only --json add the top-level
@@ -779,7 +789,11 @@ Feature: Review and remember credential grants without delivering them
   #    itos-container: warning credential.filesystem: <n> more filesystem warnings omitted
   #    Doctor writes these lines after its credential problem lines and before
   #    its approval problem lines and "Review with itos container approve".
-  #    Credentials-only writes them after its problem lines. Approve writes
+  #    Ordinary doctor prints its credential problems through its approval
+  #    readiness presentation (presentApprovalReadiness, with c.Presentation,
+  #    in doctor/command), so that presentation and the plain readiness one
+  #    build this order. Credentials-only writes them after its problem
+  #    lines, in presentCredentials. Approve writes
   #    them after its result, outside its review, prompt, candidate and record.
   #    Standard output is unchanged in every mode.
   #  - Warnings are not settings. A filesystem change alone never changes a
@@ -790,9 +804,14 @@ Feature: Review and remember credential grants without delivering them
   #
   # Rule 5, run records them. The run preflight's selection carries the
   # warnings as fresh execution evidence, like ProxyImageID. Approval port's
-  # Durable gains CredentialWarnings and CredentialWarningsOmitted, of the
-  # readiness port types (approval port already imports readiness port).
-  # Approval domain Preflight sets them from its local readiness observation.
+  # Durable gains one CredentialWarnings field of rule 4's fixed-storage
+  # list type (approval port already imports readiness port). The run
+  # slice's domain sets it in PreflightContext
+  # (internal/slices/run/domain/preflight.go), after snapshot publication and
+  # beside ProxyImageID, by copying view.Inspection.Credentials' list when
+  # view.Inspection.Credentials is not nil. That list comes from the source
+  # observation made after engine inspection (rule 3). Approval domain
+  # Preflight still returns only its View and is unchanged.
   # The session store's first intent publication copies them into the
   # record's top-level "credential_warnings" and
   # "credential_warnings_omitted", with doctor JSON's shapes and presence
@@ -814,18 +833,49 @@ Feature: Review and remember credential grants without delivering them
   #  - credential_warnings is an array of 1 to 8 closed objects, each with
   #    exactly three string members: rule, path and filesystem.
   #  - rule is exactly "credential.filesystem".
-  #  - path is "(unprintable)", or at most 4096 bytes of valid UTF-8 holding
-  #    no U+0000 to U+001F or U+007F, written as "/" or as "/" followed by
-  #    nonempty components, none of them "." or "..".
+  #  - path is "(unprintable)", "(too long)", or at most 512 bytes of valid
+  #    UTF-8 holding no U+0000 to U+001F or U+007F, written as "/" or as "/"
+  #    followed by nonempty components, none of them "." or "..".
   #  - filesystem is 1 to 64 bytes, each byte from 0x21 to 0x7E.
   #  - Entries are strictly ascending by path bytes, then filesystem bytes.
   #  - credential_warnings_omitted is a JSON integer from 1 to 32760, in
   #    decimal with no sign, fraction, exponent or leading zero. It is
   #    present only beside exactly 8 warnings.
-  # Anything else is invalid. A record that carries credential_warnings may
-  # be up to 524288 bytes: 8 warnings with 4096-byte paths fit even at JSON's
-  # six-byte escapes. Every other record keeps its 65536-byte limit. Store
-  # publication and recovery both refuse warnings on a session whose frozen
+  # Anything else is invalid.
+  # Record size. No size limit changes. Decode refuses any record over 65536
+  # bytes, and it parses through manifest.Parser, whose port MaxBytes is also
+  # 65536. That parser is shared with manifests, so it is not touched. A
+  # record carrying the warnings must therefore encode within 65536 bytes,
+  # and rule 3's 512-byte path cap guarantees it. Encode uses json.Marshal,
+  # which writes each "<", ">" or "&" as a six-byte \u escape, and that is
+  # the worst expansion for these members. The worst case of each part is
+  # then:
+  #  - one entry, at most 40 + 6*512 + 16 + 6*64 + 2 = 3514 bytes;
+  #  - eight entries with their separators, plus the member name and
+  #    brackets, at most 28144 bytes;
+  #  - the omitted member, at most 36 bytes more.
+  # Both warning members together therefore encode to at most 28180 bytes.
+  # Every other member the product writes is a hexadecimal ID, a fixed name,
+  # a /proc descriptor path, a /dev/shm staging path, an engine endpoint that
+  # connected, or a distribution/reference image reference, and all of these
+  # stay far below the remaining 37356 bytes. Session porttest's credential
+  # store contract gains one case on fake and disk. It builds a schema-4
+  # record with home, egress, credential staging and anchor at their longest
+  # valid values, adds the eight longest warnings (ID-CREDAPPROVAL-37) and
+  # an omitted count of 32760, and checks two things: Encode writes at most
+  # 65536 bytes, and Decode returns an equal record. If that case cannot
+  # pass, stop and report; do not raise a limit. Because no record the
+  # product writes can exceed the limit, the store gains no size refusal,
+  # which could never be reached.
+  # Comparability. Record keeps == and != (porttest memory store,
+  # ValidTransition). It holds the warnings in two comparable fields, which
+  # publication fills from Durable's list:
+  #  - an 8-entry array with a used-entry count, tagged
+  #    "credential_warnings,omitzero" and marshalled as the array of its used
+  #    entries;
+  #  - an int tagged "credential_warnings_omitted,omitzero".
+  # A record without warnings therefore encodes byte for byte as today.
+  # Store publication and recovery both refuse warnings on a session whose frozen
   # snapshot holds no credential grant. That rule has a session port contract
   # case on fake and disk; status reports it as recovery.invalid-state.
   #
@@ -904,8 +954,9 @@ Feature: Review and remember credential grants without delivering them
   #    the accepted risk in rule 2. The 0027 amendment names the arc42 section
   #    it changes, as the charter requires.
   #
-  # Architecture. Detection and shaping belong to engine/readiness's domain;
-  # Durable's fields to engine/approval's port and domain; the record, codec,
+  # Architecture. Detection and shaping belong to engine/readiness's domain,
+  # and the list type to its port. Durable's field belongs to
+  # engine/approval's port, and the run slice's domain fills it. The record, codec,
   # recovery projection and presentation to engine/session. Doctor and
   # approve stay thin and print through cli.UI. No slice imports a sibling,
   # only cmd assembles adapters, and domains and ports gain no I/O import. No
@@ -978,23 +1029,50 @@ Feature: Review and remember credential grants without delivering them
       | doctor --credentials-only --json | fuseblk.ntfs | selected state root        | first       | /state                                       |
       | doctor --json                    | fuse         | source ancestor            | first       | /vault                                       |
 
-  # Layouts, added to the all-ext4 admission fixture in both tables unless
-  # named per observation:
-  #  - "tmpfs at / beside the ext4 root": a second "/" row of type tmpfs; nodes stay on row 1.
-  #  - "fuse.sshfs at the source ancestor and overlay below the checkout":
-  #    /vault on fuse.sshfs, with nodes under /vault on it, and a node-free
-  #    overlay row at /checkout/subtree.
-  #  - "overlay on nine mounts below the checkout": node-free overlay rows at
-  #    /checkout/m1 to /checkout/m9.
-  #  - "a 65-byte type at the checkout root": /checkout's row has type "x" repeated 65 times.
-  #  - "a type holding an escaped space at the checkout root": the type field is
-  #    written fuse\040x, which decodes to "fuse x".
-  #  - "a mount point holding byte 0xff below the checkout": an overlay row at
-  #    /checkout/ followed by the raw byte 0xff.
-  #  - "overlay then fuse at the checkout root": /checkout's row is overlay in
-  #    the first table and fuse in the final one.
-  #  - "overlay at the checkout root in both observations": the same row in both tables.
+  # Layouts. Each starts from the all-ext4 admission fixture, whose tables
+  # hold "1 0 0:1 / / rw - ext4 disk rw". The rows below are given as
+  # mountinfo text and go into both tables unless a layout names one table.
+  # Every added row has its own mount ID and device from 0:2 upward, root
+  # "/", and parent 1 unless stated. Mount points are written in mountinfo's
+  # escaped form, because the fixture's Mounts strings pass through
+  # json.Marshal, and the shared parser (moby/sys/mountinfo v0.7.2) decodes
+  # octal escapes in both the mount point and the type. "Nodes move" means
+  # that the nodes at the mount point and below it take that row's mount
+  # ID, as credentialAdmissionFilesystem does for a placement. Every other
+  # node stays on mount ID 1.
+  #  - "tmpfs at / beside the ext4 root". Row 1 becomes two rows, in this
+  #    order: "2 0 0:2 / / rw - tmpfs tmpfs rw" and then
+  #    "1 2 0:1 / / rw - ext4 disk rw". The ext4 row covers the tmpfs row, and
+  #    every node stays on the visible mount ID 1.
+  #  - "fuse.sshfs at the source ancestor and overlay below the checkout".
+  #    Two rows are added: "2 1 0:2 / /vault rw - fuse.sshfs sshfs rw", with
+  #    nodes moving to it, and the node-free
+  #    "3 1 0:3 / /checkout/subtree rw - overlay overlay rw".
+  #  - "overlay on nine mounts below the checkout". For k from 1 to 9, the
+  #    node-free row "<k+1> 1 0:<k+1> / /checkout/m<k> rw - overlay overlay rw".
+  #  - "a 65-byte type at the checkout root".
+  #    "2 1 0:2 / /checkout rw - <type> disk rw", where the type is "x"
+  #    repeated 65 times. Nodes move.
+  #  - "a type holding an escaped space at the checkout root". The same row
+  #    with the type field written fuse\040x, which decodes to "fuse x".
+  #    Nodes move.
+  #  - "a mount point holding byte 0xff below the checkout". The node-free row
+  #    "2 1 0:2 / /checkout/\377 rw - overlay overlay rw". Its mount point is
+  #    written as a backslash and the three digits 377, which decodes to
+  #    "/checkout/" followed by byte 0xff.
+  #  - "overlay then fuse at the checkout root".
+  #    "2 1 0:2 / /checkout rw - overlay overlay rw" in the first table; the
+  #    same row with type fuse in the final table. Nodes move.
+  #  - "overlay at the checkout root in both observations". The overlay row
+  #    just described, in both tables. Nodes move.
+  #  - "a 512-byte mount point below the checkout". The node-free row
+  #    "2 1 0:2 / {512-byte point} rw - overlay overlay rw". {512-byte point}
+  #    is "/checkout/", then 200 "a", "/", 200 "a", "/" and 100 "a": exactly
+  #    512 bytes, the longest P rule 3 keeps.
+  #  - "a 513-byte mount point below the checkout". The same row, with a last
+  #    component of 101 "a": 513 bytes.
   # A cell lists the expected warnings as "P on F", joined by "; ", in order.
+  # {512-byte point} in a cell stands for the path defined above.
   @wip @slice-61 @ID-CREDAPPROVAL-32
   Scenario Outline: Credential filesystem warnings are deduplicated, sorted, capped and printable
     Given a credential admission observation fixture requesting "claude" with independent matching policy and source-checkout pins
@@ -1014,6 +1092,8 @@ Feature: Review and remember credential grants without delivering them
       | doctor --json                    | a mount point holding byte 0xff below the checkout             | (unprintable) on overlay                                                                                                                                                 | 0       |
       | doctor --credentials-only --json | overlay then fuse at the checkout root                         | /checkout on fuse; /checkout on overlay                                                                                                                                  | 0       |
       | doctor                           | overlay at the checkout root in both observations              | /checkout on overlay                                                                                                                                                     | 0       |
+      | doctor --json                    | a 512-byte mount point below the checkout                      | {512-byte point} on overlay                                                                                                                                              | 0       |
+      | doctor                           | a 513-byte mount point below the checkout                      | (too long) on overlay                                                                                                                                                    | 0       |
 
   # The defect is applied to the claude-a node after the overlay placement:
   #  - "group-readable mode 0640": mode 0100640.
@@ -1190,7 +1270,10 @@ Feature: Review and remember credential grants without delivering them
   # Last, it attempts three saves: one adding a warning to the ext4 record,
   # one changing the varied record's filesystem text, and one dropping its
   # warnings. The disk store meets the same rules through the session port
-  # contract (see the slice-61 block). Public run is untouched.
+  # contract (see the slice-61 block). Public run is untouched. Preflight
+  # becomes ready only after Engine.Open, so each successful run opens the
+  # fake engine once; the last Then compares the assembly's engine.Opens for
+  # the varied run with the ext4 run's.
   @wip @slice-61 @ID-CREDAPPROVAL-36
   Scenario Outline: Run's preflight carries filesystem warnings into the session intent record it publishes
     Given a credential admission observation fixture requesting "claude" with independent matching policy and source-checkout pins
@@ -1199,7 +1282,7 @@ Feature: Review and remember credential grants without delivering them
     And the varied first intent record carries exactly those credential warnings and no omitted count member
     And the ext4 first intent record has neither credential warning member
     And the next valid save keeps the recorded warnings byte for byte while saves that add change or drop them are refused
-    And the preflight contract reads no source data and opens no engine
+    And the preflight contract reads no source data and opens the engine exactly as often as its ext4 control
 
     Examples:
       | filesystem | placement              | observation | path                                         |
@@ -1243,8 +1326,18 @@ Feature: Review and remember credential grants without delivering them
   # "; ", and omitted count 0 means no omitted member. Paths need not match
   # the sources, because status never consults current paths. The Given
   # re-captures the protected tree (recoveryCapture) after its edit, so the
-  # reused last Then compares against the seeded record as it stands. Before
-  # the work the decoder refuses the extra members, so status reports
+  # reused last Then compares against the seeded record as it stands. The
+  # Given writes the members as json.Marshal does, so "<", ">" and "&" become
+  # six-byte \u escapes, as in a record that run published.
+  # Two named cells cover the size bound in rule 6:
+  #  - "{eight longest}" is eight warnings. Warning k, for k from 1 to 8, has
+  #    path "/" followed by 510 "<" and the digit k (512 bytes) and
+  #    filesystem "<" repeated 64 times. With omitted count 32760, this is
+  #    the largest warning content rule 6 allows, at its worst escaping.
+  #  - "{eight longest} in a 65536-byte record" is the same warnings. The
+  #    Given then inserts spaces before the record's final "}" until the file
+  #    is exactly 65536 bytes, which is the largest record Decode accepts.
+  # Before the work the decoder refuses the extra members, so status reports
   # recovery.invalid-state and the first Then fails.
   @wip @slice-61 @ID-CREDAPPROVAL-37 @local-engine-fixture
   Scenario Outline: Status shows the filesystem warnings a credential session recorded
@@ -1262,6 +1355,9 @@ Feature: Review and remember credential grants without delivering them
       | allowlist | / on tmpfs; /checkout on overlay                                                                                                 | 0       |
       | offline   | /m1 on overlay; /m2 on overlay; /m3 on overlay; /m4 on overlay; /m5 on overlay; /m6 on overlay; /m7 on overlay; /m8 on overlay | 3       |
       | offline   | (unprintable) on (unprintable)                                                                                                   | 0       |
+      | allowlist | (too long) on overlay                                                                                                            | 0       |
+      | offline   | {eight longest}                                                                                                                  | 32760   |
+      | offline   | {eight longest} in a 65536-byte record                                                                                           | 32760   |
 
   # Slice-61 rule 6, by ID-22's pattern. The first status proves that the
   # seeded valid warnings decode. Then the fixture rewrites only the intent
@@ -1271,6 +1367,13 @@ Feature: Review and remember credential grants without delivering them
   # When, the new When keeps the first JSON status as the only entry of
   # w.approval.results, re-captures the protected tree after the defect, and
   # leaves the second status as the current result for the reused Thens.
+  # The two size defects are the next byte above ID-CREDAPPROVAL-37's
+  # largest valid cells:
+  #  - "a 513-byte path" replaces the path with "/vault/" followed by 506 "a".
+  #  - "the eight longest warnings in a 65537-byte record" writes ID-37's
+  #    {eight longest} with omitted count 32760, then pads with spaces before
+  #    the final "}" to exactly 65537 bytes. Each member is valid, so only
+  #    the size can make this second status refuse.
   # Before the work the first status already refuses and the first Then fails.
   @wip @slice-61 @ID-CREDAPPROVAL-38 @local-engine-fixture
   Scenario Outline: A malformed recorded filesystem warning makes the session record invalid
@@ -1298,6 +1401,8 @@ Feature: Review and remember credential grants without delivering them
       | an omitted count of 0 beside eight warnings     |
       | an omitted count of 2 without warnings          |
       | an omitted count written as a string beside eight warnings |
+      | a 513-byte path                                 |
+      | the eight longest warnings in a 65537-byte record |
 
   # The consent/host-agent assertions already pass before slice-30. Keep them as
   # regression checks; the missing exposure disclosure is this scenario's red.
