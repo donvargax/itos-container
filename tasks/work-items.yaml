@@ -4,6 +4,7 @@ phases:
 queue:
   - slice-31
   - slice-40
+  - slice-61
   - T-76
   - slice-48
   - slice-49
