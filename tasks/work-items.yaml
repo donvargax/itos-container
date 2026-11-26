@@ -2945,3 +2945,16 @@ items:
       filesystem-type refusal in q-64 and its standing summary. Update the credential policy and
       approval scenarios and prove the doctor, run and status outcomes.
     refs: [docs/decisions/0027-credential-source-inspection.md, docs/decisions/0029-credential-approval.md, features/credentials-policy.feature, features/credentials-approval.feature]
+  - id: p2-readiness-approval-refusal-inventory
+    title: Identify the outsider each readiness and approval refusal stops
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: []
+    kind: idea
+    why: >
+      Inventory every fail-closed refusal in readiness and approval. For each, record the
+      diagnostic, the condition that triggers it, and which outsider it stops from doing what. Apply
+      the trust boundary for the local machine, repositories and accounts. Where there is no
+      outsider, list the refusal as a candidate for a recorded warning, with its reason, for a
+      separate decision on changing behavior.
