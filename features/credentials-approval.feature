@@ -694,15 +694,20 @@ Feature: Review and remember credential grants without delivering them
   # ======================================================================
   # Slice-61: credential.filesystem is a warning in doctor and run status.
   #
-  # Authority and the reopened lines. The person's call of 2026-11-26 is in
-  # slice-61's registry entry (tasks/work-items.yaml). It applies the
-  # 2026-11-24 rule that a security control must stop a real outsider. The
-  # local machine, its repositories and its accounts are trusted. A
+  # Authority and the superseded text. The person's call of 2026-11-26 is
+  # decision 0041
+  # (docs/decisions/0041-record-credential-filesystem-type-as-a-warning-on-the-trusted-local-host.md:20),
+  # and its standing line is docs/decisions/STANDING.md:126-128. It applies
+  # the 2026-11-24 rule that a security control must stop a real outsider.
+  # The local machine, its repositories and its accounts are trusted. A
   # filesystem type describes the person's own layout, and the approved
-  # workload already receives the model credential. That fact reopens three
-  # things: docs/decisions/STANDING.md:123-125, q-64's refusal
-  # (tasks/asks.yaml) and decision 0027's 2026-11-10 04:42 UTC amendment with
-  # its NFS and 9p extensions. Detection stays, and nothing else is reopened.
+  # workload already receives the model credential. Decision 0041 replaces
+  # the filesystem-type refusal of q-64 (tasks/asks.yaml) and of decision
+  # 0027's 2026-11-10 04:42 UTC amendment with its NFS and 9p extensions.
+  # Detection stays, and nothing else is reopened. STANDING.md already holds
+  # the person's line, so slice-61 does not edit STANDING.md; every other
+  # standing line, including STANDING.md:123-125 on credentials passed in
+  # per command, stays in force.
   #
   # Which text governs. Until slice-61's feat commit, ID-CREDAPPROVAL-29 and
   # this file's header paragraph on filesystems describe main and stay live.
@@ -858,13 +863,36 @@ Feature: Review and remember credential grants without delivering them
   # Every other member the product writes is a hexadecimal ID, a fixed name,
   # a /proc descriptor path, a /dev/shm staging path, an engine endpoint that
   # connected, or a distribution/reference image reference, and all of these
-  # stay far below the remaining 37356 bytes. Session porttest's credential
+  # stay far below the remaining 37356 bytes.
+  # Parser budgets. manifest.Parser's jsonc adapter also refuses a document
+  # deeper than 32, with more than 2048 nodes, or whose JSON-pointer paths
+  # total more than 65536 bytes (internal/engine/manifest/jsonc/limits.go:11-15,
+  # where every key, value and array element is a node and every key and
+  # value is charged its full path). The warning members stay inside each:
+  #  - depth: the deepest warning value sits at depth 4 (record, array,
+  #    entry, string);
+  #  - nodes: 1 key and 1 array, then per entry 1 object and 3 keys with 3
+  #    values, so 2 + 8*7 = 58, plus 2 for the omitted member: 60 nodes;
+  #  - path bytes: "/credential_warnings" charged as key and value (40), per
+  #    entry 22 for "/credential_warnings/<i>" plus 54, 54 and 66 for its
+  #    rule, path and filesystem keys and values (196, so 1568 for eight),
+  #    and 56 for "/credential_warnings_omitted": 1664 bytes.
+  # Session porttest's credential
   # store contract gains one case on fake and disk. It builds a schema-4
   # record with home, egress, credential staging and anchor at their longest
-  # valid values, adds the eight longest warnings (ID-CREDAPPROVAL-37) and
-  # an omitted count of 32760, and checks two things: Encode writes at most
-  # 65536 bytes, and Decode returns an equal record. If that case cannot
-  # pass, stop and report; do not raise a limit. Because no record the
+  # valid values, and with these two members at their longest valid values:
+  #  - engine_endpoint is "unix://" followed by a 108-byte absolute path, "/"
+  #    and then 107 "&" bytes. 108 bytes is Linux's sun_path size, which Go's
+  #    unix connect refuses to exceed, and readiness records only an
+  #    endpoint that connected. Each "&" encodes as a six-byte escape.
+  #  - image_reference is a canonical name:tag@digest reference that
+  #    distribution/reference accepts (manifest/reference Valid): a 255-byte
+  #    name (its NameTotalLengthMax), a 128-byte tag and a sha256 digest.
+  # It adds the eight longest warnings (ID-CREDAPPROVAL-37) and an omitted
+  # count of 32760, and checks two things: Encode writes at most 65536
+  # bytes, and Decode, which runs manifest.Parser's byte, depth, node and
+  # path budgets, returns an equal record. If that case cannot pass, stop
+  # and report; do not raise a limit. Because no record the
   # product writes can exceed the limit, the store gains no size refusal,
   # which could never be reached.
   # Comparability. Record keeps == and != (porttest memory store,
@@ -911,13 +939,13 @@ Feature: Review and remember credential grants without delivering them
   #    credential_stacking_contract.go and credential_export_contract.go into
   #    warning cases, for both fake and disk. Extend session porttest's
   #    credential store contract with rules 5 and 6 on fake and disk.
-  #  - In docs/decisions/STANDING.md, replace lines 123-125 with this one
-  #    line, where <N> is the first line of the new 0027 amendment:
-  #    - A credential source, checkout or state path on a filesystem other than ext4, btrfs or xfs gives a `credential.filesystem` warning that doctor shows and run records, never a refusal; overlay, FUSE, NFS, 9p and every other type are still detected, and every other source check still refuses. The local machine, its repositories and its accounts are trusted. 2026-11-26. `docs/decisions/0027-credential-source-inspection.md:<N>`
-  #    Wrap it like its neighbours.
+  #  - Leave docs/decisions/STANDING.md unchanged. Its line at 126-128 is
+  #    the person's call (decision 0041) and already states this rule.
   #  - Insert this paragraph into decision 0027, directly after the q-64
   #    section that ends "...credential-delivery support claim.":
-  #    "Amended by the person, **2026-11-26** (slice-61), applying the rule of
+  #    "Amended by the person, **2026-11-26**, in
+  #    [decision 0041](0041-record-credential-filesystem-type-as-a-warning-on-the-trusted-local-host.md)
+  #    and built by slice-61, applying the rule of
   #    2026-11-24 that a security control must stop a real outsider: the local
   #    machine, its repositories and its accounts are trusted, a filesystem
   #    type describes the person's own layout, and the approved workload
@@ -936,9 +964,11 @@ Feature: Review and remember credential grants without delivering them
   #    in the session intent record for status. Their exact shape is in
   #    slice-61's block of
   #    [credentials-approval.feature](../../features/credentials-approval.feature)."
-  #  - In decision 0029, append "Slice-61 (the person, 2026-11-26) makes that
-  #    allowlist's refusal a `credential.filesystem` warning; see decision
-  #    0027." to its first paragraph. Replace its paragraph beginning "The
+  #  - In decision 0029, append "The person's
+  #    [decision 0041](0041-record-credential-filesystem-type-as-a-warning-on-the-trusted-local-host.md)
+  #    (2026-11-26), built by slice-61, makes that allowlist's refusal a
+  #    `credential.filesystem` warning; see decision 0027's amendment of that
+  #    date." to its first paragraph. Replace its paragraph beginning "The
   #    source observer accepts only ext4, btrfs and xfs" with: "The source
   #    observer detects every type other than ext4, btrfs and xfs in both
   #    mount observations, under decision 0027's source/ancestor and
