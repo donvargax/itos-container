@@ -9948,18 +9948,20 @@
     record's outcome: failed if Failed, else skipped if Skipped, else passed. The first statement of
     every top-level test function in package features must be timeHarnessTest(<its *testing.T
     parameter>). That covers every `func TestX(t *testing.T)` in features/*_test.go, build-tagged
-    files included, and TestFeatures, which leaves 223 on ee2a50dd besides TestMain. No test
+    files included, and TestFeatures, which leaves 227 on f9fa026c besides TestMain. No test
     calls t.Parallel today. A record is written only when the sink is open, which happens only in
     the parent process.
 
     Two files are at revive's 600-line limit (.golangci.yml file-length-limit, comments and blank
-    lines skipped). Code lines on ee2a50dd: engine_fixture_test.go 599 and
-    engine_fixture_warmup_test.go 600. One line per test would refuse both. Never join lines to fit,
+    lines skipped). On f9fa026c engine_fixture_test.go and engine_fixture_warmup_test.go each
+    hold about 600 code lines. One line per test would refuse both. Never join lines to fit,
     the gaming p2-split-engine-fixture-test names. Move whole functions, unchanged except for the
     timing line, into new sibling files instead. TestEngineFixtureManifestValidation and
     fixtureJSON go to features/engine_fixture_manifest_test.go. fixtureProductPreparationIssues
     and TestEngineFixtureWarmupProduct go to features/engine_fixture_warmup_product_test.go. If
-    revive refuses another file, move whole test functions the same way. The rest of
+    revive refuses another file, move whole test functions the same way. That includes the new
+    nonengine_timing_regression_test.go: its subtest bodies may be named functions in a sibling
+    file, features/nonengine_timing_cases_test.go, each called from its t.Run. The rest of
     p2-split-engine-fixture-test stays with that idea, validFixtureEnvironment's formatting
     included.
 
@@ -10015,7 +10017,12 @@
     run. Afterwards there is exactly one, {"test":"TestFake","duration_ns":5000000000,
     "outcome":"passed"}, decoded with DisallowUnknownFields. Failed and Skipped both true gives
     failed. Skipped alone gives skipped. A nil output registers no cleanup. A fake named
-    "TestFake/sub" with a non-nil output registers no cleanup and leaves the buffer empty.
+    "TestFake/sub" with a non-nil output registers no cleanup and leaves the buffer empty. Last,
+    it sets the package variable timingSink to a second buffer, after registering a cleanup that
+    restores the old value, and calls timeHarnessTest on a fresh fake named TestFake. After that
+    fake's cleanups run, the second buffer holds exactly one `harness test timing: ` record, for
+    TestFake with outcome passed. This holds timeHarnessTest to forwarding to
+    startHarnessTiming(t, timingSink).
 
     sink sets the variable with t.Setenv to a fresh path in t.TempDir(). After
     timingSinkFromEnvironment, os.LookupEnv reports the variable absent and the file exists as a
@@ -10032,12 +10039,17 @@
 
     features_entry reads the AST of features_test.go and engine_diagnostics_test.go. TestFeatures
     must hold exactly one assignment `selection.records = timingSink`, before its runPreparedFeatures
-    call. TestMain must call timingSinkFromEnvironment exactly once, before m.Run.
+    call. TestMain must call timingSinkFromEnvironment exactly once, before m.Run, and bind the
+    call's first result to one local identifier. It must hold an assignment `timingSink =
+    <that identifier>` after the call and before m.Run, and a call `<that identifier>.Close()`
+    after m.Run and before TestMain's last os.Exit call. Either may sit inside an if statement.
+    Order is source position, found with ast.Inspect so nested statements count. The subtest
+    names each missing piece. It runs no child process.
 
-    features/README.md, after the "Scenario timing." paragraph, gains at most 600 bytes. The file
-    has 1221 bytes left under doc-caps' 49152-byte cap. The sentence names the variable, the three
-    prefixes, that TestMain unsets the variable before any test, that nothing is written without
-    it, and TestNonEngineScenarioTiming.
+    features/README.md gains one sentence at the end of the "Scenario timing." paragraph, at most
+    200 bytes. On f9fa026c the file has 207 bytes left under doc-caps' 49152-byte cap. The sentence
+    names the variable, the three prefixes, that TestMain unsets the variable, and that nothing is
+    written without it. If main leaves less room by then, stop and report; trim no other text.
 
     Commits. The implementer may commit freely in its workspace. The host makes the landing commits
     and runs itos, submission, publication and review. Commit 1 is red, a test commit made with
@@ -10055,12 +10067,16 @@
     CI only; if it refuses a file for length, move whole test functions as above. Before stopping,
     run the checks. Run -race only over TestNonEngineScenarioTiming
     and TestEngineScenarioTiming, never over the whole package. Then run the whole feature suite
-    once with the variable set, since every test changes. Report the number of records the file
-    held against the selected count and the 223 tests.
+    once, since every test changes: ITOS_CONTAINER_TIMING_RECORDS=<fresh path> go test ./features
+    -timeout=20m, the timeout of itos.yaml's whole-suite command (T-58), without its -count=1. The
+    binary reads the variable, so a fresh path is not served from the cache. Report the number of
+    records the file held against the selected count and the tree's count of top-level tests. If
+    that run hits the timeout, report the partial count and the timeout as they are. Do not rerun
+    it or raise the timeout.
 
-    How the checks fail on ee2a50dd. The first: go test exits 0, then the check prints
-    `TestNonEngineScenarioTiming/ordinary_rows did not pass` and exits 1. The second exits 1 at its
-    first grep. Both were run here under sh.
+    How the checks fail on ee2a50dd, and again on f9fa026c. The first: go test exits 0, then the
+    check prints `TestNonEngineScenarioTiming/ordinary_rows did not pass` and exits 1. The second
+    exits 1 at its first grep. Both were run here under sh.
   done_when:
     - run: >-
         out=$(go test ./features -v -run '^(TestEngineScenarioTiming|TestNonEngineScenarioTiming)$' 2>&1);
