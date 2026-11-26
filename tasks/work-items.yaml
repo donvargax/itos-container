@@ -2821,7 +2821,7 @@ items:
     title: The non-engine feature tier writes a timing record for every scenario row and every harness regression test
     phase: 1
     owner: donvargax
-    status: todo
+    status: doing
     depends_on: []
     kind: task
   - id: T-86
