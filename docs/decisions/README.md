@@ -40,5 +40,7 @@ file and leaves this list, which itos decision record writes.
 - [ADR-0037: Control state stays on v0 with no compatibility promise: old state gets a documented manual cleanup, and the persisted device field is dropped](0037-control-state-stays-on-v0-with-no-compatibility-promise-old-state-gets-a-documented-manual-cleanup-and-the-persisted-device-field-is-dropped.md)
 - [ADR-0038: slice-60's cancelled-sweep test pairs its absence check with a live-context positive control](0038-slice-60-s-cancelled-sweep-test-pairs-its-absence-check-with-a-live-context-positive-control.md)
 - [ADR-0039: slice-40's redraft may reuse the earlier spec on slice-40-old and the partial implementation on slice-40-d9e5a2d](0039-slice-40-s-redraft-may-reuse-the-earlier-spec-on-slice-40-old-and-the-partial-implementation-on-slice-40-d9e5a2d.md)
+- [ADR-0040: Share the approved whole OpenCode login file at its normal path](0040-share-the-approved-whole-opencode-login-file-at-its-normal-path.md)
+- [ADR-0041: Record credential filesystem type as a warning on the trusted local host](0041-record-credential-filesystem-type-as-a-warning-on-the-trusted-local-host.md)
 
 <!-- itos:decisions:end -->
