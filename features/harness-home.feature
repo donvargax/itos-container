@@ -690,215 +690,314 @@ Feature: An approved persistent home for one checkout's harness
     Then each mismatch reports changed approval at /home/harnesses with exit 1 and the Engine API fixture saw no connection and journalled no request
     And each matching control reports no approval change and its Engine API fixture journal holds the readiness inspection of version, info and the approved image
 
-  # Slice-40: deliver an approved OpenCode login to one container run. Its rows
-  # are ID-HOME-32 to 38, beside their topics' blocks: policy, approval and the
-  # run's approval comparison here, the local run rows after ID-HOME-29, the
-  # recovery row after ID-HOME-10 and the native row after ID-HOME-31. They sit
-  # in this file because they extend slice-41's OpenCode area and the file is
-  # already in the offline engine shard; a new feature file with an @engine row
-  # would need a shard in .github/workflows, which this item does not touch.
-  # Authorities: charter milestone two step 2; decisions 0025 (staged binds,
-  # /dev/shm, fixed targets), 0029 (approval binds kinds and paths, never
-  # contents), 0035 (real credentials, one form per provider) and 0039 (this
-  # redraft decides; the slice-40-old scenarios were not on this tree to read);
-  # T-48's ledger (staging, exact mounts, owned recovery); slice-29's source
-  # inspection and slice-30's approval contract in credentials-policy.feature
-  # and credentials-approval.feature; slice-41's rows and record above;
-  # architecture.md Slices. Slice-34's, slice-41's and slice-54's rows and
-  # decisions stay unchanged except where a line below names one.
+  # Slice-40: deliver the approved whole OpenCode login file, writable, at its
+  # normal path in one container run. Its rows are ID-HOME-32 to 38, beside
+  # their topics' blocks: policy, approval and the run's approval comparison
+  # here, the local run rows after ID-HOME-29, the recovery row after
+  # ID-HOME-10 and the native row after ID-HOME-31. They sit in this file
+  # because they extend slice-41's OpenCode area and the file is already in the
+  # offline engine shard; a new feature file with an @engine row would need a
+  # shard in .github/workflows, which this item does not touch.
+  # Authorities: charter milestone two step 2; decisions 0029 (approval binds
+  # kinds and paths, never contents; path identity only), 0035 (real
+  # credentials, one form per provider: the auth file shared with the host and
+  # refreshed in place), 0039 (this redraft decides what it reuses), 0040 (the
+  # person, 2026-11-26: the grant is the whole host OpenCode auth.json, the
+  # review shows every provider entry, and run provides that same file
+  # writable at /home/itos/.local/share/opencode/auth.json) and 0042 (the
+  # person, 2026-11-26: the approved file grant covers providers added to it
+  # later with no fresh approval; each run records the provider names present
+  # for that run and status shows them, names only, never credential values);
+  # slice-29's source inspection and slice-30's approval contract in
+  # credentials-policy.feature and credentials-approval.feature; slice-34's
+  # home rows and slice-41's rows and record above; architecture.md Slices.
+  # Slice-34's, slice-41's and slice-54's rows and decisions stay unchanged
+  # except where a line below names one. This replaces the earlier slice-40
+  # draft's filtered copy, /dev/shm staging, /run target and
+  # run.credential-content: none of them is specified any more.
   #
-  # What one grant authorizes (decided by the item, 2026-11-24; decision 0035):
-  # - OpenCode issues no subscription token, so the one grant is the OpenCode Go
-  #   provider entry of the person's own OpenCode auth.json, normally
-  #   ~/.local/share/opencode/auth.json. That file may also hold other provider
-  #   logins (the smoke record's finding 5 saw a GitHub Copilot login beside
-  #   OpenCode Go). Only the opencode-go member is delivered. Every other member,
-  #   and every member of the opencode-go entry other than type and key, stays
-  #   on the host and appears in no worker file, request, record or output.
-  # - Reconciling the standing lines (docs/decisions/STANDING.md:16 and :23):
-  #   the source is the host's own login file, read in place on every run, so a
-  #   host-side re-login reaches the next run with no copy to keep in step. The
-  #   delivered file holds one secret. The entry is an API key, which OpenCode
-  #   does not refresh, so nothing flows back to the host file and the worker
-  #   gets no write path to it. A changed standing line would reopen this.
-  # - Because run checks the content, the grant can deliver only an OpenCode Go
-  #   API-key entry. A source path the checkout names that holds anything else
-  #   (an SSH key, a Claude login) is refused at run, never delivered as is.
+  # What one grant authorizes (decided by the person, 0040 and 0042):
+  # - The grant is one host file, normally the person's
+  #   ~/.local/share/opencode/auth.json, whole: every provider login in it,
+  #   OAuth and API key alike, present now or added later. The worker can read,
+  #   refresh, rewrite or empty every entry, and its writes reach the host file
+  #   at once. Approval binds the kind and the source path (STANDING.md:120,
+  #   unchanged); it never binds the file's contents, its provider list or its
+  #   inode. A provider added to, removed from or changed in the file needs no
+  #   new approval.
+  # - Provider names are shown and recorded, never values: the review lists
+  #   the names the file holds when it is reviewed, and each run records the
+  #   names present when run checked the source before creating its worker.
+  #   A name is a top-level member name of the file. No value, member other
+  #   than a top-level name, byte count or offset of the source is ever shown,
+  #   recorded or logged.
   #
   # Request (policy version 3 only; versions 1 and 2 still refuse credentials):
-  # - credentials accepts a third kind, exactly the string opencode-go, at most
-  #   once, with slice-29's closed {kind, source} entry and source grammar. This
-  #   is additive within version 3, as slice-34 and slice-41 added home members
-  #   to versions 1 to 3: no accepted file changes meaning, and it avoids the
-  #   version 4 that slice-48 plans for Codex. Kinds sort as claude-token,
-  #   github-token, opencode-go. OpenCode-Go, opencode, opencode-auth and
-  #   OPENCODE-GO stay policy.credential_kind at /credentials/<i>/kind; a second
-  #   opencode-go is policy.credential_duplicate at the later entry's kind.
-  #   ID-CREDENTIALS-05's refused examples stay refused; its title, "only the two
-  #   decided token kinds are accepted", goes stale, and the feat commit may
-  #   retitle it. The grant needs no home or harness: it is a file at a fixed
-  #   target, whichever home the request selects.
+  # - credentials accepts a third kind, exactly the string opencode-auth, at
+  #   most once, with slice-29's closed {kind, source} entry and source
+  #   grammar. The name follows codex-auth (slice-48) because the grant is the
+  #   whole login file, not one provider's entry. It is additive within version
+  #   3, as slice-34 and slice-41 added home members to versions 1 to 3: no
+  #   accepted file changes meaning. The partial implementation d9e5a2d read
+  #   the request in a new version 4; this spec keeps version 3 so the number
+  #   slice-48 and T-76 plan for Codex stays theirs, and the implementer reuses
+  #   d9e5a2d only where it fits this rule (decision 0039). Kinds sort as
+  #   claude-token, github-token, opencode-auth. OpenCode-Auth, opencode,
+  #   opencode-go and OPENCODE-AUTH stay policy.credential_kind at
+  #   /credentials/<i>/kind; a second opencode-auth is
+  #   policy.credential_duplicate at the later entry's kind.
+  #   ID-CREDENTIALS-05's refused examples stay refused; its title, "only the
+  #   two decided token kinds are accepted", goes stale, and the feat commit may
+  #   retitle it.
+  # - The target lies in the harness home, so an opencode-auth grant requires
+  #   home {storage: volume, harnesses: [opencode]}. A request without home, or
+  #   whose harnesses lack opencode, is the new rule policy.credential_home at
+  #   /credentials/<i>/kind, exit 2, with file itos-container.yaml; its fix
+  #   names home {storage: volume, harnesses: [opencode]}. home.harness: codex
+  #   (slice-54) beside it changes nothing.
   # - File-only doctor JSON lists the grant in policy.credentials as
-  #   {"kind":"opencode-go","source":<as written>} in the sorted order above;
+  #   {"kind":"opencode-auth","source":<as written>} in the sorted order above;
   #   plain file-only doctor prints it in the existing credential line format.
+  #   `doctor --credentials-only` lists it with its target
+  #   /home/itos/.local/share/opencode/auth.json and stays metadata-only.
   #   Parsing never stats or opens the source.
-  # - Doctor and approve inspect the source by metadata only, with slice-29's
-  #   observer and rules unchanged (credential.* at /credentials/<i>/source).
-  #   They never read the content, so neither can tell whether the file holds an
-  #   OpenCode Go entry; run reads it (below).
+  #
+  # Inspection (ordinary doctor, approve and run; slice-29's observer and
+  # metadata rules unchanged, credential.* at /credentials/<i>/source):
+  # - After a source passes the metadata rules, ordinary doctor, approve and
+  #   run read it once through the descriptor that observer retained, 1 to
+  #   65536 bytes, and derive its provider names. The source must be UTF-8
+  #   JSON text (RFC 8259) holding one value, an object, with no repeated
+  #   top-level member name. Each top-level name is 1 to 256 bytes once
+  #   decoded and holds no C0 control character and no DEL. Member values are
+  #   parsed for syntax only and never kept. The names are sorted by byte
+  #   value. An empty object is valid and has no names.
+  # - A source failing any of this, or empty, or over 65536 bytes, is the new
+  #   rule credential.content, exit 1, located at
+  #   itos-container.yaml/credentials/<written index>/source. Its message and
+  #   fix name no source byte, member name, offset or length; the fix asks for
+  #   a JSON object of OpenCode provider logins or the grant's removal. Doctor
+  #   reports it as a problem beside the other credential.* rules; approve
+  #   refuses before any prompt; run refuses before any engine connection.
+  # - The derivation is a pure function in the readiness domain, using the
+  #   standard library's encoding/json token decoder; no new dependency. The
+  #   read goes through the readiness credential port and its disk adapter;
+  #   porttest fakes supply bytes and do no I/O.
+  # - The read is doctor's and approve's only contact with a credential's
+  #   contents, and it keeps names alone. Other kinds stay metadata-only.
   #
   # Approval (slice-30's contract, one more kind):
-  # - The canonical grant is {"kind":"opencode-go","source":<path>,
-  #   "target":"/run/itos-container/credentials/opencode-go"}. Its profiles are
-  #   slice-30's credential profiles (offline-credentials-v1,
-  #   allowlist-credentials-v1 and their -home- forms); a new kind needs no new
-  #   profile. The strict record codec accepts this kind and target. A stored
-  #   opencode-go grant with any other target under /run/itos-container/
-  #   credentials/ is readable history that differs from the current target, as
-  #   slice-30 rules for every kind. Rotating the file at the same path keeps the
-  #   fingerprint; adding, removing or repointing the grant changes /credentials.
+  # - The canonical grant is {"kind":"opencode-auth","source":<path>,
+  #   "target":"/home/itos/.local/share/opencode/auth.json"}. Its profiles are
+  #   slice-30's home credential profiles (offline-credentials-home-v1 and
+  #   allowlist-credentials-home-v1); a new kind needs no new profile. The
+  #   strict record codec accepts this kind with exactly this target. Provider
+  #   names never enter canonical settings or the fingerprint. Rotating or
+  #   refreshing the file at the same path keeps the fingerprint; adding,
+  #   removing or repointing the grant changes /credentials.
   # - q-52 holds: the grant needs bare approve at a real terminal; every
   #   --fingerprint refuses with approve.terminal-required (exit 1).
-  # - Plain doctor and bare approve's review print slice-30's credential line and
-  #   its three disclosure lines unchanged, then, when an opencode-go grant is
-  #   current, these three whole lines, case-sensitive, in this order:
-  #     opencode-go: each run reads the source as OpenCode's auth.json and stages only its opencode-go entry, an API key; every other provider entry in that file stays on the host.
-  #     opencode-go: the worker reads it read-only at /run/itos-container/credentials/opencode-go; OpenCode reads its login from $XDG_DATA_HOME/opencode/auth.json, so the workload links that path to it. Run writes no login into the home.
-  #     opencode-go: a key changed in the source reaches the next run without new approval; a running worker keeps its copy and cannot write the source.
-  #   When every current grant is opencode-go, slice-30's run warning
+  # - Ordinary doctor --json gains /inspection/opencode_auth, exactly
+  #   {"providers":[<sorted names>]}, when an opencode-auth grant is requested
+  #   and its source passed every credential rule; otherwise the member is
+  #   absent.
+  # - Plain doctor and bare approve's review print slice-30's credential line
+  #   and disclosure unchanged, then, when an opencode-auth grant is current,
+  #   these three whole lines, case-sensitive, in this order, where <names> is
+  #   the sorted names JSON-escaped and joined by ", ", or "(none)":
+  #     opencode-auth: run mounts this file itself, read-write, at /home/itos/.local/share/opencode/auth.json; the worker can read, refresh, replace or remove every provider login in it, and its writes reach the host file.
+  #     opencode-auth: providers in the file now: <names>. Providers added to it later are covered by this approval with no new review; each run records the provider names it finds, and status shows them.
+  #     opencode-auth: the path is bound, not the contents or the inode; a host re-login by rename reaches the next run, while a running worker keeps the file it was given.
+  #   When every current grant is opencode-auth, slice-30's run warning
   #   (approval port CredentialGate, "Credential delivery is not available in
   #   this increment; ...") is replaced by exactly
-  #     Run delivers the opencode-go grant.
-  #   Any other grant set keeps the warning the tree has then. Plain status
-  #   shows the same lines for an opencode-go session, as slice-30's shared
-  #   disclosure already does; no row judges plain status.
-  # - The decisions above ID-HOME-25 said "Run never reads or copies the host's
-  #   ... ~/.local/share/opencode" and that slice-41's setting "delivers no
-  #   OpenCode login". Both stay true of the harness setting. The one exception
-  #   is the single source file an approved opencode-go grant names, which run
-  #   reads and filters as below.
+  #     Run delivers the opencode-auth grant.
+  #   Any other grant set keeps the warning the tree has then. slice-30's
+  #   staging sentence (CredentialStaging) stays: it describes the other kinds,
+  #   and the first line above says this kind differs.
+  # - The decisions above ID-HOME-25 said "Run never reads or copies the
+  #   host's ... ~/.local/share/opencode" and that slice-41's setting "delivers
+  #   no OpenCode login". Both stay true of the harness setting. The one
+  #   exception is the single source file an approved opencode-auth grant
+  #   names, which run reads for its names and mounts.
   #
   # Run (lifts the version 3 gate for this kind only):
   # - Run accepts a valid version 3 request whose credentials list is nonempty
-  #   and every grant is opencode-go. Every other version 3 request keeps the
+  #   and every grant is opencode-auth. Every other version 3 request keeps the
   #   gate the tree has then (today policy.version at /version, exit 2, before
   #   manifest, source, engine or state access, even with no grants); slice-31
   #   lifts claude-token separately. Lifting it requests no new consent for an
   #   unchanged canonical grant.
-  # - Run then carries slice-30's ordinary doctor checks: the 4095-byte bounds,
-  #   source metadata inspection before engine access and again after engine
-  #   inspection, and the checkout identity comparison. A source failure reports
-  #   doctor's located credential.* rule and exit, and nothing is created. Its
-  #   approval comparison is local and precedes any engine connection, as
-  #   ID-HOME-27's is; changed grants report run.approval-changed, exit 1,
-  #   naming the sorted JSON pointers that differ.
-  # - Staging is T-48's, unchanged in order: durable staging intent, a new
-  #   /dev/shm/itos-container-<32 lower hex> directory (0700, host UID), one file
-  #   named opencode-go (O_CREAT|O_EXCL|O_NOFOLLOW, mode 0400, host UID), one
-  #   read-only HostConfig.Mounts bind of that file at the fixed target, exact
-  #   boundary verification before start, and unlink of the file and directory
-  #   once start returns and the checkout-mount detector has run. The worker
-  #   keeps its acquired copy until it is removed. Nothing is ever written under
-  #   the checkout, protected state, the home volume or the image.
-  # - The copying adapter reads the checked source once, 1 to 65536 bytes, as
-  #   T-48 does, and writes not those bytes but exactly
-  #     {"opencode-go":{"type":"api","key":K}}
-  #   with no whitespace and no final newline, where K is the key member's JSON
-  #   string token exactly as written in the source, escapes included (never
-  #   decoded and re-encoded). The source must be UTF-8 JSON text (RFC 8259)
-  #   holding one value, an object, with no repeated member name at its top
-  #   level or inside the opencode-go entry. Its opencode-go member must be an
-  #   object whose type is exactly the string "api" and whose key is a string
-  #   that decodes to at least one character. Other top-level members are
-  #   parsed for syntax only, and the entry's other members are dropped. A
-  #   source failing any of this is refused as run.credential-content, exit 1,
-  #   located at itos-container.yaml/credentials/<written index>/source, whose
-  #   fix names `opencode auth login` and OpenCode Go. Its message and fix name
-  #   no source byte, member name other than opencode-go, offset or length. The
-  #   staging intent was already durable, so the refusal cancels that
-  #   reservation: partial staging is removed, no worker create is sent, owned
-  #   session resources other than a retained home are removed, and no
-  #   unfinished session is left for stop. The extraction is a pure function
-  #   beside the copying adapter (internal/engine/session/disk), using the
-  #   standard library's encoding/json token decoder; no new dependency. It is
-  #   not a domain or port, so porttest fakes keep their own bytes. The local
-  #   rows judge the content rule through the disk backend only.
-  # - The session engine port, codec, porttest fake and docker observation gain
-  #   the third kind, its fixed target and its staged file name. The strict
-  #   session record evolves explicitly, as T-48 did (a new schema number if
-  #   the shape changes, coordinated with the number main holds when this
-  #   lands). Existing records keep their bytes and meaning and are still read.
-  #   Recovery reconstructs staging authority from protected records alone, as
-  #   T-48 specifies, now also for an opencode-go staging.
-  # - Rotation: each run reads the source afresh, so a safe replacement at the
-  #   same path, a new inode with valid metadata and a new key, is staged by the
-  #   next run under the same approval and generation. A running session's copy
-  #   is not updated. The target is read-only, so the worker cannot write it.
-  # - T-48's credential-refused (short read, changed size) and
-  #   credential-unavailable outcomes keep the classification the tree gives
-  #   them; this slice adds only credential-content. No row tests them here.
-  # - Status JSON carries the grant from the session's protected snapshot, as
-  #   slice-30 specifies, and gains no staging field. Allowlist runs keep
-  #   slice-30's refusal-log disclosure; no row here tests the refusal log
-  #   (AC-36's marker probe belongs to p1-platform-log-redaction).
+  # - Run carries slice-30's ordinary doctor checks: the 4095-byte bounds,
+  #   source metadata before engine access and again after engine inspection,
+  #   and the checkout identity comparison, plus the content rule above at
+  #   both points. Its approval comparison is local and precedes any engine
+  #   connection, as ID-HOME-27's is; changed grants report
+  #   run.approval-changed, exit 1, naming the sorted JSON pointers that differ.
+  # - The names derived at the check after engine inspection are the names
+  #   present for that run. Run records them in the session's protected record
+  #   before its worker create. A later change to the file, by the worker or
+  #   the host, never changes that record.
+  # - Delivery is one bind in the worker's HostConfig.Mounts: type bind, Source
+  #   the approved source path as written, Target
+  #   /home/itos/.local/share/opencode/auth.json, ReadOnly false, no bind,
+  #   volume, tmpfs or image options and no consistency value. It is the only
+  #   credential mount; nothing is staged, copied or written to /dev/shm, the
+  #   checkout, protected state or the image, and no credential value enters
+  #   the create body, environment, labels or argv. The single-file form is
+  #   decided over Codex's directory-plus-link form: a directory bind would
+  #   also expose OpenCode's other host data and need masks like 0033's.
+  # - Boundary inspection before start, beside slice-34's and slice-41's,
+  #   requires exactly that mount in the inspected worker, read-write, with its
+  #   source path, and no other bind whose source or target names the source
+  #   path or a path under /home/itos/.local/share/opencode. A difference is
+  #   run.isolation-unverified, exit 1, with no start; the owned unstarted
+  #   worker is removed and the home retained.
+  # - Session engine port, codec, porttest fake and docker adapter gain this
+  #   writable single-file bind beside T-48's read-only staged binds, which
+  #   stay unchanged. The strict session record evolves explicitly, as T-48
+  #   did: a new schema number, coordinated with the number main holds when
+  #   this lands, carrying the grant's source and target, the recorded names
+  #   and the preparation container below. Records of earlier schemas keep
+  #   their bytes and meaning and are still read.
+  # - The source is never written by run, status or stop. Run makes no check
+  #   of the source after the worker ends; the next run's checks apply, so a
+  #   file the worker left 0644, unparsable or empty is refused then
+  #   (credential.permissions or credential.content), never repaired.
   #
-  # Open and proposed points, each for the person:
-  # - Proposed, 2026-11-26, by this drafter: delivery at the fixed /run target,
-  #   with the workload linking $XDG_DATA_HOME/opencode/auth.json to it, and not
-  #   a bind at /home/itos/.local/share/opencode/auth.json. A bind inside the
-  #   retained home would make the runtime create root-owned mountpoint
-  #   directories in the worker's own data path on a fresh home, and on a
-  #   reused home would resolve worker-controlled paths: the unsafe
-  #   retained-path work slice-56 owns for Codex. The fixed target reuses T-48
-  #   and slice-30's target grammar unchanged.
-  # - Open, 2026-11-26: the person's smoke check of a real OpenCode v2.2.1 run
-  #   whose auth.json is that link to a read-only file holding only the
-  #   opencode-go entry. The smoke record shows only that v2.2.1 reads its login
-  #   from $XDG_DATA_HOME/opencode/auth.json in place (finding 2). Whether
-  #   v2.2.1 writes that file at startup, and so fails on a read-only one, is
-  #   not established. No scenario depends on it, and this spec claims no
-  #   OpenCode behaviour beyond the record.
-  # - Open, 2026-11-26, deferred: other provider logins in the same file (OAuth
-  #   entries such as GitHub Copilot or an Anthropic login) are never delivered.
-  #   Delivering one would be its own grant and item. Key expiry and account
-  #   revocation (AC-30) are not detected: a revoked key fails in the workload's
-  #   own provider request.
+  # Placing the bind in a reused home (proposed by the drafter, 2026-11-26,
+  # from the q-100 hold's recommendation; the person has not ruled, and may
+  # change it at review). The home is retained and worker-written, and both
+  # runc at start and the daemon's archive mount setup on a created container
+  # resolve a bind destination through any symlink in /home/itos/.local,
+  # .local/share or .local/share/opencode, within a container scope that
+  # includes the checkout mount. On a fresh home the runtime would also create
+  # root-owned .local/share/opencode, which OpenCode then cannot write.
+  # - Before it creates the worker, run creates one owned preparation
+  #   container: the approved image, the approved numeric UID:GID, network
+  #   mode none, the session's owned labels, and exactly one mount, the home
+  #   volume at /home/itos with NoCopy true. It has no checkout, credential or
+  #   other mount, and it is never started. It follows the worker's ownership
+  #   rules: durable intent before create, no retry after a lost reply,
+  #   removal by exact full ID, recorded in the session's protected record.
+  #   For an opencode-auth session slice-34's root initialization runs on this
+  #   container, not on the worker; other sessions are unchanged.
+  # - Through bounded Engine API archive calls on it, run inspects, in order,
+  #   /home/itos/.local, /home/itos/.local/share, /home/itos/.local/share/
+  #   opencode and /home/itos/.local/share/opencode/auth.json, stopping at the
+  #   first refusal. Each directory that exists must be a directory, not a
+  #   symlink, owned by the approved UID:GID; auth.json, if it exists, must be
+  #   a regular file owned by the approved UID:GID. Kind and mode come from
+  #   Engine path metadata, owner from the archive's first header, bounded to
+  #   64 KiB as slice-34 bounds the root. Modes of existing entries and the
+  #   contents of auth.json are not inspected.
+  # - Whatever is missing, run creates by one archive upload of only the
+  #   missing entries, with numeric UID:GID: directories 0700 and auth.json an
+  #   empty regular file 0600, the mountpoint. It then reads every entry back
+  #   under the same rules. It overwrites, chmods, chowns, removes or follows
+  #   nothing that exists.
+  # - A symlink, another kind, another owner, or an Engine path error other
+  #   than not-found on any entry is run.home-refused, exit 1, located at that
+  #   home path, whose fix names `itos container stop --home <full-home-id>
+  #   --reset` (slice-34's consented reset), with no upload, no worker create,
+  #   the preparation container removed and the home retained. A readback that
+  #   disagrees with the upload is also run.home-refused. An unavailable,
+  #   uncertain or timed-out engine call is run.home-unavailable, exit 75.
+  #   slice-56 holds the same daemon link-following question for Codex; each
+  #   harness owns its own refusal, and the two answers should agree.
+  # - The preparation container is removed, with its absence confirmed, before
+  #   the worker create. Slice-34's checkout admission and home allocation
+  #   fence keep any other worker off that home between the inspection and the
+  #   worker's start, so the checked paths cannot change before runc resolves
+  #   the bind. Slice-34's boundary verification of the home root on the
+  #   worker stays.
+  # - All of it shares the existing 10 s call and 120 s startup budgets.
   #
-  # Architecture: policy validates the kind; approval canonical and
-  # presentation bind and disclose it; readiness gains run's opt-in for
-  # deliverable kinds beside AllowVersion3 (doctor and approve keep theirs);
-  # the run slice wires T-48's CredentialSources and CredentialStager through
-  # its Runner; session domain, port, codec, disk and docker carry the third
-  # kind; cmd assembles. No slice imports another, porttest fakes do no I/O
-  # and share contracts with adapters. Reuse the pinned moby client v0.6.2/api
-  # v1.56.1, golang.org/x/sys v0.48.0, moby/sys/mountinfo v0.7.2 and Go 1.27.4;
-  # no new library, service or pin. The implementation updates docs/CONFIG.md
-  # (the kind, its target, run's delivery and the home-read exception),
-  # docs/CLI.md's approval text, docs/security.md's credential limits and the
-  # kind enum of docs/schemas/itos-container-v3.schema.json. No arc42 departure
-  # is expected; if the code shows one, record a decision in the same pull
+  # After the run (proposed by the drafter, 2026-11-26, from the hold):
+  # - Normal exit, failure, cancellation and stop remove the worker, and with
+  #   it the bind, and any preparation container, as owned session resources;
+  #   they never remove or write the source. The home keeps the empty
+  #   mountpoint file under the worker's own login path, so a later run
+  #   without the grant finds no host login there.
+  # - Identity binding is path only, as 0029 binds it, with no inode binding.
+  #   A host-side re-login done by rename while a worker runs leaves that
+  #   worker writing to the old inode, and the next run mounts the new file.
+  #
+  # Status:
+  # - Status JSON keeps the session's frozen grants from its protected
+  #   snapshot, as slice-30 specifies, and an opencode-auth session gains
+  #   opencode_auth, exactly {"providers":[<recorded sorted names>]}, read from
+  #   the protected record alone. Plain status adds one line,
+  #   "opencode-auth providers at run start: <names>", formatted as the review
+  #   formats them. Status never reads the current source. Sessions without
+  #   the grant keep their existing output.
+  #
+  # Open, for the person:
+  # - Open, 2026-11-26, a new fact that may reopen 0040: the drafter read the
+  #   v2.2.1 tag of anomalyco/opencode, the release slice-41 supports, to check
+  #   how it writes auth.json, as the person asked. It does not keep logins
+  #   in auth.json. Logins, refreshes and removals go to a credential table in
+  #   a SQLite database in its data directory (packages/core/src/
+  #   credential.ts). auth.json is read only by a one-time migration
+  #   (packages/core/src/database/migration/
+  #   20260805200742_import_legacy_credentials.ts) that copies its entries into
+  #   that table. A database created from nothing marks every migration done
+  #   without running it (packages/core/src/database/migration.ts, apply), so
+  #   it never reads auth.json. As the source reads, a v2.2.1 worker with a
+  #   fresh home ignores the mounted file and writes no refresh back to it.
+  #   The rename-or-in-place question does not arise, since v2.2.1 never
+  #   writes auth.json. This spec still delivers what 0040 and 0042 decide. Its
+  #   rows use a synthetic stand-in and claim no OpenCode behaviour. Whether
+  #   the delivery should change (for example to the database file, or to an
+  #   OpenCode release that reads auth.json) is the person's call. The
+  #   person's own smoke check settles it on their host, outside the runnable
+  #   work.
+  # - Not established: whether the person's host OpenCode still reads its
+  #   login from auth.json, or from that database, after its upgrade to 2.2.1.
+  #   The smoke record says only that the login was read "in place" from the
+  #   host data directory, which holds both files.
+  # - Key expiry and account revocation (AC-30) are not detected: a revoked
+  #   login fails in the workload's own provider request.
+  #
+  # Architecture: policy validates the kind and the home requirement; the
+  # readiness domain derives provider names behind its credential port and
+  # disk adapter; approval canonical and presentation bind and disclose it;
+  # the run slice wires the check, the record and the preparation through its
+  # Runner; session domain, port, codec, porttest fake and docker adapter carry
+  # the writable single-file bind, the preparation container and the record;
+  # status presents the recorded names; cmd assembles. No slice imports
+  # another, porttest fakes do no I/O and share contracts with adapters.
+  # Reuse the pinned moby client v0.6.2/api v1.56.1, golang.org/x/sys v0.48.0,
+  # moby/sys/mountinfo v0.7.2 and Go 1.27.4; no new library, service or pin.
+  # The implementation updates docs/CONFIG.md (the kind, its home requirement,
+  # target, content rule and delivery, and the home-read exception),
+  # docs/CLI.md's doctor, approval and status text, docs/security.md's
+  # credential limits and the kind enum of
+  # docs/schemas/itos-container-v3.schema.json. No arc42 departure is
+  # expected; if the code shows one, record a decision in the same pull
   # request.
   #
   # Step handoff: every phrase in ID-HOME-32 to 38 is NEW. Reuse the helpers
   # behind ID-HOME-25 to 27 and 30 (harness_home_opencode_steps_test.go and
   # harness_home_opencode_native_test.go), slice-30's credential approval
   # fixture (credential_approval_steps_test.go: its private synthetic sources,
-  # oracle and terminal transcript), the doctor Engine API fixture's journal and
-  # connection count (doctor_engine_test.go), the home SDK recording endpoint
-  # (cmd/itos-container/home_sdk_fixture_test.go) and slice-34's native home
-  # fixtures. Local rows routed through TestHomeLocalContract need their own
-  # cases there, whose dispatch fails any unbound ID. Add the definitions alone
-  # in a red test commit with @wip kept.
+  # oracle and terminal transcript), the doctor Engine API fixture's journal
+  # and connection count (doctor_engine_test.go), the home SDK recording
+  # endpoint (cmd/itos-container/home_sdk_fixture_test.go) and slice-34's
+  # native home fixtures. Local rows routed through TestHomeLocalContract need
+  # their own cases there, whose dispatch fails any unbound ID. Add the
+  # definitions alone in a red test commit with @wip kept.
   # Givens write temporary Git checkouts, raw policies and manifests, private
   # synthetic sources (mode 0600 files in 0700 directories on an accepted
   # filesystem, outside checkout and state), independently encoded approval,
   # snapshot and session records (never through the product codec) and
-  # synthetic markers: each source member's secret value is a fresh random
-  # marker, distinct per member. None calls product doctor, approve, run, status
-  # or stop, and none asserts. Every product command is captured in When and
-  # judged in Then. Every absence search has a positive control, the same
-  # search finding the marker where it must be (the source, the staged bytes
-  # observed at create or the worker's read), so an empty search cannot pass.
+  # synthetic markers. Each source's top-level names are fixed synthetic
+  # provider names; each value it holds is a fresh random marker, distinct
+  # per value, and no name contains a marker. None calls product doctor,
+  # approve, run, status or stop, and none asserts. Every product command is
+  # captured in When and judged in Then. Every absence search has a positive
+  # control, the same search finding the marker where it must be (the
+  # source, or what the worker read), so an empty search cannot pass.
   # Assertions report the surface searched, never a marker. No real OpenCode,
   # model, account, credential or public endpoint. Non-engine red runs are
   # local; ID-HOME-38's red and green runs are CI-only, by dispatch. On a host
@@ -906,84 +1005,99 @@ Feature: An approved persistent home for one checkout's harness
   # (p2-repair-platform-ci-fixtures), local runs stop before the behaviour
   # assertion: record that as an environment blocker, never as red evidence.
   #
-  # Expected red, from reading main at 16c0a82 (predictions, not executed
+  # Expected red, from reading the tree at 77de6ba (predictions, not executed
   # evidence), always at the first Then, never in a Given or When: every
-  # policy naming opencode-go is refused by policy.Inspect as
+  # policy naming opencode-auth is refused by policy.Inspect as
   # policy.credential_kind at /credentials/<i>/kind, exit 2, before any state,
   # source or engine access.
   # - ID-HOME-32: file-only doctor refuses the accepted request, so its first
   #   Then fails.
   # - ID-HOME-33: ordinary doctor --json refuses the request, with no
-  #   approval.effective, so the first Then fails.
-  # - ID-HOME-34: each changed request and its matching control are refused
-  #   with policy.credential_kind, not run.approval-changed, so the first Then
+  #   approval.effective and no /inspection/opencode_auth, so the first Then
   #   fails.
+  # - ID-HOME-34: each changed request and each matching control are refused
+  #   with exit 2, not run.approval-changed, so the first Then fails.
   # - ID-HOME-35 and 36: run refuses with policy.credential_kind before any
-  #   engine request, so no create carries a staged file and the first Then
-  #   fails, on the control as well as the defects.
-  # - ID-HOME-37: the session codec refuses the seeded record's opencode-go
-  #   staging kind, so status reports invalid protected state instead of the
-  #   session and its grant, and the first Then fails.
+  #   engine request, so no preparation container or bind is created and the
+  #   first Then fails, on the control as well as the defects.
+  # - ID-HOME-37: the session codec refuses the seeded record's new schema and
+  #   its opencode-auth grant, so status reports invalid protected state
+  #   instead of the sessions, their grant and recorded names, and the first
+  #   Then fails.
   # - ID-HOME-38: run refuses before its worker exists, so the stand-in reports
   #   nothing and the first Then fails.
   #
   # The implementer may commit freely in its own workspace; the host makes the
   # landing commits and handles itos, submission, publication and review.
   @wip @slice-40 @ID-HOME-32
-  Scenario: Policy version 3 accepts one OpenCode Go grant and versions 1 and 2 still refuse it
-    Given an OpenCode Go grant policy fixture with a version 3 request, the same entry in version 1 and 2 files and the malformed OpenCode Go kinds
-    When file-only doctor inspects each request in JSON and plain file-only doctor inspects the version 3 request
-    Then the version 3 request succeeds with exactly its normalized credentials, holding the opencode-go grant as written after any other kinds, without the source being opened
-    And the version 1 and 2 files keep their existing refusal of credentials and each malformed kind has exactly its specified rule and subject without state or engine access
+  Scenario: Policy version 3 accepts one OpenCode login file grant on an OpenCode home and versions 1 and 2 still refuse it
+    Given an OpenCode login grant policy fixture with version 3 requests on a volume home with the OpenCode harness, the same entry in version 1 and 2 files, requests without that home and the malformed OpenCode login kinds
+    When file-only doctor inspects each request in JSON, plain file-only doctor inspects the accepted version 3 request and credentials-only doctor inspects it in JSON
+    Then the version 3 requests succeed with exactly their normalized credentials, holding the opencode-auth grant as written after any other kinds, and credentials-only doctor lists it at its fixed home target, without the source being opened
+    And the version 1 and 2 files keep their existing refusal of credentials, the requests without the OpenCode home report policy.credential_home, and each malformed kind has exactly its specified rule and subject without state or engine access
 
-  # ID-HOME-32's inputs, each with manifest a.json and a source under the
+  # ID-HOME-32's inputs, each with manifest a.json and home {storage: volume,
+  # harnesses: [opencode]} unless stated, and a source path S under the
   # fixture's private directory. Accepted: version 3 with
-  # [{kind: opencode-go, source: S}] and with [{kind: opencode-go, source: S},
-  # {kind: github-token, source: T}] (judged sorted: github-token first).
-  # Versions 1 and 2 with [{kind: opencode-go, source: S}] keep their existing
-  # credentials refusal, policy.unknown_key at /credentials, exit 2, as
-  # credentials-policy.feature specifies. Malformed version 3 kinds OpenCode-Go, opencode,
-  # opencode-auth and OPENCODE-GO -> policy.credential_kind /credentials/0/kind;
-  # two opencode-go entries -> policy.credential_duplicate /credentials/1/kind.
-  # Each malformed file gives exactly that one problem, exit 2. The source path
-  # S does not exist, so a request that succeeds shows parsing opened nothing.
+  # [{kind: opencode-auth, source: S}] and with [{kind: opencode-auth,
+  # source: S}, {kind: github-token, source: T}] (judged sorted: github-token
+  # first). Versions 1 and 2 with [{kind: opencode-auth, source: S}] keep
+  # their existing credentials refusal, policy.unknown_key at /credentials,
+  # exit 2, as credentials-policy.feature specifies. Version 3 with the grant
+  # and no home, and with home {storage: volume} and no harnesses ->
+  # policy.credential_home /credentials/0/kind. Malformed version 3 kinds
+  # OpenCode-Auth, opencode, opencode-go and OPENCODE-AUTH ->
+  # policy.credential_kind /credentials/0/kind; two opencode-auth entries ->
+  # policy.credential_duplicate /credentials/1/kind. Each refused file gives
+  # exactly that one problem, exit 2. S does not exist when file-only doctor
+  # runs, so a request that succeeds shows parsing opened nothing; the
+  # credentials-only run is judged only for its grant list and target, and
+  # reports S's absence as slice-29 rules, which this row does not judge.
 
-  # The request is version 3 offline with no home and one opencode-go grant.
-  # The fixture seeds an approval of the same checkout's version 3 request
-  # without credentials (offline-v1, declared version 3), so the differences
-  # are /credentials and /profile (to offline-credentials-v1), and
-  # computes both fingerprints itself, requiring them to differ. The source is
-  # a valid private auth.json whose members hold markers. Doctor and approve
-  # read metadata only, so the row judges that no marker appears in any output
-  # or record and that the source keeps its bytes, mode and inode.
+  # The request is version 3 offline with home {storage: volume, harnesses:
+  # [opencode]} and one opencode-auth grant. The fixture seeds an approval of
+  # the same checkout's request without credentials
+  # (offline-home-v1, declared version 3), so the differences are
+  # /credentials and /profile (to offline-credentials-home-v1), and computes
+  # both fingerprints itself, requiring them to differ. The source is a
+  # private synthetic auth.json with the top-level names anthropic,
+  # github-copilot and opencode-go, an OAuth entry for github-copilot and API
+  # entries for the others, each value a fresh marker. The expected provider
+  # line names exactly those three, sorted. The row judges that the names
+  # appear and that no marker appears in any output or record, and that the
+  # source keeps its bytes, mode and inode.
   @wip @slice-40 @ID-HOME-33 @local-engine-fixture
-  Scenario: Review binds the OpenCode Go grant and discloses what it delivers, at a terminal only
-    Given an OpenCode Go approval fixture whose checkout requests an opencode-go grant over an independently seeded approval without credentials, with a private synthetic auth.json source
+  Scenario: Review binds the OpenCode login file grant and shows every provider name in it, at a terminal only
+    Given an OpenCode login approval fixture whose checkout requests an opencode-auth grant over an independently seeded approval without credentials, with a private synthetic auth.json source holding three provider logins
     When JSON doctor and plain doctor inspect the request, approve runs at a terminal with the seeded approval's fingerprint, and then bare approve runs at a terminal and receives "y" after the review
-    Then JSON doctor reports the independently expected credentials with the opencode-go grant at its fixed target, the /credentials and /profile differences and the independently calculated new fingerprint
+    Then JSON doctor reports the independently expected credentials with the opencode-auth grant at its fixed home target, the /credentials and /profile differences, the independently calculated new fingerprint and exactly the three sorted provider names under /inspection/opencode_auth
     And the fingerprint approval is refused with approve.terminal-required and exit 1 without a prompt and the seeded approval record is unchanged
-    And plain doctor and the review before exactly one y/N prompt both show the opencode-go credential line, the credential disclosure, the three opencode-go lines in order and "Run delivers the opencode-go grant." in place of the run warning
-    And terminal approval exits 0 and records the independently expected settings and new fingerprint at the next generation
-    And no source byte or marker appears in any output or record, the source is unchanged, and no home volume, staging or worker is created
+    And plain doctor and the review before exactly one y/N prompt both show the opencode-auth credential line, the credential disclosure, the three opencode-auth lines in order naming exactly the three sorted providers, and "Run delivers the opencode-auth grant." in place of the run warning
+    And terminal approval exits 0 and records the independently expected settings and new fingerprint at the next generation, with no provider name in the approval record
+    And no marker appears in any output or record, the source is unchanged, and no home volume, preparation container or worker is created
 
   # As ID-HOME-27: each checkout has a raw policy, independently encoded
   # approval records and its own doctor Engine API fixture at DOCKER_HOST, and
-  # the When runs the itos-container binary's own run. Every source is valid.
-  # Changed: adding (the record is the same version 3 request without
-  # credentials; pointers /credentials /profile) and repointing (the record's
-  # grant names another valid source; pointer /credentials). The matching
-  # control's record carries the same grant and must reach the readiness
-  # inspection (GET /version, GET /info and GET /images/<approved image>/json
-  # journalled, no run.approval-changed); the fixture answers later requests
-  # 403 and its later outcome is not judged. A run that kept the version 3
-  # gate fails the control, and one that skipped the comparison fails the
-  # changed rows.
+  # the When runs the itos-container binary's own run. Every source is a
+  # valid private auth.json. Changed: adding (the record is the same request
+  # without credentials; pointers /credentials /profile) and repointing (the
+  # record's grant names another valid source; pointer /credentials). Two
+  # matching controls carry the same grant as their record: one whose source
+  # is unchanged since the record was encoded, and one to whose source the
+  # fixture adds a fourth provider entry, rewriting it in place before the
+  # When (0042: a later addition needs no new approval). Each control must
+  # reach the readiness inspection (GET /version, GET /info and
+  # GET /images/<approved image>/json journalled, no run.approval-changed);
+  # the fixture answers later requests 403 and the later outcome is not
+  # judged. A run that kept the version 3 gate fails both controls, one that
+  # bound the provider list fails the added-provider control, and one that
+  # skipped the comparison fails the changed rows.
   @wip @slice-40 @ID-HOME-34 @local-engine-fixture
-  Scenario: Adding or repointing the OpenCode Go grant needs a new approval before run contacts the engine
-    Given OpenCode Go grant run checkouts with raw policies and independently encoded approval records for adding and repointing the grant and a matching control
-    When the itos-container binary runs each changed request and then the matching control through its production approval preflight
+  Scenario: Adding or repointing the OpenCode login grant needs a new approval before run contacts the engine, and a provider added to the file does not
+    Given OpenCode login grant run checkouts with raw policies and independently encoded approval records for adding and repointing the grant, an unchanged matching control and a matching control whose source gained a provider after its approval
+    When the itos-container binary runs each changed request and then each matching control through its production approval preflight
     Then each changed request reports changed approval naming exactly its sorted pointers with exit 1 and its Engine API fixture saw no connection and journalled no request
-    And the matching control reports no approval change and its Engine API fixture journal holds the readiness inspection of version, info and the approved image
+    And each matching control, including the one whose source gained a provider, reports no approval change and its Engine API fixture journal holds the readiness inspection of version, info and the approved image
 
   # Slice-54: the person selects the Codex defaults explicitly and sees them
   # before approving. It is slice-35's first stage, built on slice-34 (done),
@@ -1371,78 +1485,78 @@ Feature: An approved persistent home for one checkout's harness
 
   # Slice-40's local run rows; its decisions sit above ID-HOME-32. Both run
   # through the disk backend only, at the SDK recording endpoint
-  # (home_sdk_fixture_test.go), with cmd's production readiness, staging and
-  # docker adapters, real /dev/shm staging and the fixture's private source.
-  # The memory fake keeps its own bytes, so it cannot judge the content rule.
-  # @linux keeps the rows from passing on a process whose disk subtest is
-  # skipped. At each worker create the recording endpoint reads the file the
-  # bind's source names, before the controller unlinks it, and keeps those
-  # bytes, mode and owner for the Then; that read is the positive control for
-  # every marker search.
-  # ID-HOME-35's source, mode 0600, written with two-space indentation as
-  # OpenCode writes it, members in this order:
-  #   github-copilot: {"type":"oauth","refresh":M1,"access":M2,"expires":0}
-  #   anthropic:      {"type":"api","key":M3}
-  #   opencode-go:    {"type":"api","label":M4,"key":K1}
-  # where each M is a fresh marker as a JSON string and K1 is a fresh marker
-  # whose JSON string token contains the six-byte escape backslash, u, 0, 0,
-  # 2, d (a hyphen) where the decoded marker has its hyphen. Every marker search
-  # looks for the decoded marker and for its token as written. The expected staged
-  # bytes are {"opencode-go":{"type":"api","key":K1}}, K1's token as written.
-  # Between the two runs the fixture writes a sibling file (0600) with K2 in
-  # place of K1 and renames it over the source, a new inode at the same path.
-  # The second run must stage K2 under the first run's approval generation
-  # with no consent. The sibling checkout (version 1, the same home request,
-  # no grant) is the absence control: its create has no credential bind.
-  # Every run's argv is "/workspace/opencode --standalone run --format json"
-  # and the endpoint lets each worker start and exit 0.
+  # (home_sdk_fixture_test.go), with cmd's production readiness, session and
+  # docker adapters and the fixture's private source. The endpoint keeps a
+  # synthetic home tree per volume: it answers archive HEAD and GET on a
+  # container from the tree of the volume mounted there, applies archive
+  # uploads to it, and journals each call with its path. The memory fake keeps
+  # its own bytes, so it cannot judge the source rules. @linux keeps the rows
+  # from passing on a process whose disk subtest is skipped. Every run's argv
+  # is "/workspace/opencode --standalone run --format json" and the endpoint
+  # lets each worker start and exit 0; the preparation container is never
+  # started.
+  # ID-HOME-35's source, mode 0600, written with two-space indentation, has
+  # the top-level names anthropic, github-copilot and opencode-go: an OAuth
+  # entry for github-copilot and API entries for the others, each value a
+  # fresh marker. The first run starts on a fresh home. Between the two runs
+  # the fixture rewrites the source in place (same inode) adding a fourth
+  # provider, xai, with its own marker; the second run must record the four
+  # names under the first run's approval generation with no consent. Fresh
+  # status runs after each run. The sibling checkout (the same home request,
+  # no grant, version 1) is the absence control.
   @wip @slice-40 @ID-HOME-35 @local-engine-fixture @linux
-  Scenario: Run stages only the OpenCode Go entry as a read-only file outside the engine configuration
-    Given an OpenCode Go launch fixture with an approved version 3 volume home with the OpenCode harness and an opencode-go grant whose source holds an OpenCode Go entry with an extra member and two other provider logins, each with its own marker, a sibling approved checkout with the same home and no grant, and two sequential runs between which the fixture replaces the source at the same path with a new key
-    When fresh run controllers execute both runs and the sibling's run through the disk backend's recording engine endpoint
-    Then at each run's create the bind's staged file holds exactly the expected opencode-go bytes with that run's key, mode 0400 and the host UID, and the bind is read-only at /run/itos-container/credentials/opencode-go with no other credential bind
-    And no create body, inspection reply, journalled request or response, protected record, status JSON, stdout, stderr, checkout file or archive copy holds any source member's marker, while status JSON lists the opencode-go grant at its fixed target
-    And after each run its staging directory is gone, its worker and anchor are removed and the home is retained, and the second run used the same seeded approval generation with no new approval record
-    And the sibling's create has no credential bind and no staging directory is made for it, and no run changes the source
+  Scenario: Run mounts the approved OpenCode login file writable at its normal path and records its provider names for each run
+    Given an OpenCode login launch fixture with an approved version 3 volume home with the OpenCode harness and an opencode-auth grant whose source holds three provider logins each with its own marker, a sibling approved checkout with the same home and no grant, and two sequential runs between which the fixture adds a fourth provider to the source in place
+    When fresh run controllers execute both runs and the sibling's run through the disk backend's recording engine endpoint, and fresh status follows each run
+    Then before each worker create the run created a never-started preparation container with only the home volume, inspected the four login paths in order, uploaded on the fresh home exactly the three directories at 0700 and an empty auth.json at 0600 owned by the approved UID GID, uploaded nothing on the reused home, and confirmed the preparation container absent
+    And each worker create holds exactly one credential mount, a read-write bind of the approved source path at /home/itos/.local/share/opencode/auth.json, and no staging directory is made
+    And status reports the first run's three sorted provider names and the second run's four, and the second run used the same seeded approval generation with no new approval record
+    And no create body, inspection reply, journalled request or response, protected record, status output, stdout, stderr, checkout file or archive copy holds any source marker, while the source still holds every marker
+    And after each run its worker and anchor are removed and the home is retained, the sibling's run made no preparation container and no credential mount, and no run changes the source
 
-  # ID-HOME-36's defective sources are each a mode 0600 file the fixture
-  # writes before the run, holding a fresh marker wherever a value appears:
-  # no opencode-go member ({"github-copilot":{"type":"oauth",...}}); an entry
-  # of type "oauth"; an entry without key; key ""; key 7; entry "M"; two
-  # opencode-go members; two key members in the entry; the text opencode-go=M;
-  # a top-level array holding a valid object; a valid object followed by {};
-  # a valid object whose key string holds the byte 0xff. The two metadata rows
-  # start from a valid source and change it after the approval was seeded:
-  # chmod 0644, or a second hard link in the same private directory. Those
-  # refuse in run's readiness, before any engine request; the content rows
-  # refuse at staging, after readiness and before any worker create. The
-  # control is a sibling checkout with the same request and a valid source; it
-  # must stage exactly its expected entry and exit 0, so a run that refused
-  # every opencode-go grant fails every row.
+  # ID-HOME-36's defects. Source rows write a mode 0600 source holding a fresh
+  # marker wherever a value appears, or start from a valid source and change
+  # it after the approval was seeded: chmod 0644, or a second hard link in the
+  # same private directory. They refuse at run's check before engine access,
+  # so the endpoint journals nothing. Content defects: text that is not JSON;
+  # a top-level array holding a valid object; a repeated top-level name; a
+  # valid object followed by {}; a valid object whose value string holds the
+  # byte 0xff; a top-level name holding the byte 0x01 (escaped as \u0001); an
+  # empty file; 65537 bytes of one valid object padded with spaces. Home rows
+  # use a valid source and a reused home whose synthetic tree holds the
+  # defect; they refuse at the preparation inspection, after readiness and
+  # before any upload or worker create. "Another owner" gives .local/share the
+  # UID one above the approved one; the "path error" row's HEAD on
+  # .local/share/opencode answers 500 with a link-loop message. The control is
+  # a sibling checkout with the same request, a valid source and a fresh home;
+  # it must mount exactly its source and exit 0, so a run that refused every
+  # opencode-auth grant fails every row.
   @wip @slice-40 @ID-HOME-36 @local-engine-fixture @linux
-  Scenario Outline: Run refuses an OpenCode Go source it cannot deliver before any worker is created
-    Given an OpenCode Go launch fixture whose approved opencode-go source has "<defect>" and an independent OpenCode Go control with a valid source
-    When both OpenCode Go launches are attempted through the disk backend's recording engine endpoint
-    Then the defective launch reports <rule> with exit 1 located at /credentials/0/source and journals no worker create, while the control's staged file holds exactly its expected opencode-go bytes and it exits 0
-    And after the defective launch no staging directory and no unfinished session remain and no owned resource but a retained home is left
-    And no marker of the defective source appears in its stdout, stderr, protected records or any journalled request
+  Scenario Outline: Run refuses an OpenCode login source or home path it cannot deliver before any worker is created
+    Given an OpenCode login launch fixture whose approved opencode-auth delivery has "<defect>" and an independent OpenCode login control with a valid source and a fresh home
+    When both OpenCode login launches are attempted through the disk backend's recording engine endpoint
+    Then the defective launch reports <rule> located at "<subject>" with exit 1 and stops <stops>, while the control's worker mounts exactly its source read-write at the login path and it exits 0
+    And after the defective launch no preparation container, worker or unfinished session remains, the home is retained with its synthetic tree unchanged, and a home refusal's fix names the consented reset of that home
+    And no marker of the defective source appears in its stdout, stderr, protected records or any journalled request, and the source is unchanged
 
     Examples:
-      | defect                               | rule                   |
-      | no opencode-go member                | run.credential-content |
-      | opencode-go entry of type oauth      | run.credential-content |
-      | opencode-go entry without a key      | run.credential-content |
-      | empty key                            | run.credential-content |
-      | key that is a number                 | run.credential-content |
-      | opencode-go entry that is a string   | run.credential-content |
-      | repeated opencode-go member          | run.credential-content |
-      | repeated key member in the entry     | run.credential-content |
-      | text that is not JSON                | run.credential-content |
-      | a top-level array                    | run.credential-content |
-      | a second JSON value after the object | run.credential-content |
-      | invalid UTF-8 in a string            | run.credential-content |
-      | mode changed to 0644 after approval  | credential.permissions |
-      | a second hard link after approval    | credential.links       |
+      | defect                                          | rule                   | subject                                     | stops                                                     |
+      | source mode changed to 0644 after approval      | credential.permissions | /credentials/0/source                       | before any engine request                                 |
+      | a second hard link to the source after approval | credential.links       | /credentials/0/source                       | before any engine request                                 |
+      | source text that is not JSON                    | credential.content     | /credentials/0/source                       | before any engine request                                 |
+      | a top-level array                               | credential.content     | /credentials/0/source                       | before any engine request                                 |
+      | a repeated top-level provider name              | credential.content     | /credentials/0/source                       | before any engine request                                 |
+      | a second JSON value after the object            | credential.content     | /credentials/0/source                       | before any engine request                                 |
+      | invalid UTF-8 in a string                       | credential.content     | /credentials/0/source                       | before any engine request                                 |
+      | a control character in a provider name          | credential.content     | /credentials/0/source                       | before any engine request                                 |
+      | an empty source                                 | credential.content     | /credentials/0/source                       | before any engine request                                 |
+      | a source over 65536 bytes                       | credential.content     | /credentials/0/source                       | before any engine request                                 |
+      | .local a symlink in the home                    | run.home-refused       | /home/itos/.local                           | after the preparation inspection with no upload or create |
+      | .local/share/opencode a symlink in the home     | run.home-refused       | /home/itos/.local/share/opencode            | after the preparation inspection with no upload or create |
+      | .local/share owned by another UID               | run.home-refused       | /home/itos/.local/share                     | after the preparation inspection with no upload or create |
+      | an engine path error on .local/share/opencode   | run.home-refused       | /home/itos/.local/share/opencode            | after the preparation inspection with no upload or create |
+      | auth.json a directory in the home               | run.home-refused       | /home/itos/.local/share/opencode/auth.json  | after the preparation inspection with no upload or create |
+      | auth.json a symlink in the home                 | run.home-refused       | /home/itos/.local/share/opencode/auth.json  | after the preparation inspection with no upload or create |
 
   # Recovery and bounded operations. Independently seeded home-aware records
   # are not accepted by the old codec: first Then is red, never a setup assertion.
@@ -1468,26 +1582,25 @@ Feature: An approved persistent home for one checkout's harness
     And neither stop allocates or starts anything or deletes the home and a same-named replacement is refused by a separate control
 
   # Slice-40's recovery row; its decisions sit above ID-HOME-32. Disk backend
-  # only, at the SDK recording endpoint, @linux as ID-HOME-35. The Given encodes
-  # each session's protected records itself, never through the product codec:
-  # a session of an approved opencode-go run whose controller was lost after
-  # its staging was durably owned and its worker created, before any start
-  # request, with its staging directory
-  # /dev/shm/itos-container-<fresh token> (0700, host UID) holding only the file
-  # opencode-go (0400, host UID, the expected entry bytes with a marker), and
-  # its owned unstarted worker on the endpoint. The original source is deleted
-  # before any When, so neither status nor stop can depend on it. The control
-  # session is encoded the same way, but its staging directory also holds an
-  # unexpected file named extra. T-48's recovery removes only the expected
-  # names and refuses unexpected contents, so the control proves stop deletes
-  # by exact name and never recursively.
+  # only, at the SDK recording endpoint, @linux as ID-HOME-35. The Given
+  # encodes each session's protected records itself, never through the
+  # product codec, each with the opencode-auth grant at its fixed target and
+  # the recorded provider names anthropic and opencode-go. The first session's
+  # controller was lost after its preparation container was durably owned and
+  # created (its full ID recorded), before the worker create. The second's was
+  # lost after its worker was created with the read-write bind, before any
+  # start request. Both containers exist, unstarted, on the endpoint, beside
+  # an unowned control container carrying the first session's labels but not
+  # its recorded ID. The source keeps its markers and is set to mode 0000
+  # before any When, so neither status nor stop can read it.
   @wip @slice-40 @ID-HOME-37 @local-engine-fixture @linux
-  Scenario: Fresh stop removes an OpenCode Go staging left by a lost controller and nothing else
-    Given an independently seeded session of an approved opencode-go run whose controller is gone after staging, with its staged file, its owned unstarted worker and its source deleted, and a seeded control session whose staging directory also holds an unexpected file
+  Scenario: Fresh stop removes what a lost OpenCode login run owned and never touches the login file
+    Given independently seeded sessions of an approved opencode-auth run whose controllers are gone, one after its preparation container was created and one after its worker was created with the login bind, an unowned control container with the first session's labels and an unreadable source
     When fresh status and stop processes inspect and clean both sessions twice through the disk backend's recording engine endpoint
-    Then status first reports the session with its opencode-go grant at its fixed target and its exact stop retry, and stop removes its worker and then its staged file and directory and records completion
-    And the repeated stop makes no engine mutation and status reports the session complete, and no marker appears in any status or stop output
-    And the control's stop records no completion and leaves its staging directory with both its files in place
+    Then status first reports each session with its opencode-auth grant at its fixed target, its recorded provider names and its exact stop retry
+    And stop removes the first session's preparation container and the second session's worker by their exact full IDs and records completion, leaving the control container in place
+    And the repeated stop makes no engine mutation and status reports both sessions complete with their recorded provider names
+    And the source keeps its bytes, inode and mode, the home is retained, and no marker appears in any status or stop output
 
   @slice-34 @ID-HOME-11 @local-engine-fixture
   Scenario Outline: Home work shares the existing operation budgets
@@ -1718,33 +1831,39 @@ Feature: An approved persistent home for one checkout's harness
   # Slice-40's native row; its decisions sit above ID-HOME-32. Offline, so no
   # proxy or refusal log. The source is a private synthetic auth.json on the
   # runner (0600 in a 0700 directory on ext4, outside the checkout and state)
-  # holding an opencode-go API entry and two other provider logins, each value
-  # a fresh marker sharing one fixed prefix. The stand-in first stops at the
-  # fixture's barrier file in its checkout, before it reads anything; there
-  # the harness inspects the worker through the engine and checks the staging
-  # directory the protected session record names, then releases it. The
-  # stand-in, as the workload, then does what the review tells a workload to
-  # do: it makes $XDG_DATA_HOME/opencode/auth.json a symlink to
-  # /run/itos-container/credentials/opencode-go, reads its login through that
-  # link, and tries to open the target for writing. It prints only the
-  # SHA-256 of what it read, whether that held the marker prefix (the positive
-  # control for the home search), whether the write was refused, whether the
-  # link resolves and whether any file under /home/itos, symlinks not
-  # followed, holds the marker prefix; it never prints a marker. For the
-  # second run the fixture rewrites the request as version 1
-  # with the same home and no grant and seeds its matching approval. The
-  # first assertion needs delivery; the second run's absence, cleanup and the
-  # retained home are regression controls. Docker inspection may report
-  # paths, never values (decision 0025).
+  # with the top-level names anthropic, github-copilot and opencode-go, each
+  # value a fresh marker sharing one fixed prefix. The home is fresh. The
+  # stand-in first stops at the fixture's barrier file in its checkout,
+  # before it reads anything; there the harness inspects the worker through
+  # the engine, then releases it. The stand-in then, at
+  # $XDG_DATA_HOME/opencode/auth.json: reports the owner and mode of
+  # .local, .local/share and .local/share/opencode; reads the file and prints
+  # its SHA-256, its sorted top-level names and whether it held the marker
+  # prefix (the positive control for the home search); rewrites it in place
+  # (open for writing with truncation, same inode) with the same names, the
+  # opencode-go value replaced by a fresh refreshed marker and a fourth name,
+  # xai, as a refresh and a new login would; prints the SHA-256 of what it
+  # wrote; then writes a sibling file in .local/share/opencode and tries to
+  # rename it onto the login path, printing whether the rename was refused
+  # with EBUSY. It never prints a marker. Fresh status follows the first run.
+  # For the second run the fixture rewrites the request without the grant,
+  # with the same home, and seeds its matching approval; the stand-in reports
+  # what the login path holds and whether any file under /home/itos, symlinks
+  # not followed, holds the marker prefix. The first assertion needs
+  # delivery; the second run's absence, cleanup and the retained home are
+  # regression controls. Docker inspection may report paths, never values
+  # (decision 0025). This proves in-place refresh with a stand-in only; the
+  # supported OpenCode's own behaviour is the open point above ID-HOME-32.
   @wip @slice-40 @ID-HOME-38 @engine @linux
-  Scenario: The worker reads only the OpenCode Go entry, read-only, and nothing of it outlives the run
-    Given a CI OpenCode checkout with a cached approved image for the actual non-root controller UID GID, an approved offline volume home with the OpenCode harness and an opencode-go grant, a private synthetic auth.json source holding an OpenCode Go entry and two other provider logins each with its own marker, and a synthetic opencode stand-in installed at "/workspace/opencode"
-    When the product runs the stand-in, which links its OpenCode auth path to the delivered file, reads its login through that link and tries to write it, and at the stand-in's checkout barrier the harness inspects the worker and the recorded staging directory
-    And the fixture rewrites the request without the grant with its matching approval and a second fresh product run invokes the stand-in again
-    Then the first stand-in read through its link exactly the expected opencode-go bytes, by digest, holding the marker prefix, its write was refused and no file under /home/itos held the prefix
-    And at the barrier the worker's inspection holds a read-only bind at /run/itos-container/credentials/opencode-go and no marker, and the recorded staging directory was already gone before the worker read its copy
-    And the second stand-in found its link dangling and no file under /home/itos holding the marker prefix
-    And no marker appears in either run's stdout or stderr, status, protected records or checkout, the source keeps its bytes, mode and inode, and after each run its worker, anchor and staging are absent while the home remains
+  Scenario: The worker reads and refreshes the host OpenCode login file in place at its normal path, and nothing of it outlives the run
+    Given a CI OpenCode checkout with a cached approved image for the actual non-root controller UID GID, an approved offline volume home with the OpenCode harness and an opencode-auth grant, a private synthetic auth.json source holding three provider logins each with its own marker, and a synthetic opencode stand-in installed at "/workspace/opencode"
+    When the product runs the stand-in, which at its normal login path reads the file, rewrites it in place with a refreshed login and an added provider and then tries to rename another file onto it, and at the stand-in's checkout barrier the harness inspects the worker
+    And fresh product status inspects the session, then the fixture rewrites the request without the grant with its matching approval and a second fresh product run invokes the stand-in again
+    Then the first stand-in read exactly the source's bytes, by digest, holding the marker prefix and exactly the three sorted provider names, found .local, .local/share and .local/share/opencode owned by the approved UID GID with mode 0700, and its rename onto the login path was refused with EBUSY
+    And after the first run the host source holds exactly the bytes the stand-in wrote, by digest, at its original inode and mode, and status reports the three provider names recorded at run start
+    And at the barrier the worker's inspection holds exactly one credential mount, a read-write bind of the source path at /home/itos/.local/share/opencode/auth.json, and no marker
+    And the second stand-in found an empty regular file at the login path and no file under /home/itos holding the marker prefix, and its worker had no credential mount
+    And no marker appears in either run's stdout or stderr, status, protected records or checkout, and after each run its worker, preparation container and anchor are absent while the home remains
 
   # Controller death cannot supply retry output: use the independently captured
   # protected registration, then explicitly invoke fresh status and stop.
