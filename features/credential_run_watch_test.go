@@ -14,14 +14,18 @@ import (
 const (
 	credentialWatchHeaderSize = 16
 	credentialWatchIgnored    = 0x8000
+	credentialWatchOnlyDir    = 0x01000000
+	credentialWatchDontFollow = 0x02000000
 	credentialWatchDirectory  = 0x40000000
 )
 
+const credentialWatchPollMillis = 10
+
 type credentialWatchIO struct {
 	open     func() (int, error)
-	addWatch func(int, string) (int, error)
+	addWatch func(int, string, uint32) (int, error)
 	read     func(int, []byte) (int, error)
-	poll     func(int) (int, error)
+	poll     func(int, int) (int, error)
 	close    func(int) error
 }
 
@@ -96,7 +100,10 @@ func (o *credentialEventObserver) watchTree(root string, created bool) error {
 }
 
 func (o *credentialEventObserver) watchDirectory(path string) error {
-	wd, err := o.watchIO.addWatch(o.fd, path)
+	const mask = credentialCreate | credentialModify | credentialAttrib | credentialCloseWrite |
+		credentialMoveFrom | credentialMoveTo | credentialDelete | credentialDeleteSelf |
+		credentialMoveSelf | credentialWatchOnlyDir | credentialWatchDontFollow
+	wd, err := o.watchIO.addWatch(o.fd, path, mask)
 	if err == nil {
 		o.watches[wd] = path
 	}
@@ -169,7 +176,7 @@ func (o *credentialEventObserver) drain() {
 				}
 				continue
 			}
-			n, err := o.watchIO.poll(o.fd)
+			n, err := o.watchIO.poll(o.fd, credentialWatchPollMillis)
 			if err != nil && !errors.Is(err, syscall.EINTR) {
 				failure = err
 			}
