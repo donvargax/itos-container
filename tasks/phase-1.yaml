@@ -9454,8 +9454,197 @@
     completed. Fifth, `@linux`-tagged raw-observation fixtures for local rows, and native rows on a
     verified supported filesystem with a private state root. It keeps 0032's settled directory, lock
     and version lines unchanged. Broken down from slice-32.
+
+    The problem. No docs/decisions/0032-codex-shared-directory.md exists on main, and decision 0025
+    still says no Codex kind or delivery is defined. The charter (2026-11-20, q-90) and
+    docs/decisions/STANDING.md:16 settle the shape. The worker gets the host's Codex home
+    read-write as a directory. Its auth.json is a symlink into that directory, because Codex
+    renames a new copy over the file (0025, still so in 0.171.0). Codex keeps its write lock,
+    auth.lock, in CODEX_HOME, and opens it without truncation and never renames it (0025). The
+    login is the ChatGPT subscription (STANDING.md:15). slice-48 to slice-53 each build one stage
+    from this record, so the record settles the five contracts below before any of them is drafted.
+    The implementer writes the record from this entry. Where this entry decides a point, the record
+    states it as this entry's decision. Mark each point decided (from the charter or STANDING.md,
+    with its date) or proposed (this entry's, 2026-11-21, for the person to confirm), as
+    STANDING.md:47 asks. If the implementer finds a point here cannot work as stated, stop and
+    report it with evidence; do not design around it.
+
+    The engine versions this record cites. As of 2026-11-21, CI's ubuntu-latest label is moving
+    from Ubuntu 24.04 to 26.04 (actions/runner-images issue 14748, still open, with completion
+    planned for 2026-11-19). So a CI engine job can land on either image. Image ubuntu24/20261116.376
+    installs docker-ce 28.0.4, and image ubuntu26/20261116.202 installs docker-ce 29.4.2. Each
+    image's toolset json pins those two versions. These are the 28.0.4 and 29.4.2 daemons the ledger
+    and decision 0022 already record. Cite moby source at both v28.0.4 and v29.4.2. Both images
+    install containerd.io at "latest" from download.docker.com, and that package carries runc. No
+    image readme names either version, and download.docker.com is not a host this work may reach.
+    So the record states that the containerd and runc versions are not recorded, and cites no
+    source for either. The lock binding chosen below needs no runtime behaviour beyond what decision
+    0020's checkout anchor already relies on. The runtime binds dockerd's own volume mountpoint
+    under /var/lib/docker, a root-owned path no worker can write. Slice-17's native rows already
+    exercise that path on both daemons. The version gap is therefore one more reason the
+    single-file alternative is not chosen. The record tells slice-52's CI-only row to print the
+    daemon's /version components and /info ContainerdCommit and RuncCommit alongside its result,
+    so that later readers can see which versions it ran on.
+
+    Section "Lock binding through mount acquisition" (feeds slice-52). The threat is another
+    worker that shares the same Codex directory read-write. Between the final metadata check and
+    the moment the runtime acquires the mount, it can rename auth.lock or replace it with a
+    symlink or another inode. The host user and its processes are trusted, as decision 0027's race
+    argument already says. Decisions, all proposed.
+    - The directory is bound exactly as the checkout is in decision 0020. The controller opens it
+      with O_PATH and O_NOFOLLOW, checks its device and inode against the approved identity, and
+      holds that descriptor until ContainerStart returns. It publishes an owned local volume with
+      exactly type=none, o=bind and device=/proc/<controller-pid>/fd/<n>, named
+      itos-container-codex- followed by the session's name token and labelled like the checkout
+      anchor. The worker mounts that volume read-write at the fixed target
+      /run/itos-container/codex, with copying disabled. dockerd performs the bind in its own
+      namespaces, through the local driver and moby/sys/mount. Cite volume/local/local_unix.go and
+      daemon/create_unix.go at both moby tags. Right after start, the decision 0020 detector
+      compares the directory too: /proc/<pid>/root/run/itos-container/codex must have the approved
+      device and inode, under q-39's and q-42's rules unchanged. A mismatch gives owned
+      kill/removal and a mount refusal.
+    - The lock gets no mount of its own. The policy's lock must be the literal path
+      <source>/auth.lock, because the approved directory is the Codex home and Codex keeps
+      auth.lock there. The worker therefore reaches the lock only through the anchored directory.
+      At the final check, with the directory descriptor held, the controller opens auth.lock
+      relative to that descriptor with O_PATH and O_NOFOLLOW. It must be a regular file with the
+      approved lock device and inode. A lock replaced after that check, by a worker that shares
+      the directory, is still inside the anchored directory. It is part of the shared-write
+      exposure the person accepted (q-72's "exposure and corruption risk accepted"). The worker
+      resolves a planted symlink inside its own mount namespace, so a replacement can break
+      refresh serialization but can never hand the worker a host file outside the directory. The
+      record states this weaker binding plainly: Docker binds the directory's inode, not the
+      lock's.
+    - Not chosen: a single-file HostConfig bind of the lock from a /proc/<pid>/fd/<n> source.
+      There the runtime (runc) resolves the source path. Its version is not recorded and no agent
+      can read it, so the pinned-inode claim would rest on unread code. Decision 0020's local
+      volume cannot bind a file, because it mounts onto a directory.
+    - Where the worker-side symlinks auth.json and auth.lock in $CODEX_HOME come from is not this
+      record's call. It names their targets, /run/itos-container/codex/auth.json and
+      /run/itos-container/codex/auth.lock, and leaves their creation to slice-52, with slice-35's
+      home seeding.
+    - Evidence slice-52 owes, CI-only. First substitute the directory path at the
+      mount-acquisition boundary. The worker must see the original directory inode or never run
+      the workload, and a healthy control must pass. Then replace auth.lock with a symlink to a
+      host sentinel outside the directory. The worker must not read the sentinel, after a probe
+      shows the host UID can read it. No source inspection or local fixture is runtime evidence.
+
+    Section "Credential-set aliases" (feeds slice-49, and slice-52's recheck). The credential set
+    is the directory D (source), its auth A (D/auth.json, a fixed name) and lock L (D/auth.lock),
+    and any token source T. All proposed. Extend the existing duplicate-inode check in
+    internal/engine/readiness/domain/credentials.go and the shared readiness observer, with no new
+    bounds and no reading of contents. Refusals, each located and each the first failure for its
+    field, in the existing order:
+    - D: a host-owned directory, not a symlink, with safe ancestors and no group or other write
+      bit; otherwise credential.directory (new), exit 1, at /credentials/<i>/source.
+    - A and L: the existing token file rules, which are host-owned regular file, no symlink,
+      exactly one link and no group or other bits. A is 1 to 65536 bytes and L 0 to 65536. A's
+      failures are located at /credentials/<i>/source with a message naming auth.json; L's at
+      /credentials/<i>/lock.
+    - L on the same inode as A, or L not a regular file: credential.duplicate or
+      credential.regular at /credentials/<i>/lock.
+    - T on the same inode as A or L: credential.duplicate at /credentials/<j>/source. T inside D's
+      subtree, which the worker could reach through the directory: credential.location at
+      /credentials/<j>/source.
+    - The checkout or either protected state root inside D, or D inside them: credential.location
+      at /credentials/<i>/source. Mount rows at, below or covering D get the checkout's existing
+      coordinate rules.
+    - D's entries get the checkout inventory's existing rules and bounds (decisions 0013, 0019):
+      128 per batch, 100,000 entries, depth 64, 10 s. A regular file with more than one link is
+      credential.links, and a Unix socket is credential.socket (new), both exit 1. Exhausted bounds
+      use the existing exit-3 unavailable rule. All are located at /credentials/<i>/source, and the
+      message names the entry kind, never its name.
+    - An independent-source control passes: the same entries as separate inodes outside D.
+
+    Section "Version 4, harness home and delivery gates" (feeds slice-48, slice-50 and slice-52).
+    Proposed unless marked otherwise.
+    - Version 4 is version 3 plus the kind codex-auth, with exactly kind, source and lock, at most
+      once. Token entries keep exactly kind and source. Version 4 carries home: {storage: volume}
+      exactly as versions 1 to 3 already do, which is decided (decision 0030 and docs/CONFIG.md).
+      Version 3 still refuses codex-auth with policy.credential_kind, so a retained version keeps
+      its written meaning (STANDING.md:89). A lock other than <source>/auth.lock is
+      policy.credential_lock (new), exit 2, at /credentials/<i>/lock. It is checked file-only and
+      never stats the path. Unsupported-version fixes name versions 1 to 4.
+    - The canonical approval grant for Codex is the closed object {kind: codex-auth, source, lock,
+      target: /run/itos-container/codex, device, inode, lock_device, lock_inode}, with the four
+      identity values as decimal strings. The approval binds the directory and lock identities but
+      never A's inode or any bytes. A safe auth.json replacement keeps the fingerprint. A
+      different directory or lock inode at the same path changes it, as the single /credentials
+      difference. Token grants keep their path-only form.
+    - Profiles take the base, then -credentials when any token grant exists, then -codex for a
+      Codex grant, then -home, then -v1. So Codex alone is offline-codex-v1 or allowlist-codex-v1,
+      and Codex with home is offline-codex-home-v1 or allowlist-codex-home-v1. A version-4 policy
+      with no grant keeps the no-grant profiles and declares version 4.
+    - The frozen form is these canonical bytes in the session snapshot, unchanged. Status projects
+      the grant from the snapshot only.
+    - Run gates. Every version-4 request refuses with policy.version, exit 2, before manifest,
+      source, engine or state access, until slice-52 lifts the gate; this follows STANDING.md:101.
+      Slice-52 then admits two kinds of request. A version-4 request with no grant runs as its
+      no-grant profile. A request with Codex only, with or without home, is delivered. Codex plus
+      any token keeps refusing, as run.credentials-unsupported (new), exit 2, at /credentials,
+      with the same early placement and no state written, until a later item specifies combined
+      delivery. Version 3 stays as slice-31 leaves it.
+
+    Section "Session record and source-check publication" (feeds slice-51 to slice-53). All
+    proposed. The Codex record is session schema 5, separate from schema 4's token staging. It has
+    schema 2's fields and anchor, optional egress and home as today, and a required codex object.
+    It has no credentials member, and a schema-5 record with token staging is invalid. The codex
+    object is closed, with three members.
+    - grant: the approved Codex grant, exactly as frozen.
+    - anchor: the owned directory volume, with exactly the checkout anchor's seven fields
+      (session, name, source as the /proc descriptor path, device, inode, created, stage). Its
+      stage is intent, owned or absent, under the same transition rules. It binds to the original
+      session because its session and name token equal the record's. The volume carries the
+      session's labels, and recovery revalidates its options and labels against the protected
+      record before any removal, never by name alone.
+    - check: last is the last completed check, with phase admission or final and result safe,
+      unsafe or unavailable; pending is true or false.
+    The admission check runs before worker create and publishes {phase: admission, result: safe}.
+    An admission check that is not safe refuses before any engine mutation and publishes nothing.
+    The final check comes after owned worker removal is confirmed. Pending becomes true durably
+    before the sources are read. The result is then published with pending false, and only after
+    that is the anchor released, last of the owned resources. A completed final check is
+    terminal: a later stop keeps it and never checks again. A pending check after interrupted
+    cleanup makes stop resume the same full ID and check. No check deletes or repairs a source.
+    Status reads only the record.
+
+    Section "Deterministic metadata fixtures" (feeds every local and native row). Decided by the
+    coordinator's why above; the rest proposed.
+    - Local rows are tagged @linux and run a test-only cmd/itos-container assembly shaped like
+      TestCredentialContractProcess (cmd/itos-container/credentials_contract_test.go). It feeds
+      readinessfake.CredentialFiles raw nodes for D, A, L, the tokens and their ancestors, and raw
+      mountinfo text with ext4 rows parsed by the real readinessdisk.ParseCredentialMounts. The OS
+      and architecture inputs are linux and amd64. So each row reaches its own assertion rather
+      than host.unsupported or credential.filesystem. Because the observations live in memory, the
+      loop host's UID-65534 / and /tmp (p2-repair-platform-ci-fixtures) cannot stop them. Each row
+      has a positive control. Record-only rows reuse the existing session contract assembly.
+    - Native @engine rows run only in CI. Each one creates its Codex directory under a fresh
+      private root outside the checkout and state. That directory is mode 0700 and holds a
+      synthetic auth.json marker and an empty auth.lock, both 0600. The row first statfs the root
+      and fails, never skips, unless it is ext4, btrfs or xfs. Each row uses its own XDG_STATE_HOME
+      with mode 0700. The record notes that the fixed <account home>/.local/state/itos-container
+      tree cannot move and is shared by the runner's rows.
+    - No real account, login or Codex binary is used; synthetic markers only (STANDING.md:64).
+
+    Bounds. The implementer writes only docs/decisions/0032-codex-shared-directory.md, with the five
+    sections under exactly the headings the check reads, each as a level-2 heading. It names the
+    arc42 sections it supersedes: the slice-32 increment row, the T-48 Codex-file note and the
+    question-1 risk row. It leaves arc42, docs/CONFIG.md, docs/security.md, the registry and
+    sibling entries unchanged. It adds no code, scenario, dependency or workflow change.
+
+    Commits and proof. One docs commit with Task T-76. The range is prose-only (ci.prose.paths
+    covers docs/**), so no proof.code path changes and there is no mutation proof. On such a range
+    CI keeps only checks declaring prose: true, so the check declares it. The implementer may commit
+    freely in its workspace. The host makes the landing commits and runs itos, submission,
+    publication and review.
+
+    How the check fails today. grep cannot open docs/decisions/0032-codex-shared-directory.md, so
+    the first heading fails and the loop exits 1. It also fails if any heading is missing,
+    reworded or not at level 2. It cannot judge the sections' content; review against this entry
+    does.
   done_when:
     - run: for h in 'Lock binding through mount acquisition' 'Credential-set aliases' 'Version 4, harness home and delivery gates' 'Session record and source-check publication' 'Deterministic metadata fixtures'; do grep -qxF "## $h" docs/decisions/0032-codex-shared-directory.md || exit 1; done
+      prose: true
 - id: T-77
   type: ci
   title: credentials-run.feature joins the egress engine shard whole, before slice-31 lands
