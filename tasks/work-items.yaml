@@ -3022,3 +3022,33 @@ items:
       also runs T-48's ReadPath and checked-source contracts, so a closed or refused capability
       cannot read or alias a retained source. These are regression checks of shapes that already
       hold, not behaviour scenarios. Broken down from slice-31.
+  - id: claude-run-admission-delivery
+    title: run admits an approved version-3 Claude request, rechecks sources after engine inspection, and stages the checked inode as the read-only token file or starts nothing
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [credrun-native-delivery-steps, credentialfs-raw-contract, slice-61]
+    kind: idea
+    why: >
+      This slice lifts run's version-3 gate (cmd/itos-container/main.go:337) for no-grant and
+      claude-token requests only. Lifting it turns on at once readiness's located source refusals
+      before and after engine inspection (internal/engine/readiness/domain/inspect.go:67 and :103)
+      and T-48's staging and inspected-bind checks. So this slice owns every local scenario that
+      turns green then: CREDRUN-01, -02, -03, -04, -05, -06 and -07. Each is red on its base because
+      run refuses version 3 with policy.version exit 2. CREDRUN-04 fails at its source-problem Then.
+      CREDRUN-06 fails at its rule-and-exit Then: a denied open, a short read or a size change after
+      a full read must give run.credential-refused; a non-tmpfs staging root or a short write must
+      give run.credential-unavailable; a writable bind, one naming the source or one with another
+      target must give run.isolation-unverified; and none of these may start the workload.
+      CREDRUN-03 is edited in place under decision 0041. Its tmpfs and nfs4 rows move to an outline
+      beside it with an ID minted by `itos tests next-id`, in which the Claude run proceeds with
+      slice-61's recorded credential.filesystem warning, while the rows for an independently
+      observed location still refuse. Delivery reuses T-48's seam: a copy from the retained
+      descriptor, private tmpfs staging, and one read-only bind at
+      /run/itos-container/credentials/claude-token. Requests that include GitHub keep the
+      policy.version exit-2 gate. The slice changes neither run help nor status output, so
+      CREDRUN-13 and CREDRUN-14 stay red for their owners. In its feat commit it replaces
+      CREDENTIALS-13's blanket version-3 run rows and CREDAPPROVAL-17's Claude row, and removes the
+      blanket version-3 run warning for supported requests. Its author writes the local step
+      definitions red first. Its local evidence reuses the first task's detectors and edit bracket.
+      Broken down from slice-31.
