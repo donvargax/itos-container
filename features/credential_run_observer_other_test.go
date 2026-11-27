@@ -11,7 +11,3 @@ func credentialWatchUnsupported() (int, error) {
 func credentialRunDevice(_ string) (uint64, error) {
 	return 0, errCredentialRunObserverUnsupported
 }
-
-func verifyCredentialRunFilesystem(_ []string) error {
-	return errCredentialRunObserverUnsupported
-}
