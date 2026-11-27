@@ -1255,6 +1255,9 @@ items:
       point to add is the order of work. Until the person answers, T-40's teardown copy and
       slice-26, slice-27 and slice-28 must carry the disclosure that an incomplete log cannot be
       detected. Slice-28 shows a count as complete only after the decision.
+    deferred: >
+      Wait until idea intake can resume an unanswered question without terminating the active queue
+      session. Resume this idea after that fix.
   - id: T-43
     title: The Engine failure diagnostics step prints each failed scenario's godog step error and annotates it
     phase: 1
@@ -2950,6 +2953,9 @@ items:
       refusal still applies. Update decision 0027's 2026-11-10 amendment and supersede the
       filesystem-type refusal in q-64 and its standing summary. Update the credential policy and
       approval scenarios and prove the doctor, run and status outcomes.
+      The disk-store test for warning persistence passed on the tree without the implementation.
+      Exercise a stored warning with its path and filesystem type so the missing behavior fails
+      on red and the implemented behavior passes on green.
     refs: [docs/decisions/0041-record-credential-filesystem-type-as-a-warning-on-the-trusted-local-host.md, docs/decisions/0027-credential-source-inspection.md, docs/decisions/0029-credential-approval.md, features/credentials-policy.feature, features/credentials-approval.feature]
   - id: p2-readiness-approval-refusal-inventory
     title: Identify the outsider each readiness and approval refusal stops
