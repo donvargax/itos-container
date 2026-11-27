@@ -3039,14 +3039,15 @@ items:
       CLI, CONFIG, security and arc42 status docs up to date, and revises AC-36's row in
       docs/plans/container-pilot.md and ADR 0025's question-6 prose to q-56's wording, without
       claiming the redaction that p1-platform-log-redaction owns. Broken down from slice-31.
-  - id: claude-run-staging-recovery
+  - id: slice-64
     title: Lost start acknowledgement and controller loss recover staged credentials from original authority, and status shows credential staging
     phase: 1
     owner: null
     status: todo
     depends_on: [slice-63, T-96]
-    kind: idea
+    kind: slice
     why: >
+      Was claude-run-staging-recovery.
       This slice owns the credential_staging projection in status JSON (present, absent or unknown,
       from T-48's observation) and the session-labeled 'credential staging: <value>' plain line,
       which is omitted for no-grant sessions. It also owns the recovery rules that use them.
