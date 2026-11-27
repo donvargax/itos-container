@@ -1552,6 +1552,7 @@ items:
       an approved grant, or after the source file changes mode or owner, run refuses before creating
       anything. A second worker or project does not receive it. Offline runs without grants are
       unchanged. Broken down from p1-credentials-passed-in.
+    refs: [docs/decisions/0035-real-credentials-for-container-runs-a-subscription-token-where-the-provider-issues-one-else-its-auth-file-shared.md]
   - id: slice-32
     title: run bind-mounts the approved Codex auth.json, and its lock file when present, read-write as single files
     phase: 1
@@ -1969,7 +1970,7 @@ items:
     phase: 1
     owner: donvargax
     status: todo
-    depends_on: [slice-40, slice-31, slice-53]
+    depends_on: [slice-40, slice-53]
     kind: slice
     why: >
       Was p1-exec-owned-session.
@@ -1979,6 +1980,9 @@ items:
       disconnect, concurrent stop and foreground exit. Specify how an exec process is terminated
       despite the absence of an exec-signal endpoint before implementing. Require black-box
       scenarios and CI-only real-engine evidence. Broken down from p1-interactive-tty.
+    deferred: >
+      Wait for every replacement child of slice-31. Restore those dependencies before resuming this
+      item. The OpenCode and Codex harness dependencies also continue to apply.
   - id: slice-39
     title: Attach an interactive TTY to an owned exec command
     phase: 1
@@ -2147,7 +2151,7 @@ items:
     depends_on: []
     kind: task
   - id: slice-40
-    title: Deliver an approved OpenCode login to one container run
+    title: Deliver the approved whole OpenCode login file writable at its normal path
     phase: 1
     owner: donvargax
     status: todo
@@ -2156,14 +2160,13 @@ items:
     why: >
       Specify the OpenCode counterpart to slice-32. The source is auth.json under
       ~/.local/share/opencode and may include the OpenCode Go provider key alongside other provider
-      entries. Specify what one grant authorizes, how unrelated entries stay outside it, what
-      approval shows, how updates or refreshes and cleanup work, and how the staged login stays out
-      of the checkout, engine configuration and logs. Use synthetic markers and fake endpoints for
-      the scenarios. Name any unresolved account decision explicitly. Specification first. Real
-      credentials follow decision 0035: OpenCode issues no subscription token, so the one grant is
-      the OpenCode Go provider entry from auth.json. Any harness may be the first in the container
+      entries. Under decisions 0035 and 0040 the person approves the whole file after seeing every
+      provider it holds. Run makes the host file writable at OpenCode's normal login path so
+      refreshes reach the host. Specify cleanup and how the login stays out of the checkout,
+      engine configuration and logs. Use synthetic markers and fake endpoints for the scenarios.
+      Name any unresolved account decision explicitly. Any harness may be the first in the container
       (the person, 2026-11-24), so this slice need not wait for the Codex and Claude slices.
-    refs: [docs/decisions/0039-slice-40-s-redraft-may-reuse-the-earlier-spec-on-slice-40-old-and-the-partial-implementation-on-slice-40-d9e5a2d.md]
+    refs: [docs/decisions/0042-keep-the-opencode-file-grant-when-providers-change-and-record-provider-names-per-run.md, docs/decisions/0040-share-the-approved-whole-opencode-login-file-at-its-normal-path.md, docs/decisions/0039-slice-40-s-redraft-may-reuse-the-earlier-spec-on-slice-40-old-and-the-partial-implementation-on-slice-40-d9e5a2d.md]
   - id: slice-41
     title: Start OpenCode headless with isolated home and configuration
     phase: 1
@@ -2933,8 +2936,8 @@ items:
   - id: slice-61
     title: Record credential.filesystem as a warning in doctor and run status
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: slice
     why: >
@@ -2948,7 +2951,7 @@ items:
       refusal still applies. Update decision 0027's 2026-11-10 amendment and supersede the
       filesystem-type refusal in q-64 and its standing summary. Update the credential policy and
       approval scenarios and prove the doctor, run and status outcomes.
-    refs: [docs/decisions/0027-credential-source-inspection.md, docs/decisions/0029-credential-approval.md, features/credentials-policy.feature, features/credentials-approval.feature]
+    refs: [docs/decisions/0041-record-credential-filesystem-type-as-a-warning-on-the-trusted-local-host.md, docs/decisions/0027-credential-source-inspection.md, docs/decisions/0029-credential-approval.md, features/credentials-policy.feature, features/credentials-approval.feature]
   - id: p2-readiness-approval-refusal-inventory
     title: Identify the outsider each readiness and approval refusal stops
     phase: 1

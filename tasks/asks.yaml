@@ -404,3 +404,18 @@ questions:
     question: "slice-38 and slice-39 (exec and TTY into an owned session): should they wait for harness support in the container?"
     answer: "Yes. The person, 2026-11-25: slice-38 and slice-39 come after harness support in the container: OpenCode (slice-40), Claude Code (slice-31 and the children it is broken into), Codex (slice-48 to slice-53), and later possibly further harnesses. They are neither deferred nor dropped. slice-38 depends on slice-40, slice-31 and slice-53 (slice-53 ends the Codex chain), and slice-39 already waits on slice-38. When slice-31's breakdown names its children, slice-38 depends on those instead."
     decision: none
+  - id: q-100
+    item: "slice-40"
+    question: "What does one OpenCode login grant authorize when the host auth.json holds more than one provider?"
+    answer: "On 2026-11-26 the project owner’s local-login rule and decision 0035 were applied to OpenCode. The person approves the whole host OpenCode auth.json. Approval shows every provider it holds, including OpenCode Go and GitHub Copilot OAuth when both are present. Run makes that same file available writable at OpenCode’s normal login path so refreshes land on the host. A filtered copy would add maintenance without protecting against an outsider on the trusted local machine."
+    decision: 40
+  - id: q-101
+    item: "slice-61"
+    question: "Should a credential filesystem type that cannot exclude a backing alias by itself refuse a run on the trusted local machine?"
+    answer: "On 2026-11-26 the project owner directed that credential.filesystem become a recorded doctor and run warning. Detect the affected path and filesystem type, report both in doctor, and preserve the warning for status. Continue when filesystem type alone prevents excluding an alias, including on overlay, FUSE, NFS and 9p. The local machine, repositories and accounts are trusted. This applies the 2026-11-24 rule that a security refusal must address a real outsider."
+    decision: 41
+  - id: q-102
+    item: "slice-40"
+    question: "Does approval of the whole OpenCode auth.json cover providers added to that file later, and what must each run and its status show?"
+    answer: "The person confirmed on 2026-11-26 that the approved whole-file grant covers providers added to the host OpenCode auth.json later. Adding a provider requires no fresh approval. Each run records the provider names present for that run. Its status shows those recorded names. Both contain provider names only and never credential values."
+    decision: 42
