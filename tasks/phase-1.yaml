@@ -10021,18 +10021,467 @@
   type: test
   title: credentials-run.feature lands on main with CREDRUN-08 to -10 @wip and their native step definitions, red in CI
   why: >
-    Native red evidence must exist before product code turns it green. Main's egress-shard placement
-    also needs credentials-run.feature to hold genuine @engine rows as soon as the file exists. This
-    task carries the reviewed CREDRUN-08, -09 and -10 onto current main with @wip kept. It revises
-    the header to decision 0035 (the staged claude-token file, never replaced by rotation), to
-    decision 0041 and to the egress placement. It also adds their native step definitions and the
-    shared harness the later children reuse: the native /var/tmp fixture verification, the
-    cooperative hash probe, the marker detectors (raw and base64 at all three offsets) each with a
-    positive control, the inotify checkout observer with its calibrated policy-edit bracket, and the
-    engine-free regression TestCredentialRunPolicyEditBracket. No product code. Broken down from
+    Native red evidence must exist on main before product code turns it green, and T-77 already
+    names credentials-run.feature in the egress shard while no file of that name is on main.
+    slice-31 was dropped on 2026-11-27 and broken down. This task lands its reviewed native rows
+    ID-CREDRUN-08, -09 and -10 on main, @wip, with complete native step definitions and the shared
+    harness that T-96 and slice-62 to slice-64 reuse: the native /var/tmp fixture and its
+    verification, the cooperative hash probe and its positive control, the marker detectors and
+    theirs, an engine passthrough journal, the inotify checkout observer with its calibrated
+    policy-edit bracket, and the engine-free regression TestCredentialRunPolicyEditBracket. It adds
+    no product code, no workflow edit and no new scenario ID. The work is one test commit under
+    features/ only. The implementer may commit freely in its own workspace; the host makes the
+    landing commits and handles itos, submission, publication and review. Agents never get an
+    engine, so only the check below runs locally; the native rows run in CI. Broken down from
     slice-31.
+
+    The file. Create features/credentials-run.feature with exactly the text below, ending in one
+    newline. Each line of the file is shown here with two extra leading spaces. The header is
+    slice-31's reviewed header (this file at 48ce147, origin/slice-31), cut to these rows and
+    revised for decision 0035 (the staged claude-token file is that run's own copy, and rotation
+    never replaces it), decision 0041 (filesystem type warns and no longer refuses), T-93's step
+    rule and T-77's egress placement. The three rows are that file's lines 439 to 493, unchanged.
+    This text is what lands, not the branch. If the branch differs or cannot be fetched, nothing
+    changes.
+
+      @phase-1
+      Feature: Deliver the approved Claude token to one owned run
+        Run copies the approved source's current bytes to a private read-only worker file.
+        Approval binds the grant, not its contents. Provisioning exposes no token in
+        configuration, records or diagnostics, and owned teardown removes the copy.
+
+        # Authorities: charter milestone two step 2, contract AC-02/03/22/23/28/29 and
+        # AC-36 AS REVISED BY q-56, decisions 0025, 0027, 0029, 0035 and 0041,
+        # architecture.md Slices, arc42 Credential run, q-52/67/69 and T-93's step rule.
+        # Rows land in stages from slice-31's breakdown: T-95 lands 08 to 10 @wip with
+        # their native steps and the shared harness; T-96 adds 11 and 12; the local rows
+        # 01 to 07, 13 and 14 join with the items that own them. slice-31's complete
+        # reviewed header, with the admission, recheck, presentation, raw-contract and
+        # supersession rules those items carry, is this file at 48ce147.
+        #
+        # Decision 0035: container runs may use real credentials, the person's smoke
+        # check included; Claude gets a claude setup-token token, staged as below for
+        # the workload to export as CLAUDE_CODE_OAUTH_TOKEN. No scenario uses a real
+        # credential, provider/model call, login, refresh or account: every source
+        # here is synthetic. No Codex kind, GitHub delivery, automatic environment
+        # export, harness init or new privilege belongs here.
+        # Decision 0041: a source filesystem type that by itself prevents excluding a
+        # backing alias raises credential.filesystem as a warning naming the path and
+        # type, in doctor and in run status, and the run continues; an independently
+        # observed prohibited location or any other independent refusal still applies.
+        #
+        # q-56 supersedes ADR 0025's open question 6 and blanket log-absence wording:
+        # provisioning must not leak, but hostile workload output/traffic is unredacted.
+        # A workload can put token bytes in a refused hostname; proxy stdout, Docker's
+        # proxy log and the retained refusal log can then contain them. Verbatim target
+        # logging remains. p1-platform-log-redaction owns scrubbing and the adversarial
+        # hostname-marker probe; neither blocks these rows. Preserve that disclosure,
+        # do not hash hostnames here, and do not claim general AC-36 closure.
+        #
+        # Delivery is T-48's existing mechanism, not a new session lifecycle:
+        # retain checked descriptors, reopen /proc/self/fd/<n> rather than source names,
+        # and copy once without trimming, including final newlines. Intent precedes
+        # private tmpfs staging under /dev/shm/itos-container-<32 lowercase hex digits>,
+        # directory 0700, file 0400, host UID. Bind ONLY the staged regular file
+        # read-only at /run/itos-container/credentials/claude-token. The original
+        # source, siblings and host staging directory are never mounted. Keep all
+        # existing hardening, private IPC, worker /dev/shm, literal argv as the main
+        # process and no restart. Never put source bytes in controller-set Env/argv,
+        # Engine API bodies, labels, inspect, approvals, snapshots, intents, recovery,
+        # diagnostics or files under checkout/state. The workload may explicitly read
+        # the file and export CLAUDE_CODE_OAUTH_TOKEN; the controller does not do that
+        # or call a shell on its behalf. After start wait and the applicable mount
+        # detector, attempt staged unlink on every path; an acquired mount survives
+        # unlink. Completion requires worker AND staging absence plus every existing
+        # owned resource, never just a missing pathname. The staged file is that run's
+        # own copy (decision 0035): rotating valid contents or inode at the approved
+        # path between runs is not an approval change, never replaces a live worker's
+        # copy, and reaches only a later run's staging.
+        #
+        # Sources contain only fresh "itos-synthetic-credential-" plus 32 random lower
+        # hex digits, with optional padding/final newlines. Hashes are calculated by the
+        # harness and cooperative worker only, never production approval/provisioning.
+        # Hash-only probe reports include nonce, path, mode/UID and attempted operations;
+        # absent reports cannot satisfy either positive or isolation assertions.
+        # Scan raw markers and base64 at all three offsets, with positive-control
+        # files for EVERY detector. Scan all request/response metadata (including error
+        # bodies), full worker inspect, text/JSON status, doctor/approve output, run/stop
+        # diagnostics, approval/snapshot/intent/recovery and all checkout/state files.
+        # Checkout absence is also continuous, not only final: each When first arms a
+        # recursive inotify write observer on every checkout directory (create,
+        # modify, attrib, close-write, moves, delete and queue overflow) and proves it
+        # with a fixture-made transient create, write and remove of its own. Later
+        # fixture or probe control writes go only to one fixture control directory and
+        # are journaled by exact name. Sources, state roots and the account home lie
+        # outside every checkout, so their fixture edits are not checkout events. The
+        # only fixture edits inside a checkout are three policy edits, each a single
+        # journaled operation on that checkout's exact itos-container.yaml path: 05's
+        # policy row replaces it while run is held at its post-freeze barrier; 10
+        # replaces the first project's after every earlier run's controller has
+        # exited and before the later run starts; 12 unlinks it after the killed
+        # controller has been reaped and before any fresh status or stop.
+        # A replacement never writes through the policy path. The harness writes and
+        # closes the new policy in a staging file in the private fixture root outside
+        # every checkout, checks it shares the checkout's st_dev (else a fixture
+        # blocker), records its inode and SHA-256, and then makes exactly one
+        # rename(2) over the policy path. An unlink is exactly one unlink(2). The
+        # harness's edit helper journals every mutating syscall it issues in a
+        # bracket, with its path, and the bracket requires exactly one rename or one
+        # unlink there and no open-for-write, write or truncate. That journal, not
+        # the inotify count, attributes the fixture's own mutation.
+        # One inotify instance per checkout keeps its events in order. The harness
+        # brackets each edit with uniquely named begin and end sentinel creates in the
+        # control directory, and in the same When calibrates the expected event kinds
+        # by the identical operation on a calibration file there: one rename of a
+        # staged file over an existing one, or one unlink. Inside a bracket the
+        # policy path must show exactly that calibrated move-to or delete event and
+        # no modify, close-write, attrib or create event. Every other writer is
+        # accounted for by event kind: a write, truncate or recreation on that name
+        # by anyone emits an event the calibrated sequence lacks, and coalescing can
+        # merge repeats only into one such event, never into the expected one. A
+        # second rename carries its own cookie and a second delete needs a create
+        # between them, so neither coalesces into the calibrated event. Every other
+        # writer is also held for the bracket: each product process the harness
+        # launched is reaped or parked at its journaled, unreleased barrier, and each
+        # live worker's cooperative probe is parked at a barrier that writes nothing.
+        # After the end sentinel the policy path's inode and SHA-256 equal the staged
+        # file's, or the path is absent after an unlink. The observer stays armed
+        # throughout. Any other checkout event, an extra or out-of-bracket event on
+        # the policy path, a missing or extra journaled mutation, a changed staged
+        # result, a missing bracketed edit, an unjournaled name or an overflow fails
+        # every provisioning-surface assertion, even when the final marker scan and
+        # checkout comparison pass.
+        # The red-first test commit also adds an engine-free harness regression,
+        # TestCredentialRunPolicyEditBracket, run by ordinary go test over a
+        # disposable checkout with the observer armed. Its negative controls open the
+        # policy file once and make two writes through that one descriptor inside one
+        # bracket: before a scheduled replacement, after it on the new file, and
+        # before a scheduled unlink. Each must fail the bracket check. Its positive
+        # control, the calibrated single replacement or unlink alone, must pass. It
+        # tests the harness, so it passes before and after the work and is not
+        # scenario red evidence.
+        # Include proxy stdout, its Docker log and retained refusal log in 08's allowlist
+        # row, whose ordinary refusal hostname contains NO marker. Require a nonempty
+        # observed refusal and a successful controlled TLS exchange, not empty logs.
+        # In 08 invoke doctor in plain/JSON and matching bare approve at a terminal
+        # without an answer, retaining their output before run; collect plain/JSON
+        # status while the hash probe waits after startup. Require successful results
+        # and no new consent/publication. Do not scan absent command transcripts.
+        # Fixture-owned sources, staged bytes while authorized, positive controls and
+        # fixture-only journals containing inputs are excluded from searches of product
+        # persistence; actual Engine API captures and product state are never excluded.
+        # Workload transport carries only hashes in these cooperative probes. Failure
+        # messages identify the leaking surface, never print markers or full records.
+        #
+        # @engine means guarded Linux amd64 native Docker CI ONLY, using the cached
+        # image and non-root host UID/GID. Native fixture: one private 0700 root under
+        # /var/tmp, as slice-29's credential fixture uses, holds the checkout, the
+        # selected XDG_STATE_HOME, the source directory and the account home that the
+        # existing engine probe assembly receives as SLICE_21_ACCOUNT_HOME. Only that
+        # seam relocates the fixed <account home>/.local/state/itos-container boundary;
+        # a private HOME or XDG_STATE_HOME does not, and the runner's real account
+        # state is never used. Before any product command the Given independently
+        # verifies, by its own statfs, statx(STATX_MNT_ID) and mountinfo parse and
+        # never the product observer, for the source, checkout, selected state root,
+        # fixed account state root and every ancestor of each: ext4, btrfs or xfs; a
+        # mount ID naming exactly one row with a path root; no row of any other type
+        # at, below or covering those four paths; every ancestor owned by root or the
+        # host UID and not group/other-writable unless root-owned sticky; and /dev/shm
+        # a root-owned sticky tmpfs. A failed verification fails that Given at its own
+        # step (T-93), naming only path, type and UID: a fixture blocker, never red
+        # evidence. The three types are required so doctor reports the source ready
+        # with no credential.filesystem warning (decision 0041); the list is never
+        # widened to admit a runner. Each @engine When then runs JSON doctor on every
+        # fixture checkout before run. Doctor's readiness passes today, so it proves
+        # the fixture clears shared readiness and an unrelated readiness refusal
+        # cannot stand in for the credential red.
+        #
+        # Shard placement: T-77 put the whole file in the egress shard (ci.yml's egress
+        # include and egressShardFiles); it is no longer pending once on the tree. Keep
+        # four shards, whole files, the 180-second warning target and the 600-second
+        # hang guard. Red dispatch and activation must each show the egress shard
+        # selecting exactly this file's @engine rows (08 to 10: 3, 2 and 1 rows; with
+        # T-96's 11 and 12: 3, 2, 1, 2 and 2) and no other shard selecting any.
+        #
+        # Helpers built by the harness run only inside disposable workers. No real
+        # service/credential, pull/build, fallback image or agent Docker access. The
+        # allowlist row reuses slice-27's isolated fake endpoint and positive controls.
+        # Audit product effects before bounded identity-checked harness cleanup; that
+        # cleanup is never evidence of product teardown. No credential bytes are
+        # deliberately written into the checkout, even for a negative-control probe.
+        #
+        # A Given or When that cannot finish its own setup or action (a fixture,
+        # barrier, readiness wait, timeout or harness engine call that fails) returns
+        # that error at its own step (T-93). A When keeps for Then only what the
+        # product was observed to do: exits, streams, probe reports, records and
+        # engine observations, an early refusal included. Commit missing steps red
+        # first with @wip retained; use only coordinator-dispatched CI for engine
+        # red/green evidence. Today run refuses version 3 with policy.version at
+        # /version, exit 2, before any engine contact, while doctor and approve accept
+        # it, so 08 to 12's first Then, the fixture and doctor control, passes today
+        # and they fail at the next Then. These are expected failures, not executed
+        # evidence. No local mutation or whole-features race run. The implementer may
+        # commit freely in its own workspace; the host makes the landing commits and
+        # handles itos, submission, publication and review.
+
+        # Real mount acceptance and cooperative provisioning absence, including a
+        # nonempty ordinary refusal log in the allowlist row under q-56's limit.
+        @wip @slice-31 @ID-CREDRUN-08 @engine @linux
+        Scenario Outline: The approved workload alone reads a read-only staged Claude file
+          Given a CI Claude checkout with a private synthetic source and matching "<network>" approval
+          And the cooperative credential probe and every marker detector have independent positive controls
+          When the product inspects with doctor and matching terminal approve then runs the credential probe through active status and workload exit <exit>
+          Then the native fixture verification passed and JSON doctor reported every readiness check and the Claude source ready
+          And the worker reports the exact source hash including final newlines from the fixed Claude path as the non-root host UID
+          And native inspection and worker probes show one read-only mode-0400 regular Claude file and all existing hardening
+          And write attempts fail and the original host source its sibling and host staging directory cannot be opened from the worker
+          And no controller-set environment or argv contains a token or automatically exports CLAUDE_CODE_OAUTH_TOKEN
+          And its network evidence is "<network evidence>"
+          And every specified cooperative provisioning surface contains neither the raw marker nor any base64-offset encoding
+          And staged paths are absent after acknowledged startup while the worker can still read the copy
+          And run returns the observed workload exit <exit> after confirmed removal of the worker staging and all other owned resources
+          And the checkout source approval and unrelated resources are unchanged
+
+          Examples:
+            | network   | exit | network evidence                                                            |
+            | offline   | 0    | network none with no proxy or refusal log                                   |
+            | offline   | 17   | network none with no proxy or refusal log                                   |
+            | allowlist | 0    | successful controlled TLS and an ordinary denied hostname in all log copies |
+
+        @wip @slice-31 @ID-CREDRUN-09 @engine @linux
+        Scenario Outline: A live worker keeps its copy and the next run reads the rotated source
+          Given a CI Claude checkout with a private synthetic source and matching "offline" approval
+          And a second distinct synthetic source value is reserved for rotation by "<rotation>"
+          When the product inspects with JSON doctor then starts a waiting hash probe then the fixture rotates the source and releases a second read
+          Then the native fixture verification passed and JSON doctor reported every readiness check and the Claude source ready
+          And both reads in that worker report the original hash and the source reports only the rotated value
+          When that worker exits and the product runs a fresh hash probe without another approval
+          Then the fresh worker reports the rotated hash through a newly staged Claude file
+          And both runs keep the original approval fingerprint and generation without a consent prompt
+          And both runs confirm complete owned cleanup and no cooperative provisioning leak
+
+          Examples:
+            | rotation                            |
+            | rewriting the private file in place |
+            | replacing it with a valid new inode |
+
+        @wip @slice-31 @ID-CREDRUN-10 @engine @linux
+        Scenario: One project's grant cannot supply another worker or a later no-grant run
+          Given two independent CI Claude projects with distinct synthetic sources and separately matching approvals
+          And a third independent approved version three project requests no credentials
+          When the product inspects every project with JSON doctor then runs their probes concurrently and stops the first project while the other probes remain active
+          Then the native fixture verification passed and JSON doctor reported every readiness check and each Claude source ready
+          And each credential worker reports only its own source hash and cannot open the other project's source or staged path
+          And the no-grant worker executes its probe and cannot open either token or the fixed Claude path
+          And stopping the first project removes only its resources while the second still reads its original copy
+          When the remaining probes finish and the fixture removes the first project's grant and independently seeds its matching no-grant approval
+          And the product runs the no-grant token probe in the first project's same checkout and project identity
+          Then that later run has a fresh session and its probe reports a nonce-bearing denial from the fixed Claude path
+          And that later run executes without source reads staging credential mounts or residual token access
+          And every run confirms its owned cleanup without modifying any original source or leaking a marker through provisioning
+
+    Shard and pending edits, in the same commit. In features/features_test.go, pendingEngineFeatures
+    loses credentials-run.feature, because T-77 told the item that brings the file to remove it, and
+    its comment names only the two remaining entries. In features/engine_pending_test.go,
+    testPendingEngineFeatures pins those two entries and says so in its message, and
+    testPendingNameInWrongShard drops its credentials-run.feature row. In
+    features/engine_shards_test.go, egressShardFiles' comment says the file is on the tree. In
+    testBrokenShardWorkflows, 'a pending file in the other shard' names
+    credentials-run-native.feature instead and still wants 'pending feature'. A new row
+    'credentials-run.feature in two shards' adds the file to other and wants 'feature in two
+    shards'. 'the pending file missing from egress' becomes 'credentials-run.feature missing from
+    egress' and keeps its issue. TestEngineShards gains a subtest named exactly 'credentials-run red
+    inventory', modelled on 'home red inventory'. For each workflow shard entry it calls
+    selectScenarios in the red dispatch context with the red IDs '@ID-CREDRUN-08 @ID-CREDRUN-09
+    @ID-CREDRUN-10'. egress must give count 6, exactly those three IDs and no skip; every other
+    shard must give count 0 and a skip naming 'other engine shard'. In features/README.md's egress
+    list, drop 'which slice-31 brings and the shard skips and logs as pending until the file
+    exists,'. Leave .github/workflows/ci.yml and decision 0024 unchanged. The pending entry for
+    credentials-run-native.feature still names slice-31, which no longer brings that file; this task
+    leaves it alone.
+
+    Native fixture, for every Given that names a CI Claude checkout or project. One root from
+    os.MkdirTemp("/var/tmp", "credrun-"), mode 0700, holds a checkout per project, built by
+    manifestCheckout as credentialFixture builds it (a valid Git checkout, manifest and the cached
+    fixture image), and a 0700 sources directory per project. Shared by the row's projects are the
+    selected XDG_STATE_HOME, the account home passed as SLICE_21_ACCOUNT_HOME, and the control,
+    policy-staging and detector-controls directories, all 0700 and outside every checkout. The
+    product is the engine probe assembly (productProbeBinary), as credentialFixture uses, so the
+    account-home seam applies. A source is the file claude-token in its project's sources directory,
+    mode 0600 with one link. It holds a fresh marker, 'itos-synthetic-credential-' plus 32 lowercase
+    hex digits from crypto/rand, followed by two newlines. Each project and each reserved rotation
+    value gets its own marker. 08 also writes claude-token-sibling, 0600, holding a separate marker
+    of the same form, and scans for it like the others. The policy is version 3 with the row's
+    network: offline, or for 08's allowlist row the canonical endpoint names of slice-27's fixture.
+    A credential project requests credentials [{kind: claude-token, source: <absolute source
+    path>}]. 10's third project and 10's later run request none. The approval is seeded and never
+    consented. The independent oracle computes its settings, and w.approvalSeed with generation "4"
+    writes the record, plus seedControlLocations, as the existing 'a seeded matching approval at
+    generation' step does. 10's later no-grant approval for the first project is seeded the same way
+    at generation "5". Every product command of a row runs with DOCKER_HOST set to the passthrough
+    journal's socket, so the seeded engine endpoint is that socket. Verification uses
+    golang.org/x/sys/unix: Statfs (ext4 0xEF53, btrfs 0x9123683E, xfs 0x58465342; /dev/shm must be
+    TMPFS_MAGIC 0x01021994, owned by uid 0 and sticky) and Statx with STATX_MNT_ID. It parses
+    /proc/self/mountinfo itself: field 1 is the mount ID, field 5 the mount point with its octal
+    escapes decoded, and the type follows the ' - ' separator. 'A mount ID naming exactly one row
+    with a path root' means the statx mount ID equals exactly one row's mount ID, and that row's
+    mount point is the path or one of its ancestors. 'At, below or covering' means a row whose mount
+    point equals one of the four paths, lies under it, or is an ancestor of it. A failure returns an
+    error that names only the first failing path, its type and its owner UID.
+
+    Cooperative hash probe. It is a static Go program at features/testdata/credentials-run/probe.
+    egressBuild builds it (CGO_ENABLED=0, linux/amd64) into each checkout as credrun-probe before
+    the observer arms. A row's argv is exactly 'run -- /workspace/credrun-probe
+    /workspace/credrun-plan-<n>.json'. There is one plan per planned run, and the Given writes all
+    of them. A plan holds a nonce, the target path (the fixed
+    /run/itos-container/credentials/claude-token) and the paths the probe must fail to open. For 08
+    these are the host source and its sibling; for 10 the other project's host source; for a
+    no-grant plan both host sources. In 08's allowlist row the plan also names slice-27's probe as a
+    child, built and placed the same way as /workspace/slice-27-probe. Its plan has one canonical
+    allowed name and the ordinary unlisted name refused.example on 443, and it runs before the first
+    report. The probe writes no file. It prints one JSON object per line on stdout and waits on
+    stdin, which is the barrier the harness holds. Each report has the nonce, the phase (first, read
+    or final), euid and egid. For the target it gives one result: 'file' when lstat shows a regular
+    file and the read succeeds, with the sha256 of the exact bytes, the mode as four octal digits
+    and the owner uid; 'absent' on ENOENT or ENOTDIR from lstat; 'denied' on EACCES or EPERM from
+    open; or 'error' with the errno name. It gives the same result word for each must-fail path. It
+    makes four write attempts on the target (open O_WRONLY|O_APPEND, create a sibling in its
+    directory, unlink, rename) and reports each errno name, or 'succeeded'. A succeeding open is
+    closed at once, and nothing is ever written. It reports the entry names, never contents, of
+    /run/itos-container/credentials and /dev/shm. It reports whether CLAUDE_CODE_OAUTH_TOKEN is set,
+    and whether any environment value or argv element contains the target's bytes without their
+    trailing newlines. In the allowlist row it adds the child's summary. A 'file' result with no
+    hash, or a report without the plan's nonce, does not count as a report. Each stdin line is a
+    command: 'read' re-reads the target and prints a read report; 'exit <n>' prints a final report
+    and exits n. The positive control runs in the same Given as the detector controls. The harness
+    runs the probe once in a disposable container that it creates and removes itself: the cached
+    fixture image, network none, a read-only root, all capabilities dropped, no-new-privileges and
+    the host UID:GID. The probe is bound read-only, a 0400 control file is bound read-only at the
+    fixed path, a mode-0000 file is bound at one must-fail path, and a second must-fail path is
+    absent. The control requires the nonce, 'file' with the control file's hash, mode 0400 and the
+    host UID, every write attempt failing, and 'denied' and 'absent' for the other two paths. So
+    before any product command, the probe has shown it tells a regular unwritable file from a denied
+    path and from an absent one.
+
+    Marker detectors and surfaces. For each marker of the row, the needles are the raw marker and,
+    for offsets 0, 1 and 2, the base64.StdEncoding of that many 'x' bytes followed by the marker,
+    with its first and last four characters removed, as slice-29's step does. There is no hash
+    needle, because probe reports carry hashes. Before the When, each needle gets one
+    positive-control file in detector-controls (filler, needle, filler). The same scan function
+    reads each one back and must report that file's detector; a miss fails the Given. Each surface
+    is recorded while the row runs and judged after its last run exits:
+      - the stdout and stderr of every product command (run, doctor plain and JSON, approve, status
+        plain and JSON, stop);
+      - the passthrough journal: every request's method, path, query, headers and body, and every
+        response's status, headers and body, error bodies included. Each body is kept up to 4 MiB
+        with a truncation flag, and a truncated body fails the surface Then as unscannable. An
+        upgraded attach stream is relayed but not recorded, because it carries the workload's stdio,
+        which run's stdout already holds;
+      - the full ContainerInspect JSON of every product worker, and in the allowlist row of the
+        proxy, taken through the harness's own client while the probe waits;
+      - in the allowlist row, the proxy's ContainerLogs (stdout and stderr), read while the probe
+        waits after its CONNECTs, and the retained egress-refusals.jsonl;
+      - every regular file under every checkout of the row, the selected state root and the fixed
+        account state root.
+    Never searched: the sources and their rotation staging, the detector and probe control files,
+    the fixture journals, and the host staging directory, which the harness only lists by name and
+    type. A hit fails with only the surface's name and the detector's name.
+
+    Passthrough journal. A new harness type in its own file: an httputil.ReverseProxy on a Unix
+    socket in the fixture root. It forwards every request unchanged to the runner's daemon socket
+    and records as above; it injects nothing and refuses nothing. T-96's fault recorder may build on
+    it. It never stands in for product cleanup.
+
+    Checkout observer and bracket, filling in the header's rules. Each checkout has one inotify
+    instance, from golang.org/x/sys/unix InotifyInit1 with IN_NONBLOCK|IN_CLOEXEC; the non-Linux
+    build returns an unsupported error. A walk adds a watch on every directory of the checkout, .git
+    included, and on the control directory. Each watch uses
+    IN_CREATE|IN_MODIFY|IN_ATTRIB|IN_CLOSE_WRITE|IN_MOVED_FROM|IN_MOVED_TO|IN_DELETE|IN_DELETE_SELF|IN_MOVE_SELF;
+    IN_Q_OVERFLOW arrives regardless. A goroutine drains the descriptor with poll into an ordered
+    in-memory list until the row's cleanup. A directory created in a watched checkout directory
+    after arming is itself a failing event. The observer adds a watch for it at once, so later
+    events inside it are reported by path. The arming proof creates, writes and removes
+    credrun-observer-proof-<nonce> at the checkout root, and requires its create, modify,
+    close-write and delete in that order. A later When in the same row proves the observer again
+    with a fresh name. Sentinels are files in the control directory, created with O_CREAT|O_EXCL and
+    closed. 'begin-<seq>-<nonce>' opens bracket seq and 'end-<seq>-<nonce>' closes it; seq counts
+    from 1 in each row. The bracket check fails on a begin while a bracket is open, an end with no
+    open begin or with another seq, a begin still open when the row ends, and any control-directory
+    name the helper did not journal. Calibration happens inside the same When, before the edit's
+    begin. The helper creates calibrate-target-<seq> in the control directory, writes
+    calibrate-stage-<seq> in policy-staging and renames it over the target; for an unlink it unlinks
+    the target. The event kinds on that name between the calibration's own sentinels are the
+    expected kinds. The judge is a pure function over the decoded event list, the helper's journal
+    and the calibration, so the regression can also feed it synthetic records. Journal entries are
+    the helper's own: op (rename, unlink, open-write, write or truncate), path and time. They are
+    written to the fixture root, never to the checkout.
+
+    TestCredentialRunPolicyEditBracket is an ordinary go test in its own file, with no engine, over
+    a t.TempDir checkout with the observer armed. Its subtests: replacement_alone and unlink_alone
+    pass. write_before_replacement, write_after_replacement and write_before_unlink each make two
+    writes through one descriptor inside the bracket, and each fails the judge. unpaired_control (a
+    begin with no end, then an end with no begin) fails. new_directory creates a directory and a
+    file inside it after arming; it fails and reports the file's path. overflow feeds the judge a
+    synthetic IN_Q_OVERFLOW record and fails. journal_mismatch gives a journal with two renames,
+    then one with an open-write, and each fails. On a non-Linux build it skips with the unsupported
+    error; on Linux any setup error fails it. It is not scenario red evidence.
+
+    Whens. Each product run starts the way homeNativeStart does: its own context with a 90-second
+    fixture deadline, stdout and stderr captured, and stdin held open as the barrier. A When waits
+    for the probe's first report or the run's exit. A report means the run is live, and the When
+    goes on. An exit before any report is the product's observed outcome. The When then records the
+    exit and the streams, skips every later action that needs a live worker, and returns nil. Every
+    later action it does run is recorded the same way. The When returns an error only for a fixture
+    or harness failure, or for a live run that neither reports nor exits by its deadline.
+      - 08 runs JSON and plain doctor, then bare approve at a pty (credentialApprovalTerminal) with
+        no answer, then run. On the first report it takes plain and JSON status and inspects the
+        worker, and the proxy in the allowlist row. It lists /dev/shm every 10 ms for up to 10
+        seconds until no itos-container-<32 hex> entry made during the row remains; absence not
+        reached is recorded, not an error. It reads the proxy log, sends 'read', then 'exit <exit>',
+        and waits for run.
+      - 09 runs JSON doctor, then run. On the first report the fixture rotates the source, reads it
+        back and sends 'read'. In place, it opens O_WRONLY|O_TRUNC on the same inode and writes the
+        reserved value, which has the same length. For a new inode, it writes claude-token.next
+        (0600) in the sources directory and renames it over the source. The second When sends 'exit
+        0', waits, and makes a fresh run whose plan reports once and exits 0.
+      - 10 runs JSON doctor in all three checkouts, then starts the three runs together. Any exit is
+        recorded, and that project's later actions are skipped. Once all three report, it runs a
+        fresh stop in the first checkout, records it, and sends 'read' to the second project. The
+        second When sends 'exit 0' to the remaining probes and waits. It then makes the bracketed
+        policy replacement in the first checkout to its version-3 no-grant policy, seeds that
+        approval, and runs the no-grant plan there.
+    After each run exits, the harness reads that run's owned cleanup: no container, volume or
+    network carries the session's labels, and no new staging entry remains.
+
+    Thens. Each row's first Then checks the recorded verification and every JSON doctor transcript:
+    exit 0, ok true, problems empty, and inspection.ready true with checkout, engine and image
+    members. approval.status is 'matching', and credentials is exactly the row's grant with target
+    /run/itos-container/credentials/claude-token, or absent for a no-grant project. That Then passes
+    today because doctor and approve accept version 3 (cmd/itos-container/main.go:332) and run
+    refuses only later. The first behaviour Then is the step after it: 08's 'the worker reports the
+    exact source hash ...', 09's 'both reads in that worker report ...' and 10's 'each credential
+    worker reports only its own ...'. Today run exits 2 with policy.version at /version before any
+    engine contact (internal/engine/readiness/domain/inspect.go:50, pinned live by
+    ID-CREDENTIALS-13). So no report exists, and each row fails at that step with a message that
+    names run's exit and rule but no marker. Each later Then asserts what its text says, using the
+    reports, journal, inspections, listings, cleanup reads and observer above. A missing transcript,
+    report or capture fails a Then; it never passes one.
+
+    Red evidence at landing. The coordinator dispatches main's actual ci.yml with red_scenarios
+    '@ID-CREDRUN-08 @ID-CREDRUN-09 @ID-CREDRUN-10'. The run must show the six rows selected only in
+    the egress shard. Each row's report must show every Given and When passed, the first Then
+    passed, and the next step failed at its assertion. An undefined or ambiguous step, or a fixture
+    blocker, is not red evidence. The rows stay @wip and red on main after landing; slice-63 turns
+    them green. Keep each new file under revive's 600-line limit. The design points the reviewed
+    header left open (fixture layout, probe interface, detector and surface lists, the passthrough
+    journal, observer mechanics, the regression's subtests and removing the pending entry) are
+    proposed by this spec on 2026-11-27. The check fails today: neither
+    TestCredentialRunPolicyEditBracket nor the 'credentials-run red inventory' subtest exists, so
+    neither PASS line is printed.
   done_when:
-    - run: go test ./features -run '^(TestEngineShards|TestCredentialRunPolicyEditBracket)$' passes on the combined tree. A red_scenarios dispatch of main's actual CI workflow shows ID-CREDRUN-08, -09 and -10 selected only in the egress shard, each failing at its first behaviour Then after the fixture and doctor control Then passes
+    - run: >-
+        out=$(go test ./features -run '^(TestEngineShards|TestCredentialRunPolicyEditBracket)$' -v 2>&1); status=$?; printf '%s\n' "$out" | tail -n 40; [ "$status" -eq 0 ] && printf '%s\n' "$out" | grep -qF -- '--- PASS: TestEngineShards/credentials-run_red_inventory (' && printf '%s\n' "$out" | grep -qF -- '--- PASS: TestCredentialRunPolicyEditBracket ('
+      timeout: 900
 - id: T-96
   type: test
   title: CREDRUN-11 and -12 join credentials-run.feature @wip with native recorder and controller-kill step definitions, red in CI
