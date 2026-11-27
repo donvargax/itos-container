@@ -2,7 +2,6 @@
 phases:
   1: null
 queue:
-  - slice-31
   - slice-40
   - slice-61
   - T-76
@@ -1541,20 +1540,9 @@ items:
     title: run hands the approved Claude token to the workload; it appears nowhere in docker inspect, the checkout, status or logs
     phase: 1
     owner: donvargax
-    status: todo
+    status: dropped
     depends_on: [slice-30, T-48, T-77]
     kind: slice
-    why: >
-      Was p1-credentials-claude-token-run.
-      The first user-visible credential behaviour, charter step 2. Scenarios first, real-engine ones
-      in CI, using a synthetic token marker and no real account. With an approved Claude grant, run
-      makes the token readable by the workload in the form the decision record chose. A scenario
-      that fails without the isolation shows that docker inspect of the worker, the session's
-      recovery and approval records, status output, doctor output, the refusal log and run's own
-      diagnostics never contain the marker, and that nothing is written under the checkout. Without
-      an approved grant, or after the source file changes mode or owner, run refuses before creating
-      anything. A second worker or project does not receive it. Offline runs without grants are
-      unchanged. Broken down from p1-credentials-passed-in.
     refs: [docs/decisions/0035-real-credentials-for-container-runs-a-subscription-token-where-the-provider-issues-one-else-its-auth-file-shared.md]
   - id: slice-32
     title: run bind-mounts the approved Codex auth.json, and its lock file when present, read-write as single files
