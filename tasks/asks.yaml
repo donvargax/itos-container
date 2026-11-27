@@ -422,3 +422,4 @@ questions:
   - id: q-103
     item: "slice-40"
     question: "How does slice-40 deliver an approved login to OpenCode 2.2.1, which stores credentials and sessions in SQLite?"
+    answer: "On 2026-11-26 the person selected credential-only access for OpenCode 2.2.1. Run gives OpenCode the one approved OpenCode Go key through a provider-key input that this version reads. The host SQLite login store and the host sessions are never shared with the workload."
