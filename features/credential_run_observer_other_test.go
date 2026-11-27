@@ -2,18 +2,16 @@
 
 package features
 
-func newCredentialRunObserver(_, _ string) (credentialRunObserver, error) {
-	return nil, errCredentialRunObserverUnsupported
+var credentialWatchSystem = credentialWatchIO{open: credentialWatchUnsupported}
+
+func credentialWatchUnsupported() (int, error) {
+	return -1, errCredentialRunObserverUnsupported
 }
 
-func credentialRunSameDevice(_, _ string) (bool, error) {
-	return false, errCredentialRunObserverUnsupported
+func credentialRunDevice(_ string) (uint64, error) {
+	return 0, errCredentialRunObserverUnsupported
 }
 
 func verifyCredentialRunFilesystem(_ []string) error {
 	return errCredentialRunObserverUnsupported
-}
-
-func newCredentialRunStagingObserver() (credentialRunObserver, error) {
-	return nil, errCredentialRunObserverUnsupported
 }
