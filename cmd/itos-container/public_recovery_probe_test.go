@@ -33,6 +33,7 @@ type publicProbeRequest struct {
 	Args                                                        []string
 	LocalMount                                                  string
 	Fault, Boundary, ID, Ready, Release, Output, Stdout, Stderr string
+	Evidence                                                    string
 }
 
 func TestPublicRecoveryCommand(t *testing.T) {
@@ -175,7 +176,7 @@ func publicProbeIO(fault string) approvaldisk.SnapshotIO {
 		}
 		return record.Stage
 	}
-	return approvaldisk.SnapshotIO{
+	ioFault := approvaldisk.SnapshotIO{
 		Write: func(file *os.File, data []byte) (int, error) {
 			if fault == "anchor absence short write" && anchorAbsent(data) {
 				return 0, io.ErrShortWrite
@@ -217,6 +218,7 @@ func publicProbeIO(fault string) approvaldisk.SnapshotIO {
 			return file.Sync()
 		},
 	}
+	return publicReplacementIO(ioFault)
 }
 
 type publicBarrier struct {

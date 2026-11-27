@@ -9,8 +9,8 @@ import (
 )
 
 type recoveryProbe struct {
-	process                                *recoveryProcess
-	output, stdout, stderr, ready, release string
+	process                                          *recoveryProcess
+	output, stdout, stderr, ready, release, evidence string
 }
 
 func (w *world) recoveryProbeStart(args ...string) (*recoveryProbe, error) {
@@ -19,8 +19,8 @@ func (w *world) recoveryProbeStart(args ...string) (*recoveryProbe, error) {
 		return nil, err
 	}
 	prefix := filepath.Join(w.dir, "slice-11-probe-"+strconv.Itoa(len(w.recovery.processes)))
-	p := &recoveryProbe{output: prefix + "-code", stdout: prefix + "-stdout", stderr: prefix + "-stderr", ready: prefix + "-ready", release: prefix + "-release"}
-	request := map[string]any{"Args": args, "Fault": w.recoveryLocal.fault, "Boundary": w.recoveryLocal.boundary, "ID": w.recoveryLocal.id, "Ready": p.ready, "Release": p.release, "Output": p.output, "Stdout": p.stdout, "Stderr": p.stderr}
+	p := &recoveryProbe{output: prefix + "-code", stdout: prefix + "-stdout", stderr: prefix + "-stderr", ready: prefix + "-ready", release: prefix + "-release", evidence: prefix + "-evidence"}
+	request := map[string]any{"Args": args, "Fault": w.recoveryLocal.fault, "Boundary": w.recoveryLocal.boundary, "ID": w.recoveryLocal.id, "Ready": p.ready, "Release": p.release, "Evidence": p.evidence, "Output": p.output, "Stdout": p.stdout, "Stderr": p.stderr}
 	if w.doctor.real == nil {
 		request["LocalMount"] = w.doctor.checkout
 	}

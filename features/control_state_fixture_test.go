@@ -29,6 +29,7 @@ type controlFixture struct {
 	publisher                 *recoveryProcess
 	admissionEvents           int
 	watched                   []string
+	sweep                     *sweepState
 }
 
 func (w *world) controlSetup(approval, location, engines string) error {

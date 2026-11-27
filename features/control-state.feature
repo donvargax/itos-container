@@ -27,6 +27,8 @@ Feature: Doctor and approve keep control state outside another worker's checkout
   # Keep registrations after command/controller exit and after worker cleanup:
   # persistent records still need protection. No automatic relocation, deletion,
   # ownership repair, reapproval or cleanup of another project is authorized.
+  # Decision 0034 narrows the deletion clause for orphaned .intent-<nonce>.tmp
+  # publisher temporaries only; slice-60's block beside CONTROL-07 holds the rule.
   #
   # Use one durable coordination anchor per effective UID, independent of project,
   # daemon, XDG_STATE_HOME and process HOME. Select
@@ -582,6 +584,244 @@ Feature: Doctor and approve keep control state outside another worker's checkout
       | cataloged reservation cannot be read                   | approval.state.unavailable | 3    |
       | catalog is absent beside selected legacy session state | approval.state.unavailable | 3    |
       | host account home lookup is unavailable                | approval.state.unavailable | 3    |
+
+  # ---- slice-60: the next control-lock holder removes orphaned publisher temporaries ----
+  # Authority: decision 0034 (the person, 2026-11-23), which narrows decision
+  # 0022:824-828 for these temporaries only. Problem: directoryStore.Publish
+  # (internal/engine/approval/disk/storage.go) writes .intent-<nonce>.tmp, then
+  # links or renames it onto the record and removes the temporary on return. A
+  # publisher killed in between leaves the temporary alone, or as a second hard
+  # link of its record, and nothing ever removes it. Read already tolerates the
+  # second link (recordLinks, store.go); this slice removes the leftover itself.
+  # The implementer may commit freely in its workspace; the host makes the
+  # landing commits.
+  #
+  # Where it runs. No port changes: port.Control and port.ControlTransaction keep
+  # their method sets, and the porttest memory Control models no temporaries, so
+  # it and the shared Control contract stay as they are. The sweep is a private
+  # step of the disk adapter's Control.Begin (internal/engine/approval/disk). It
+  # runs only when write is true, after enroll() succeeds and before Begin's final
+  # Unchanged check. It never returns a failure: Begin's result, diagnostics and
+  # exit codes are exactly what they would be without it. Read transactions
+  # (doctor, status) never remove anything. Every writer (approve's Commit, run's
+  # Select, intent creation, admission, completion) is a "next holder".
+  #
+  # What it scans. These are the locations the same transaction's inspection
+  # walked: t.fixed, t.selected and every path in t.bindings, each an
+  # itos-container managed root L. In each L, three kinds of directories:
+  #   admission collection   L/admission. Its records are <64 lowercase hex>.json
+  #                          (69 bytes), the names admissionDirectory.Names returns.
+  #   intent directory       L/intents/<P> for each entry P of L/intents that is
+  #                          64 lowercase hex. Its records are <64 hex>.json intent
+  #                          records and <64 hex>.egress.json sidecars
+  #                          (port.ExecutionName).
+  #   session directory      L/sessions/<I>/<S> for each 64-hex I and 64-hex S.
+  #                          Its only record is record.json.
+  # The scenarios call these "admission collection", "intent directory" and
+  # "session directory", and their records the "admission claim", "session
+  # intent" and "public session record". Pin each directory with the existing
+  # pinPath rules (create=false, no symlink, managed components owned and 0700),
+  # but without the pin's waiting lock. A collection that is absent, will not
+  # pin or will not list is skipped. No other directory is touched: not
+  # approvals, snapshots, coordination, sessions/<I>, a collection itself or L.
+  #
+  # Durable evidence. A name alone is never proof. An entry E is removed only if
+  # every one of these holds:
+  #  1. Its name is exactly the one Publish makes (intentTemporary): ".intent-",
+  #     32 lowercase hex and ".tmp", 44 bytes.
+  #  2. Its lstat through the pinned root, never followed, shows a regular file
+  #     owned by the effective UID, with permissions exactly 0600 (Publish creates
+  #     it 0600 and chmods it 0600; 0400, 0644 and 0700 are kept) and no setuid,
+  #     setgid or sticky bit. A symlink, directory, FIFO, socket or device is kept
+  #     and never opened.
+  #  3. It has one link (a lone orphan), or exactly two links where its twin is in
+  #     the same directory, carries one of that directory's record names above, is
+  #     the same inode (os.SameFile on both lstats), and is itself a regular 0600
+  #     file of the effective UID. Any other link count, a twin elsewhere or a
+  #     twin under another name keeps E.
+  #  4. No live publisher can own it. Admission publication runs only under the
+  #     control lock, which this writer holds. Intent replacements run under the
+  #     intent directory's own flock, which an open intent transaction holds.
+  #     Public-record replacements run under the session's operation.lock (the
+  #     registration's first record.json runs under the control lock). So take,
+  #     without waiting (LOCK_EX|LOCK_NB), the pinned directory descriptor's flock
+  #     for an admission collection or intent directory. For a session directory,
+  #     take operation.lock, opened O_RDONLY|O_NOFOLLOW through the pinned root and
+  #     validated as openLock validates it: a regular, owned, 0600, single-link,
+  #     empty file whose inode still matches on re-lstat. If the lock is busy, or
+  #     missing, unsafe or will not open, or the flock fails in any other way,
+  #     the whole directory is kept and a later holder retries. Release the lock
+  #     after that directory's removals. Never wait: a stop holds operation.lock
+  #     while it waits for the control lock (completeAdmission), and a run holds
+  #     its intent directory for the whole intent transaction.
+  #  5. Just before removal, E (and any twin) still lstats as the same inode,
+  #     the pin is unchanged and the transaction is unchanged.
+  # Remove only E's name through the pinned *os.Root. Never remove a record or
+  # any other name. Its twin keeps its bytes, inode and mtime and now has one
+  # link. No directory fsync is required: a removal lost to a crash leaves the
+  # same orphan for the next holder, which Read already tolerates. The sweep
+  # spends Begin's existing call budget; when that ends it stops and keeps what
+  # is left. Out of scope: .refusals-, .approval-, .snapshot- and .location-
+  # temporaries, every record, and how long sessions are kept, all of which stay
+  # with p3-session-state-retention or their owners. The homes catalog
+  # (<account home>/.local/state/itos-container/homes) is not scanned either,
+  # although Homes.Save publishes through the same Publish: it lies outside
+  # every managed root L, and its publishers hold the homes transaction's lock,
+  # not the control lock or a lock rule 4 names, so its liveness evidence is a
+  # separate design point. Its leftovers stay with p3-session-state-retention
+  # until an item specifies that rule. Add disk-adapter tests
+  # beside admission_leftover_test.go for each evidence rule that no scenario
+  # reaches: an operation.lock that is missing, unsafe or held, a three-link
+  # record, and an owner other than the effective UID.
+  #
+  # Fixture. All step sentences in this block are new. Reuse controlSafe's
+  # "state path shares only a textual prefix with W" layout, so P's selected tree
+  # stays disjoint from W's checkout, and the overlap fixture's start, stop and
+  # finishLocalWorkloads for runs. No Given invokes the product. The fixture
+  # plants entries itself, in When steps, after the run that made the tree has
+  # ended or paused. Each lone orphan holds 16 arbitrary bytes and is mode 0600.
+  # Each linked temporary is os.Link of the record to a fresh .intent-<nonce>.tmp.
+  # Nonces are 32 random lowercase hex digits. "Keeps" means the controlFixture
+  # inventory (bytes, mode, owner, link count, device, inode, mtime) is unchanged
+  # for that path. "Only ... are gone" compares the swept tree's inventory before
+  # and after the writer. It allows the removed names, the twins' link count
+  # going from 2 to 1, and nothing else, apart from the writer's own approval
+  # generation, location binding or new session in P's tree.
+
+  # The record survives byte-identical. In "enrolled" rows the tree is W's,
+  # enrolled by W's run. P's approval is absent for approve and seeded matching
+  # for run. In the "selected" row the tree is P's own: P's approval is seeded
+  # matching, P's run makes the tree, and the fixture then changes P's
+  # containerEnv so that approve publishes the next generation. For each row the
+  # When run is that tree's project's offline fixture workload, ended through
+  # finishLocalWorkloads, with its session stopped and its claim complete. The
+  # readers are a fresh P doctor and a fresh status from the stopped session's
+  # own checkout. In the run row P's run is the writer: its preflight Select
+  # begins the write transaction, and the When then ends P's workload through
+  # finishLocalWorkloads and waits for P's run to exit. The first Then passes
+  # today. The second Then fails today, because nothing removes the six
+  # temporaries.
+  @wip @slice-60 @ID-CONTROL-27 @local-engine-fixture
+  Scenario Outline: The next control-lock holder removes orphaned publisher temporaries and keeps each record intact
+    Given a control-state fixture for a sweep of the "<location>" session tree by P "<command>"
+    When the "<location>" project's fixture run finishes with complete cleanup and the fixture plants a lone and a linked publisher temporary in each of its admission collection, intent directory and session directory
+    And a fresh P doctor and a fresh status of that stopped session read the tree
+    Then both readers succeed and every planted temporary and record keeps its bytes inode link count and mtime
+    When P runs "<command>" as the next writer of the control lock
+    Then the writer succeeds and only the six planted temporaries are gone from the swept tree
+    And each record that had a planted second link keeps its bytes inode and mtime with one link
+    And a fresh status reports the stopped session unchanged with complete cleanup
+
+    Examples:
+      | location | command |
+      | enrolled | approve |
+      | enrolled | run     |
+      | selected | approve |
+
+  # Names that only look like the temporary are kept, and so is the exact name
+  # without the evidence. The listed entries are planted only where today's scan
+  # ignores them: admission's Names already skips every ".intent-*.tmp" name, and
+  # no reader lists an intent directory, a session directory, approvals,
+  # snapshots, L or L/intents. So P's approval still succeeds. "outside file" is
+  # a 0600 file in W's fixture directory, outside every state tree. "linked" is a
+  # 0600 file planted first in W's session directory. The first Then fails today
+  # because the two genuine lone temporaries remain.
+  @wip @slice-60 @ID-CONTROL-28 @local-engine-fixture
+  Scenario: Names and files Publish never leaves survive the sweep
+    Given a control-state fixture for a sweep of the "enrolled" session tree by P "approve"
+    When the "enrolled" project's fixture run finishes with complete cleanup and the fixture plants these entries Publish never leaves:
+      | directory            | entry                                          | shape                           |
+      | admission collection | .intent-dead.tmp                               | lone 0600 file                  |
+      | admission collection | .intent-gggggggggggggggggggggggggggggggg.tmp   | lone 0600 file                  |
+      | admission collection | .intent-0123456789ABCDEF0123456789ABCDEF.tmp   | lone 0600 file                  |
+      | admission collection | .intent-0123456789abcdef0123456789abcdef0.tmp  | lone 0600 file                  |
+      | admission collection | .intent-0123456789abcdef0123456789abcde.tmp    | lone 0600 file                  |
+      | admission collection | .intent-11111111111111111111111111111111.tmp   | symlink to the admission claim  |
+      | admission collection | .intent-22222222222222222222222222222222.tmp   | empty 0700 directory            |
+      | intent directory     | .intent-33333333333333333333333333333333.tmp   | FIFO                            |
+      | intent directory     | .intent-44444444444444444444444444444444.tmp   | lone 0644 file                  |
+      | intent directory     | .intent-55555555555555555555555555555555.tmp   | lone 0400 file                  |
+      | intent directory     | .intent-66666666666666666666666666666666.tmp   | second link of the outside file |
+      | intent directory     | .intent-0123456789abcdef0123456789abcdef.tmq   | lone 0600 file                  |
+      | intent directory     | .intens-0123456789abcdef0123456789abcdef.tmp   | lone 0600 file                  |
+      | intent directory     | .approval-0123456789abcdef0123456789abcdef.tmp | lone 0600 file                  |
+      | intent directory     | .snapshot-0123456789abcdef0123456789abcdef.tmp | lone 0600 file                  |
+      | intent directory     | .location-0123456789abcdef0123456789abcdef.tmp | lone 0600 file                  |
+      | session directory    | linked                                         | 0600 file                       |
+      | session directory    | .intent-77777777777777777777777777777777.tmp   | second link of linked           |
+      | session directory    | .refusals-0123456789abcdef0123456789abcdef.tmp | lone 0600 file                  |
+      | approval directory   | .intent-88888888888888888888888888888888.tmp   | lone 0600 file                  |
+      | snapshot directory   | .intent-99999999999999999999999999999999.tmp   | lone 0600 file                  |
+      | managed root         | .intent-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.tmp   | lone 0600 file                  |
+      | intents collection   | .intent-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.tmp   | lone 0600 file                  |
+    And the fixture also plants a genuine lone publisher temporary in W's admission collection and in W's intent directory
+    And P runs "approve" as the next writer of the control lock
+    Then the writer succeeds and only the two genuine lone temporaries are gone from the swept tree
+    And every listed entry keeps its name type mode bytes inode link count and mtime
+
+  # A live publisher's temporary is never removed. W is started through
+  # overlapFixture.start("W", boundary, ""), which runs the cmd/itos-container
+  # test executable that sessionProbeBinary builds. That is the slice-11 probe
+  # TestPublicRecoveryCommand, given SLICE_11_REQUEST and SLICE_21_ACCOUNT_HOME,
+  # so its approval and session storage are coordinated. Two new request
+  # Boundary values, "intent replacement" and "public record replacement", wrap
+  # the Rename of the approvaldisk.SnapshotIO that the probe already assigns. For
+  # the intent row that is intentStorage.IO; for the public row, publicStorage.IO.
+  # The real call stays the fault IO's Rename, or (*os.Root).Rename. The wrapper
+  # pauses on its first call whose source has intentTemporary's shape and whose
+  # target is <64 hex>.json (intent row) or record.json (public row). It writes
+  # Ready with the source name, then waits for Release through publicBarrier.
+  # Rename takes no context, so the wrapper bounds that wait itself with its own
+  # context.WithTimeout of ten seconds, W's finite-call cap. If that deadline
+  # ends the wait, the wrapper still makes the real Rename, so W is never left
+  # hanging until the shard's hang guard, and it records the timeout below.
+  # Evidence. Only the paused call can show what it published: W later replaces
+  # the same record again (intent stage intent to owned, public record ready to
+  # running to stopped), so the end state cannot. publicProbeRequest gains one
+  # new field, Evidence, a file path in W's fixture directory outside every
+  # state tree. Right after the real Rename returns, and before returning its
+  # error, the wrapper writes that file once, 0600, as JSON holding: whether the
+  # wait timed out, the Rename error text (empty on success), and the target's
+  # Lstat through the same *os.Root (device, inode, link count) with the bytes
+  # it then reads from the target through that root. The fixture inventories
+  # W's paused temporary after Ready and before P runs; the evidence must show
+  # no timeout, no error, and that inventory's device, inode and bytes with one
+  # link.
+  # Matching record.json excludes admission's pending-to-active replacement,
+  # which shares publicStorage.IO and runs under the control lock. Prepare's
+  # intent and the registration's record.json are first publications that link
+  # exclusively and never call Rename. So the first matching Rename is the first
+  # replacement after registration. At that call, Publish has created the
+  # temporary at 0600, written, fsynced and closed it, and re-read the record. The
+  # paused directory still holds the previous record under its final name: W's
+  # <token>.json from Prepare, or W's record.json from registration. W holds that
+  # intent directory's flock, or that session's operation.lock, until the
+  # rename returns.
+  # The fixture plants after Ready, so only P's writer can remove the admission
+  # orphan. It releases W as soon as P's approve exits, inside W's ten-second
+  # finite-call cap. A W that times out fails the last Thens; it is data, not
+  # setup. The first Then fails today because the admission orphan remains. A
+  # sweep that took the paused temporary would make W's rename fail with
+  # state.write, and the evidence and the last two Thens would catch it. "No
+  # temporary of its own" is read at the end, after W's run has exited: in W's
+  # intent directory and session directory, no .intent-*.tmp name remains but
+  # the one the fixture planted beside the paused temporary.
+  @wip @slice-60 @ID-CONTROL-29 @local-engine-fixture
+  Scenario Outline: A live publisher's temporary survives another holder's sweep
+    Given a control-state fixture whose W run will pause before its first "<record>" replacement after registration once that replacement's temporary is durable
+    When W pauses there and the fixture plants a lone publisher temporary in W's admission collection and another beside W's paused temporary
+    And P approves with its exact fingerprint as the next writer of the control lock while W stays paused
+    Then the writer succeeds and the temporary planted in W's admission collection is gone
+    And W's paused temporary its record and the temporary planted beside them keep their bytes inode link count and mtime
+    When the fixture releases W and ends W's workload
+    Then W's paused rename evidence shows its "<record>" published with the paused temporary's bytes device and inode and one link
+    And W left no publisher temporary of its own in its intent directory or session directory
+    And W's run exits zero with complete cleanup
+
+    Examples:
+      | record                |
+      | session intent        |
+      | public session record |
 
   # q-35 supersedes CONTROL-10's original home-lock ordering. The fixed private
   # bootstrap chain precedes exclusion; self-binding and approval remain inside
