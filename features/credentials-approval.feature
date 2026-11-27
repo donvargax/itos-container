@@ -713,9 +713,17 @@ Feature: Review and remember credential grants without delivering them
   # this file's header paragraph on filesystems describe main and stay live.
   # This block governs the implementation, and the feat commit makes the
   # supersessions listed below. These scenarios do not change and keep
-  # passing byte for byte, because every row they use is ext4 and so gives
-  # no warning: ID-CREDAPPROVAL-01 to 28 and 30, and every ID-CREDENTIALS
-  # scenario not listed below.
+  # passing byte for byte, because none of them reaches a detected row (rule
+  # 1): ID-CREDAPPROVAL-01 to 28 and 30, and every ID-CREDENTIALS scenario
+  # not listed below. Apart from ID-CREDENTIALS-46, every row they use is
+  # ext4.
+  #   ID-CREDENTIALS-46 stays unchanged and gives no warning in either half.
+  #   Its first half's nsfs row at "/run/namespaces/unrelated" is not
+  #   relevant. Its second half's nsfs row at "/state/private/namespace" is
+  #   below the selected state, but its unprojectable root makes the boundary
+  #   projection fail, so the observation detects nothing (rule 1) and the
+  #   source still refuses with credential.unavailable and no
+  #   credential_warnings member.
   #   ID-CREDAPPROVAL-30 is slice-30's scenario, already live on main, with
   #   defined steps (credentials_observation_steps_test.go). host.unsupported
   #   still returns before any pin, walk or mount table, so it carries no
@@ -734,6 +742,11 @@ Feature: Review and remember credential grants without delivering them
   # xfs. The match is byte-exact and case-sensitive, so EXT4, tmpfs, overlay,
   # fuse, fuse.*, fuseblk, fuseblk.*, nfs, nfs4, 9p, cifs, zfs and any other
   # text are all detected. Unrelated rows stay harmless.
+  # Detection happens exactly where today's filesystem check runs: only in an
+  # observation whose boundary projection succeeded. When the boundary
+  # projection fails (the early return at the top of the readiness domain's
+  # credentialScan.project), the observation detects no row and gives no
+  # warning, whatever its mount tables hold, and its refusal is today's.
   #
   # Rule 2, no refusal. A detected row never refuses and never makes evidence
   # unavailable. Inspection continues with every other check unchanged. It
@@ -744,8 +757,9 @@ Feature: Review and remember credential grants without delivering them
   # credential.unavailable, then regular, owner, permissions, links and
   # size, then duplicate. Boundary refusals (host.unsupported, checkout.*,
   # state.*) keep their order and return before warnings exist, so they carry
-  # none. A source refusal keeps the warnings its observation found
-  # (ID-CREDAPPROVAL-33). The consequence is the person's accepted risk. An
+  # none. A source refusal after a successful boundary projection keeps the
+  # warnings its observation found (ID-CREDAPPROVAL-33); a refusal from a
+  # failed boundary projection has none (ID-CREDENTIALS-46). The consequence is the person's accepted risk. An
   # alias that overlay, FUSE, NFS or 9p hides from mountinfo and from
   # descriptor identities is accepted, with its warning (ID-CREDAPPROVAL-34
   # and 35).
