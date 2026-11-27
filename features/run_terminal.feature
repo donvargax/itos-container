@@ -318,6 +318,127 @@ Feature: An explicitly selected terminal for an owned foreground run
 
   # Native PTY metadata is bad, not a fake failure result. Retrying with a valid
   # measured size is a positive control; COLUMNS/LINES cannot supply a fallback.
+  #
+  # bug-17 (specified 2026-11-26 at 5ce2e67): the retry exits -1 on a busy host.
+  # Diagnosis: the -1 comes from the harness, not the product. invoke
+  # (features/run_terminal_linux_test.go) kills its child with SIGKILL 5 s after
+  # start, and ProcessState.ExitCode() is -1 for a signal death. On the
+  # drafter's machine the refusing first attempt took about 15 ms. The healthy
+  # retry took 2.0-2.2 s alone, and up to 4.5 s with seven local RUNTTY
+  # scenarios running at once. This scenario failed exactly as reported in 4 of
+  # 14 runs there, all three rows together at about 5.8 s, each with the whole
+  # workload payload already on stdout. Goroutine dumps (SIGQUIT in place of the
+  # kill) taken at expiry, and others taken 1.2 s into healthy retries, found the
+  # main goroutine in fsync. It was publishing protected records: the intent
+  # (session/disk store.go:311) or the public session after start
+  # (publicSession.Save), through approval/disk storage.go:180, :203 or :231.
+  # With the guard set to 45 s, 8 of 8 runs passed. So the retry does not hang:
+  # its time is the host's disk-sync latency. A 5 s kill is tighter than the
+  # product's own bounds (10 s per finite call, 30 s teardown), contrary to the
+  # standing rule that only a hang guard stops (docs/decisions/STANDING.md:48).
+  # A timed-out child still fails its step, now with exit 2 and a dump in place
+  # of -1. This scenario's text, tags
+  # and assertions stay unchanged, and so does the product. The work is
+  # harness-only, in features/, so no scenario is added or tagged @bug-17.
+  #
+  # Rule 1, the guard. Every local terminal invocation gets one hang guard of
+  # 45 s plus the fake engine's startDelay (T-68's bookkeeping), nothing else.
+  # 45 s is the figure invoke already uses so that a harness kill never replaces
+  # the 10 s call limit or the 30 s cleanup total, and it is ten times the
+  # slowest measured retry. The "start accepted but its reply times out" special
+  # case is removed rather than kept: that fault's engine is built by
+  # newTerminalEngine() with only `fault` set, so its startDelay is 0 and the
+  # uniform rule gives exactly the 45 s it has today. A hung product still fails
+  # its step through timedOut, only later. The native CI invocation
+  # (run_terminal_native_linux_test.go) keeps its own guard.
+  # Rule 2, the diagnosis. A guard that expires sends SIGQUIT, not SIGKILL, so the
+  # Go child (the TestLocalRunCommand assembly, which subscribes only to SIGINT,
+  # SIGTERM and SIGHUP) writes every goroutine's stack to its stderr. invoke
+  # already captures that stderr into w.stderr, and each failing step prints it
+  # through w.report(). If the child has not exited 3 s after SIGQUIT, exec kills
+  # it. The child environment gets GOTRACEBACK=all, so a caller's setting can
+  # neither hide the dump nor turn exit 2 into a signal death.
+  #
+  # Harness shapes. New file features/run_terminal_guard_linux_test.go (Linux
+  # only, like the rest of invoke):
+  #   const terminalInvocationGuard = 45 * time.Second
+  #   func terminalGuard(engine *terminalEngine) time.Duration
+  #     nil is legal and common: RUNTTY-02..04 install no fake engine. The result
+  #     is terminalInvocationGuard plus engine.startDelay when engine is non-nil.
+  #   func guardedCommand(ctx context.Context, bin string, words, env []string) *exec.Cmd
+  #     exec.CommandContext(ctx, bin, words...), with Env setEnv(env,
+  #     "GOTRACEBACK", "all"), Cancel sending syscall.SIGQUIT to cmd.Process,
+  #     and WaitDelay 3 s. It sets nothing else: invoke still sets Dir, the
+  #     alias and misleading COLUMNS/LINES/TERM values, stdio and SysProcAttr on
+  #     the returned command, and drops its own `cmd.WaitDelay = time.Second`.
+  #   invoke computes guard := terminalGuard(w.doctor.engine.offline.terminal),
+  #   builds its context with context.WithTimeout(context.Background(), guard)
+  #   as now, and calls guardedCommand(ctx, bin, words, env).
+  # Two child modes of the features test binary are selected by os.Args[1]
+  # alone, as socketBackendChild selects its own (no environment variable and
+  # no -test.run): "itos-container-terminal-guard-blocking" and
+  # "itos-container-terminal-guard-exiting", held in the constants
+  # terminalGuardBlockingMode and terminalGuardExitingMode. func
+  # terminalGuardChild() dispatches them. TestMain
+  # (features/engine_diagnostics_test.go) calls it on the line right after
+  # socketBackendChild(), so before the feature-binaries directory exists and
+  # before logFeatureSignals can subscribe to SIGQUIT. A no-op terminalGuardChild
+  # goes in run_terminal_other_test.go (//go:build !linux). The blocking mode
+  # runs func terminalGuardBlockingMain(): it writes "ready\n" to stdout, then
+  # calls time.Sleep(time.Hour), not select{} (which the runtime reports as a
+  # deadlock). The exiting mode writes "exiting\n" to stderr and calls os.Exit(7).
+  #
+  # Check A, TestTerminalInvocationGuard (same file). Each row is a t.Run with
+  # the name given below. The two rows that start a child run exe, the result
+  # of os.Executable(), with os.Environ(), and keep its stderr in a bytes.Buffer:
+  # - guard_nil_engine: terminalGuard(nil) == 45 s.
+  # - guard_fresh_engine: terminalGuard(newTerminalEngine()) == 45 s.
+  # - guard_start_delay: an engine from newTerminalEngine() with startDelay 1 s
+  #   gives 46 s.
+  # - guard_reply_timeout_unchanged: an engine from newTerminalEngine() with only
+  #   fault "start accepted but its reply times out" set (startDelay 0) gives
+  #   45 s.
+  # - expiry_dumps_stacks: ctx, cancel := context.WithCancel(t.Context()); run
+  #   guardedCommand(ctx, exe, []string{terminalGuardBlockingMode}, os.Environ())
+  #   with its stdout from cmd.StdoutPipe(). Read the "ready" line,
+  #   with t.Fatal if it does not arrive within 30 s. Then cancel(): exec treats a
+  #   cancelled context exactly as an expired deadline, and cancelling after
+  #   readiness keeps SIGQUIT from racing the child's runtime start. The row
+  #   calls cmd.Wait() directly, not invoke, and asserts four things: Wait
+  #   returns within 5 s of cancel; ctx.Err() is context.Canceled (invoke's
+  #   timedOut reads the same ctx.Err() != nil); cmd.ProcessState.Exited() is
+  #   true with ExitCode() 2, which a Go child exits with after a SIGQUIT dump,
+  #   while a SIGKILL gives Exited() false and -1; and stderr contains
+  #   "SIGQUIT: quit", "goroutine " and "terminalGuardBlockingMain".
+  # - prompt_exit_untouched: with ctx from context.WithTimeout(t.Context(),
+  #   terminalGuard(nil)), Run() on guardedCommand(ctx, exe,
+  #   []string{terminalGuardExitingMode}, os.Environ()) returns within 5 s.
+  #   ProcessState.Exited() is true with ExitCode() 7, ctx.Err() is nil and
+  #   stderr is exactly "exiting\n", so no SIGQUIT was sent.
+  #
+  # Red first, two test commits, each with Item bug-17. Commit 1 adds the file,
+  # the TestMain line, the no-op and check A. Its terminalGuard returns today's
+  # values (5 s plus startDelay, 45 s for the reply-timeout fault), and its
+  # guardedCommand keeps today's SIGKILL, WaitDelay 1 s and unchanged env, with
+  # invoke switched to both, so no scenario behaves differently. Report check A's
+  # red: guard_nil_engine and guard_fresh_engine fail at 5 s, guard_start_delay at
+  # 6 s, and expiry_dumps_stacks at its exit assertion (-1, no dump), while
+  # guard_reply_timeout_unchanged and prompt_exit_untouched pass. Commit 2
+  # applies Rules 1 and 2, and then every row and checks B and C pass.
+  # Check A: out=$(go test ./features -run '^TestTerminalInvocationGuard$' -v 2>&1); s=$?; printf '%s\n' "$out"; for r in guard_nil_engine guard_fresh_engine guard_start_delay guard_reply_timeout_unchanged expiry_dumps_stacks prompt_exit_untouched; do printf '%s\n' "$out" | grep -q -- "--- PASS: TestTerminalInvocationGuard/$r " || exit 1; done; exit $s
+  # Check B: go test ./features -count=1 -timeout=20m -scenarios='^@ID-RUNTTY-05$'
+  # Check C: go test ./features -count=1 -timeout=20m -scenarios='^@ID-RUNTTY-(01|02|03|04|10|15|17|18|20|22)$'
+  # Check B's red is intermittent: the reported failure, at "the retry starts
+  # with the measured size 113 by 37 and exits zero after owned cleanup" with
+  # exit -1, depends on disk load. So check A's rows carry the deterministic red.
+  # After commit 2, run check B once and report it. Do not loop it for
+  # evidence (docs/decisions/STANDING.md:56). If it still fails, the step's
+  # report now carries the SIGQUIT dump. If the dump shows the product blocked
+  # anywhere other than a disk or engine call inside its own bounds, that is a
+  # product hang this spec does not cover: stop and report the dump, and do not
+  # widen the guard further.
+  # The implementer may commit freely in its workspace; the host makes the
+  # landing commits.
   @slice-37 @ID-RUNTTY-05 @linux @local-engine-fixture
   Scenario Outline: Unusable initial terminal dimensions refuse before startup
     Given a local terminal-run fixture with terminal stdin and terminal stdout
