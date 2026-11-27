@@ -100,6 +100,8 @@ Feature: Review and remember credential grants without delivering them
   # precedence. The diagnostic's fix names ext4, btrfs and xfs. This shared rule
   # also applies to credentials-only; file-only modes still do not inspect sources.
   # The filesystem decision is no longer an implementation prerequisite to ask.
+  # Slice-61 supersedes this filesystem paragraph at its feat commit; until then
+  # it describes main. See the slice-61 block after ID-CREDAPPROVAL-29.
   #
   # Run keeps slice-29's early policy.version gate for ALL version 3 requests in
   # this increment, even without credentials. Preserve any slice-27 version-2 gate
@@ -652,6 +654,7 @@ Feature: Review and remember credential grants without delivering them
       | doctor --credentials-only --json | claude  | effective root | doctor.checkout.root    |
       | doctor --credentials-only --json | claude  | selected state | approval.state.location |
 
+  # Live until slice-61's feat commit deletes it; ID-CREDAPPROVAL-31 to 35 replace it.
   # q-64 is settled, not a prompt to examine and extend another refusal list.
   # For each invocation replace just the relevant row's filesystem field; keep
   # descriptors, mount IDs, coordinates, ownership and source bytes unchanged.
@@ -687,6 +690,597 @@ Feature: Review and remember credential grants without delivering them
       | terminal approve with yes        | nfs        | source                       | first       |
       | doctor --json                    | nfs4       | selected state descendant    | final       |
       | terminal approve with yes        | 9p         | fixed state descendant       | first       |
+
+  # ======================================================================
+  # Slice-61: credential.filesystem is a warning in doctor and run status.
+  #
+  # Authority and the superseded text. The person's call of 2026-11-26 is
+  # decision 0041
+  # (docs/decisions/0041-record-credential-filesystem-type-as-a-warning-on-the-trusted-local-host.md:20),
+  # and its standing line is docs/decisions/STANDING.md:126-128. It applies
+  # the 2026-11-24 rule that a security control must stop a real outsider.
+  # The local machine, its repositories and its accounts are trusted. A
+  # filesystem type describes the person's own layout, and the approved
+  # workload already receives the model credential. Decision 0041 replaces
+  # the filesystem-type refusal of q-64 (tasks/asks.yaml) and of decision
+  # 0027's 2026-11-10 04:42 UTC amendment with its NFS and 9p extensions.
+  # Detection stays, and nothing else is reopened. STANDING.md already holds
+  # the person's line, so slice-61 does not edit STANDING.md; every other
+  # standing line, including STANDING.md:123-125 on credentials passed in
+  # per command, stays in force.
+  #
+  # Which text governs. Until slice-61's feat commit, ID-CREDAPPROVAL-29 and
+  # this file's header paragraph on filesystems describe main and stay live.
+  # This block governs the implementation, and the feat commit makes the
+  # supersessions listed below. These scenarios do not change and keep
+  # passing byte for byte, because none of them reaches a detected row (rule
+  # 1): ID-CREDAPPROVAL-01 to 28 and 30, and every ID-CREDENTIALS scenario
+  # not listed below. Apart from ID-CREDENTIALS-46, every row they use is
+  # ext4.
+  #   ID-CREDENTIALS-46 stays unchanged and gives no warning in either half.
+  #   Its first half's nsfs row at "/run/namespaces/unrelated" is not
+  #   relevant. Its second half's nsfs row at "/state/private/namespace" is
+  #   below the selected state, but its unprojectable root makes the boundary
+  #   projection fail, so the observation detects nothing (rule 1) and the
+  #   source still refuses with credential.unavailable and no
+  #   credential_warnings member.
+  #   ID-CREDAPPROVAL-30 is slice-30's scenario, already live on main, with
+  #   defined steps (credentials_observation_steps_test.go). host.unsupported
+  #   still returns before any pin, walk or mount table, so it carries no
+  #   warning. It has no @local-engine-fixture tag on purpose: it is a
+  #   raw-observation contract with no CLI or engine fixture.
+  # After slice-61 it is no longer true that "nfs, nfs4 and 9p remain refused
+  # outright": they warn like every other type outside the three.
+  #
+  # Rule 1, detection is unchanged. A row is relevant exactly as today, in
+  # both mount observations of one source observation, in either of two ways.
+  #   First, it is the row of a source or source-ancestor descriptor.
+  #   Second, its mount point is at, below or covering the checkout root or
+  #   either protected state root (selected or fixed account). Covered rows
+  #   and an absent state root are included.
+  # A relevant row is detected when its type is not exactly ext4, btrfs or
+  # xfs. The match is byte-exact and case-sensitive, so EXT4, tmpfs, overlay,
+  # fuse, fuse.*, fuseblk, fuseblk.*, nfs, nfs4, 9p, cifs, zfs and any other
+  # text are all detected. Unrelated rows stay harmless.
+  # Detection happens exactly where today's filesystem check runs: only in an
+  # observation whose boundary projection succeeded. When the boundary
+  # projection fails (the early return at the top of the readiness domain's
+  # credentialScan.project), the observation detects no row and gives no
+  # warning, whatever its mount tables hold, and its refusal is today's.
+  #
+  # Rule 2, no refusal. A detected row never refuses and never makes evidence
+  # unavailable. Inspection continues with every other check unchanged. It
+  # maps source and boundary descriptors through the detected row's device
+  # and root like any other row. No problem ever carries
+  # credential.filesystem, so its CredentialDiagnostic case goes. Source
+  # precedence is now credential.location, then credential.mount_id, then
+  # credential.unavailable, then regular, owner, permissions, links and
+  # size, then duplicate. Boundary refusals (host.unsupported, checkout.*,
+  # state.*) keep their order and return before warnings exist, so they carry
+  # none. A source refusal after a successful boundary projection keeps the
+  # warnings its observation found (ID-CREDAPPROVAL-33); a refusal from a
+  # failed boundary projection has none (ID-CREDENTIALS-46). The consequence is the person's accepted risk. An
+  # alias that overlay, FUSE, NFS or 9p hides from mountinfo and from
+  # descriptor identities is accepted, with its warning (ID-CREDAPPROVAL-34
+  # and 35).
+  #
+  # Rule 3, the warning. Each detected row gives the closed object
+  # {"rule":"credential.filesystem","path":P,"filesystem":F}.
+  #   P is the row's decoded mount point when that is valid UTF-8 holding no
+  #   U+0000 to U+001F or U+007F and is at most 512 bytes long. A mount point
+  #   that fails the first two conditions gives the text "(unprintable)",
+  #   whatever its length. A printable mount point longer than 512 bytes gives
+  #   the text "(too long)". The 512-byte cap is what keeps rule 6's record
+  #   within the session parser's limit.
+  #   F is the row's decoded type when that is 1 to 64 bytes, each byte from
+  #   0x21 to 0x7E. Otherwise F is "(unprintable)".
+  # Rows that give an equal (P, F) give one warning. This holds across both
+  # mount observations and every relevance: a tmpfs row at "/" that covers
+  # checkout, both states and a source ancestor is one warning. Warnings are
+  # sorted by P's bytes, then F's bytes, and the first 8 are kept. The
+  # number of the rest is the omitted count, from 1 to 32760, because two
+  # tables of at most 16384 rows each hold at most 32768 distinct rows.
+  # A command reports the warnings of its last completed source observation.
+  # The shared inspector (readiness domain Inspect) observes sources twice:
+  # once before Engine.Open and again after engine inspection. Ordinary
+  # doctor and the run preflight both report the second observation, which
+  # is the one view.Inspection.Credentials holds. Approve reports the last
+  # observation it made, and credentials-only reports its only one.
+  #
+  # Rule 4, doctor and approve output. Readiness port gains the type
+  # CredentialWarning {Rule, Path, Filesystem string} and a fixed-storage list
+  # type: 8 CredentialWarning entries, a used-entry count and the omitted
+  # count. Fixed storage keeps every type that holds the list comparable with
+  # ==, as Binding.Credentials [2] already is. CredentialResult carries this
+  # list beside Issues. The following holds only when
+  # there is at least one warning; with none, every byte of today's output is
+  # unchanged, and the credentials-only envelope keeps its 5 members.
+  #  - doctor --json and doctor --credentials-only --json add the top-level
+  #    member "credential_warnings" (the array). They add
+  #    "credential_warnings_omitted" (a JSON integer) only when the count is
+  #    not zero. ok, the exit code, inspection.ready, the candidate and its
+  #    fingerprint are exactly those the same inputs give on ext4.
+  #  - In plain and JSON modes, doctor, doctor --credentials-only and approve
+  #    write one standard-error line per warning through cli.UI.Line, where
+  #    Q is Go's strconv.Quote:
+  #    itos-container: warning credential.filesystem <Q(P)> on <Q(F)>: credential exposure through filesystems other than ext4, btrfs and xfs is not checked
+  #    When the omitted count is not zero, they then write:
+  #    itos-container: warning credential.filesystem: <n> more filesystem warnings omitted
+  #    Doctor writes these lines after its credential problem lines and before
+  #    its approval problem lines and "Review with itos container approve".
+  #    Ordinary doctor prints its credential problems through its approval
+  #    readiness presentation (presentApprovalReadiness, with c.Presentation,
+  #    in doctor/command), so that presentation and the plain readiness one
+  #    build this order. Credentials-only writes them after its problem
+  #    lines, in presentCredentials. Approve writes
+  #    them after its result, outside its review, prompt, candidate and record.
+  #    Standard output is unchanged in every mode.
+  #  - Warnings are not settings. A filesystem change alone never changes a
+  #    fingerprint or an approval status, and approval binds no warning.
+  # The admission assembly (cmd/itos-container/credential_admission_contract_test.go)
+  # builds doctor.CLI with JSON fixed at true today, so every doctor row runs
+  # in JSON mode. The red step commit must change it to set doctor.CLI.JSON
+  # from whether the row's argv contains "--json", so the plain doctor and
+  # doctor --credentials-only rows reach the product's plain presentation.
+  # The new step "the varied admission succeeds exactly like its ext4 control
+  # apart from its credential warnings" then checks the mode of both runs: for
+  # a doctor row without "--json" it fails when the trimmed standard output
+  # of the control or the varied run is valid JSON (encoding/json Valid), and
+  # for a row with "--json" it fails unless each is one JSON object.
+  #
+  # Rule 5, run records them. The run preflight's selection carries the
+  # warnings as fresh execution evidence, like ProxyImageID. Approval port's
+  # Durable gains one CredentialWarnings field of rule 4's fixed-storage
+  # list type (approval port already imports readiness port). The run
+  # slice's domain sets it in PreflightContext
+  # (internal/slices/run/domain/preflight.go), after snapshot publication and
+  # beside ProxyImageID, by copying view.Inspection.Credentials' list when
+  # view.Inspection.Credentials is not nil. That list comes from the source
+  # observation made after engine inspection (rule 3). Approval domain
+  # Preflight still returns only its View and is unchanged.
+  # The session store's first intent publication copies them into the
+  # record's top-level "credential_warnings" and
+  # "credential_warnings_omitted", with doctor JSON's shapes and presence
+  # rules. That publication is Store.New or Store.Prepare, in both the
+  # porttest memory store and the disk store, and the publication case
+  # below (TestSessionStoreCredentialWarningPublication) proves it on both
+  # against bytes the test reads itself. Record.ValidTransition keeps
+  # both members equal for the record's whole life, including the schema-4
+  # staging save in session domain Runner.prepareCredentials. A save that
+  # adds, changes or drops them is refused. Public run on main still refuses
+  # version 3 with policy.version before any observation, so
+  # ID-CREDAPPROVAL-17 is unchanged. ID-CREDAPPROVAL-36 therefore proves this
+  # rule through the admission assembly's real preflight and the real
+  # session store. Whichever item lifts run's version-3 gate (slice-31) must
+  # pass the preflight's Durable to the store unchanged; that alone records
+  # the warnings.
+  #
+  # Rule 6, strict records. Session codec JSON.Decode accepts both members in
+  # intent schemas 1 to 4, each present member adding one to the field count.
+  # No schema number changes (decision 0037: v0, no compatibility promise).
+  #  - credential_warnings is an array of 1 to 8 closed objects, each with
+  #    exactly three string members: rule, path and filesystem.
+  #  - rule is exactly "credential.filesystem".
+  #  - path is "(unprintable)", "(too long)", or at most 512 bytes of valid
+  #    UTF-8 holding no U+0000 to U+001F or U+007F, written as "/" or as "/"
+  #    followed by nonempty components, none of them "." or "..".
+  #  - filesystem is 1 to 64 bytes, each byte from 0x21 to 0x7E.
+  #  - Entries are strictly ascending by path bytes, then filesystem bytes.
+  #  - credential_warnings_omitted is a JSON integer from 1 to 32760, in
+  #    decimal with no sign, fraction, exponent or leading zero. It is
+  #    present only beside exactly 8 warnings.
+  # Anything else is invalid.
+  # Record size. No size limit changes. Decode refuses any record over 65536
+  # bytes, and it parses through manifest.Parser, whose port MaxBytes is also
+  # 65536. That parser is shared with manifests, so it is not touched. A
+  # record carrying the warnings must therefore encode within 65536 bytes,
+  # and rule 3's 512-byte path cap guarantees it. Encode uses json.Marshal,
+  # which writes each "<", ">" or "&" as a six-byte \u escape, and that is
+  # the worst expansion for these members. The worst case of each part is
+  # then:
+  #  - one entry, at most 40 + 6*512 + 16 + 6*64 + 2 = 3514 bytes;
+  #  - eight entries with their separators, plus the member name and
+  #    brackets, at most 28144 bytes;
+  #  - the omitted member, at most 36 bytes more.
+  # Both warning members together therefore encode to at most 28180 bytes.
+  # Every other member the product writes is a hexadecimal ID, a fixed name,
+  # a /proc descriptor path, a /dev/shm staging path, an engine endpoint that
+  # connected, or a distribution/reference image reference, and all of these
+  # stay far below the remaining 37356 bytes.
+  # Parser budgets. manifest.Parser's jsonc adapter also refuses a document
+  # deeper than 32, with more than 2048 nodes, or whose JSON-pointer paths
+  # total more than 65536 bytes (internal/engine/manifest/jsonc/limits.go:11-15,
+  # where every key, value and array element is a node and every key and
+  # value is charged its full path). The warning members stay inside each:
+  #  - depth: the deepest warning value sits at depth 4 (record, array,
+  #    entry, string);
+  #  - nodes: 1 key and 1 array, then per entry 1 object and 3 keys with 3
+  #    values, so 2 + 8*7 = 58, plus 2 for the omitted member: 60 nodes;
+  #  - path bytes: "/credential_warnings" charged as key and value (40), per
+  #    entry 22 for "/credential_warnings/<i>" plus 54, 54 and 66 for its
+  #    rule, path and filesystem keys and values (196, so 1568 for eight),
+  #    and 56 for "/credential_warnings_omitted": 1664 bytes.
+  # Size case. cmd/itos-container/session_store_test.go gains
+  # TestSessionCodecCredentialWarningSize. It needs the real session codec,
+  # sc.JSON{Approval: canonical.JSON{}, Parser: manifestjson.Parser{}} as
+  # sessionStoreFixture composes it, because neither session porttest's fake
+  # Codec nor the codec package's parser fake runs manifest.Parser's budgets,
+  # and only cmd assembles adapters. It builds a schema-4
+  # record with home, egress, credential staging and anchor at their longest
+  # valid values, and with these two members at their longest valid values:
+  #  - engine_endpoint is "unix://" followed by a 108-byte absolute path, "/"
+  #    and then 107 "&" bytes. 108 bytes is Linux's sun_path size, which Go's
+  #    unix connect refuses to exceed, and readiness records only an
+  #    endpoint that connected. Each "&" encodes as a six-byte escape.
+  #  - image_reference is a canonical name:tag@digest reference that
+  #    distribution/reference accepts (manifest/reference Valid): a 255-byte
+  #    name (its NameTotalLengthMax), a 128-byte tag and a sha256 digest.
+  # It adds the eight longest warnings (ID-CREDAPPROVAL-37) and an omitted
+  # count of 32760, and checks two things: Encode writes at most 65536
+  # bytes, and Decode, which runs manifest.Parser's byte, depth, node and
+  # path budgets, returns an equal record. If that case cannot pass, stop
+  # and report; do not raise a limit. Because no record the
+  # product writes can exceed the limit, the store gains no size refusal,
+  # which could never be reached.
+  # Publication case. The item's earlier disk-store test passed on a tree
+  # without the implementation. StoreContract compares a reopened record only
+  # with the record New returned, and CredentialRecoveryStoreContract starts
+  # from a ready-made record and never calls New or Prepare, so a store that
+  # drops the warnings passes both. Rule 5's store evidence is therefore
+  # TestSessionStoreCredentialWarningPublication in
+  # cmd/itos-container/session_store_test.go, with subtests "disk" and
+  # "memory". Both use the real session codec composed as above, and one
+  # frozen snapshot: a canonical approval record, built as sessionStoreFixture
+  # builds its snapshot, whose candidate holds the one approved claude-token
+  # grant at /vault/claude-a.
+  #  - "disk" is sessionStoreFixture's real sd.Store on real protected
+  #    storage, holding that snapshot. It reads the published bytes with
+  #    os.ReadFile from <state>/itos-container/intents/<project>/<token>.json,
+  #    a path the test computes from its own state root. The fixture's
+  #    existing skip conditions stay.
+  #  - "memory" is session porttest's Store with that codec, its Snapshots
+  #    seeded with the same snapshot bytes and its UID, GID and Root set from
+  #    the same fixture. It reads the published bytes from
+  #    Records[port.Reference(project, token)].
+  # Each subtest makes four publications, each with a fresh token: New and
+  # Prepare with the warning Durable, then New and Prepare with the plain one.
+  # The warning Durable is the fixture's Durable whose CredentialWarnings
+  # holds exactly one entry {credential.filesystem, "/vault", "fuse.sshfs"}
+  # with omitted count 0; the plain Durable has an empty list. The test
+  # writes its expectation itself as the literal
+  #    [{"rule":"credential.filesystem","path":"/vault","filesystem":"fuse.sshfs"}]
+  # and never derives an expected value from what New or Prepare returned.
+  # For each publication:
+  #  1. New or Prepare succeeds, and the test closes the intent.
+  #  2. The published bytes are one JSON object. For the warning Durable its
+  #     "credential_warnings" member, decoded with encoding/json, equals the
+  #     literal decoded the same way, and it has no
+  #     "credential_warnings_omitted" member. For the plain Durable it has
+  #     neither member.
+  #  3. Open, then after Close OpenCleanup, of that reference each succeed
+  #     and return a record whose warning list has exactly the test's own
+  #     entries and omitted count: the one entry and 0, or no entry and 0.
+  # Red and green. On a tree where Durable.CredentialWarnings, the record's
+  # list field and the codec's two members exist but a store's New and
+  # Prepare do not copy Durable's list into the record, that store's subtest
+  # fails at check 2 for the warning Durable, because the published bytes
+  # lack "credential_warnings". A codec that writes the members but does not
+  # read them back fails check 3. Both subtests pass once each store's
+  # publication copies the list and the codec writes and reads it.
+  # Comparability and encoding. Record keeps == and != (porttest memory
+  # store, ValidTransition). It holds the warnings in one field of rule 4's
+  # fixed-storage list type (8 entries, the used-entry count and the omitted
+  # count), tagged json:"-", which publication fills from Durable's list. No
+  # port gains a MarshalJSON or UnmarshalJSON method and no port imports
+  # encoding/json: the port allowlist in .golangci.yml has no encoding/json,
+  # as internal/engine/session/disk/refusals.go:162-163 also notes. The
+  # session codec, an adapter, writes and reads the two wire members itself:
+  #  - JSON.Encode marshals a codec-local struct that embeds port.Record and
+  #    adds "credential_warnings" (a slice of codec-local {rule, path,
+  #    filesystem} entries, omitempty) and "credential_warnings_omitted" (an
+  #    int, omitempty), filled from the field's used entries and omitted
+  #    count. encoding/json promotes the embedded record's members first and
+  #    writes the two members last, only when present.
+  #  - JSON.Decode checks both members on manifest.Parser's value as rule 6
+  #    says, unmarshals into port.Record as today (the json:"-" field stays
+  #    zero), then unmarshals the same bytes into a codec-local struct holding
+  #    only the two members and copies them into the record's field.
+  # A record without warnings therefore encodes byte for byte as today.
+  # Store publication and recovery both refuse warnings on a session whose frozen
+  # snapshot holds no credential grant. That rule has a session port contract
+  # case on fake and disk; status reports it as recovery.invalid-state.
+  #
+  # Rule 7, status. Recovery projects the validated record's warnings into
+  # RecoveryEntry's JSON members "credential_warnings" and
+  # "credential_warnings_omitted", with the same shapes and presence rules.
+  # Plain status writes these lines after the session's credential grant lines:
+  #    session <id> warning credential.filesystem <Q(P)> on <Q(F)>: credential exposure through filesystems other than ext4, btrfs and xfs was not checked
+  # and, when the omitted count is not zero:
+  #    session <id> warning credential.filesystem: <n> more filesystem warnings omitted
+  # Status reads no current source, policy or approval to produce them.
+  #
+  # Rule 8, help. Doctor's help gains this line after its two --credentials-only
+  # lines:
+  #    "    Filesystems other than ext4, btrfs and xfs give credential.filesystem warnings, not refusals."
+  # No exit code changes. Exit 3's help line never named the filesystem rule.
+  #
+  # Supersession at the feat commit, explained in its body:
+  #  - Delete ID-CREDAPPROVAL-29, and the four step definitions only it uses
+  #    ("only ext4 btrfs and xfs succeed ...", "the filesystem refusal fix
+  #    names ...", "the filesystem refusal retains ...", "the filesystem
+  #    refusal precedes ..."). Replace this file's header paragraph, from
+  #    "The filesystem choice is settled by q-64" to "prerequisite to ask.",
+  #    with a pointer to this block. In the fixture handoff, "whose default
+  #    tmpfs is now refused" becomes "whose default tmpfs now warns".
+  #  - In credentials-policy.feature, delete ID-CREDENTIALS-51, 54, 60 and 61.
+  #    ID-CREDAPPROVAL-31, 34 and 35 replace them, and no number is reused.
+  #    Replace its header lines on overlay, FUSE, NFS and 9p (from "The
+  #    coordinator's 2026-11-10 04:42 UTC decision" to "instead is the person's
+  #    open decision, recorded in decision 0027.") and its "credential.filesystem
+  #    (3)" rule lines with a pointer to this block.
+  #  - Turn the refusal cases of readiness porttest
+  #    credential_stacking_contract.go and credential_export_contract.go into
+  #    warning cases, for both fake and disk. Add rule 6's size case and
+  #    rule 5's publication case to cmd/itos-container/session_store_test.go,
+  #    as named above; StoreContract and CredentialRecoveryStoreContract stay
+  #    as they are.
+  #  - Leave docs/decisions/STANDING.md unchanged. Its line at 126-128 is
+  #    the person's call (decision 0041) and already states this rule.
+  #  - Insert this paragraph into decision 0027, directly after the q-64
+  #    section that ends "...credential-delivery support claim.":
+  #    "Amended by the person, **2026-11-26**, in
+  #    [decision 0041](0041-record-credential-filesystem-type-as-a-warning-on-the-trusted-local-host.md)
+  #    and built by slice-61, applying the rule of
+  #    2026-11-24 that a security control must stop a real outsider: the local
+  #    machine, its repositories and its accounts are trusted, a filesystem
+  #    type describes the person's own layout, and the approved workload
+  #    already receives the credential. A filesystem type outside ext4, btrfs
+  #    and xfs therefore no longer refuses. This supersedes the refusal in the
+  #    2026-11-10 04:42 UTC amendment, in the amendments after the reviews of
+  #    `8e5088e` and `2ac05a4`, and in q-64; their detection stays. In both
+  #    mount observations the shared observer still detects every other type
+  #    on source and ancestor descriptors and on rows at, below or covering the
+  #    checkout or either protected state root, covered rows and absent state
+  #    included, and reports each as a `credential.filesystem` warning naming
+  #    the row's mount point and type. Inspection continues with every other
+  #    check, so an alias such a filesystem hides is accepted with its warning;
+  #    every other source or boundary refusal still applies. Doctor and
+  #    approve print the warnings, approval binds none, and run records them
+  #    in the session intent record for status. Their exact shape is in
+  #    slice-61's block of
+  #    [credentials-approval.feature](../../features/credentials-approval.feature)."
+  #  - In decision 0029, append "The person's
+  #    [decision 0041](0041-record-credential-filesystem-type-as-a-warning-on-the-trusted-local-host.md)
+  #    (2026-11-26), built by slice-61, makes that allowlist's refusal a
+  #    `credential.filesystem` warning; see decision 0027's amendment of that
+  #    date." to its first paragraph. Replace its paragraph beginning "The
+  #    source observer accepts only ext4, btrfs and xfs" with: "The source
+  #    observer detects every type other than ext4, btrfs and xfs in both
+  #    mount observations, under decision 0027's source/ancestor and
+  #    checkout/state relevance conditions, and since slice-61 reports each as
+  #    a `credential.filesystem` warning, not a refusal. Unrelated rows stay
+  #    harmless; missing mapping and known location precedence stay in force.
+  #    Synthetic observations exercise the complete matrix; they do not relabel
+  #    a native unsupported filesystem or establish native bind-mount support."
+  #  - Make docs/CONFIG.md's overlay/FUSE/NFS/9p paragraph and arc42's
+  #    "Credential source location" section say what rules 1 to 3 say.
+  #    docs/CLI.md gives rule 4's JSON members and lines, rule 7's status
+  #    members and lines, and rule 8's help line. docs/security.md discloses
+  #    the accepted risk in rule 2. The 0027 amendment names the arc42 section
+  #    it changes, as the charter requires.
+  #
+  # Architecture. Detection and shaping belong to engine/readiness's domain,
+  # and the list type to its port. Durable's field belongs to
+  # engine/approval's port, and the run slice's domain fills it. The record, codec,
+  # recovery projection and presentation to engine/session. Doctor and
+  # approve stay thin and print through cli.UI. No slice imports a sibling,
+  # only cmd assembles adapters, and domains and ports gain no I/O import. No
+  # dependency is added.
+  #
+  # Fixtures and steps. Reuse these existing steps:
+  #  - "a credential admission observation fixture requesting ..."
+  #  - the ext4 btrfs xfs When of ID-CREDAPPROVAL-29
+  #  - "each accepted control reports exactly the independently calculated grants"
+  #  - "credential observation exposes the source through ..."
+  #  - "the credential source is a second ... mount ..."
+  #  - the ID-CREDAPPROVAL-21 and 22 status steps
+  #  - "itos-container runs with", "it exits with code" and "its standard output says"
+  # The admission fixture (credentialAdmissionNodes) has the checkout at
+  # /checkout, selected state at /state, fixed account state at
+  # /account/.local/state/itos-container and sources under /vault. Row 1 is
+  # "/" on ext4. A placement adds row 2 with the varied type in the named
+  # observation, and a covered placement adds an ext4 row 3 over it at the
+  # same mount point. The expected warning path for a placement is row 2's
+  # mount point, as in each table. Every other step below is new. "The varied
+  # admission" means the last run of a When, and "its controls" means the
+  # earlier runs of that When. Givens only write fixture inputs. Never ask
+  # the product for an expected value; compute it independently.
+  #
+  # Red before the work: each scenario's first Then fails at its behaviour
+  # assertion, because today the varied input refuses with
+  # credential.filesystem, exit 3, or the record holding warnings is invalid.
+  # ID-CREDAPPROVAL-33's location rows are the exception: they reach their
+  # refusal today and fail at the warning assertion. Commit the step
+  # definitions red first with @wip in place; for the evidence run, remove
+  # @wip locally, never in a commit. Every case is local, with no engine
+  # and no real credential. The implementer may commit freely in its own
+  # workspace; the host makes the landing commits.
+
+  # The varied run must match its ext4 control in exit code 0, in the
+  # independently calculated candidate and fingerprint (or credentials-only
+  # grants), in its standard output, and in its journal counts for engine
+  # opens, prompts, approval writes, frozen publications and source data
+  # reads. JSON objects are compared after removing the two warning members.
+  # Its standard error is the control's plus rule 4's lines, placed as rule 4
+  # says. This replaces ID-CREDAPPROVAL-29's matrix row for row, with plain rows added.
+  @wip @slice-61 @ID-CREDAPPROVAL-31
+  Scenario Outline: A credential filesystem outside ext4, btrfs and xfs warns and inspection continues
+    Given a credential admission observation fixture requesting "claude" with independent matching policy and source-checkout pins
+    When the admission contract runs "<command>" with ext4 btrfs xfs then "<filesystem>" at "<placement>" in the "<observation>" mount observation
+    Then the varied admission succeeds exactly like its ext4 control apart from its credential warnings
+    And the varied admission reports exactly the credential warnings "<path> on <filesystem>" with omitted count 0
+    And the varied admission reports no credential.filesystem problem
+    And each accepted control reports exactly the independently calculated grants
+    And the accepted controls report no credential warning
+    And the varied admission reads no source data and enumerates no state record
+
+    Examples:
+      | command                          | filesystem   | placement                  | observation | path                                         |
+      | doctor --json                    | cifs         | source                     | first       | /vault/claude-a                              |
+      | terminal approve with yes        | smb3         | source ancestor            | final       | /vault                                       |
+      | doctor --json                    | ceph         | checkout root              | first       | /checkout                                    |
+      | terminal approve with yes        | virtiofs     | checkout descendant        | final       | /checkout/subtree                            |
+      | doctor --json                    | ecryptfs     | covered checkout row       | first       | /checkout                                    |
+      | terminal approve with yes        | zfs          | selected state root        | final       | /state                                       |
+      | doctor --json                    | tmpfs        | fixed account state root   | first       | /account/.local/state/itos-container         |
+      | terminal approve with yes        | ext3         | absent selected state root | final       | /state                                       |
+      | doctor --credentials-only --json | unlistedfs   | covered fixed state row    | first       | /account/.local/state/itos-container         |
+      | doctor --credentials-only --json | EXT4         | source                     | final       | /vault/claude-a                              |
+      | terminal approve with yes        | nfs          | source                     | first       | /vault/claude-a                              |
+      | doctor --json                    | nfs4         | selected state descendant  | final       | /state/subtree                               |
+      | terminal approve with yes        | 9p           | fixed state descendant     | first       | /account/.local/state/itos-container/subtree |
+      | doctor                           | overlay      | checkout descendant        | first       | /checkout/subtree                            |
+      | doctor                           | fuse.sshfs   | source ancestor            | final       | /vault                                       |
+      | doctor --credentials-only --json | fuseblk.ntfs | selected state root        | first       | /state                                       |
+      | doctor --json                    | fuse         | source ancestor            | first       | /vault                                       |
+
+  # Layouts. Each starts from the all-ext4 admission fixture, whose tables
+  # hold "1 0 0:1 / / rw - ext4 disk rw". The rows below are given as
+  # mountinfo text and go into both tables unless a layout names one table.
+  # Every added row has its own mount ID and device from 0:2 upward, root
+  # "/", and parent 1 unless stated. Mount points are written in mountinfo's
+  # escaped form, because the fixture's Mounts strings pass through
+  # json.Marshal, and the shared parser (moby/sys/mountinfo v0.7.2) decodes
+  # octal escapes in both the mount point and the type. "Nodes move" means
+  # that the nodes at the mount point and below it take that row's mount
+  # ID, as credentialAdmissionFilesystem does for a placement. Every other
+  # node stays on mount ID 1.
+  #  - "tmpfs at / beside the ext4 root". Row 1 becomes two rows, in this
+  #    order: "2 0 0:2 / / rw - tmpfs tmpfs rw" and then
+  #    "1 2 0:1 / / rw - ext4 disk rw". The ext4 row covers the tmpfs row, and
+  #    every node stays on the visible mount ID 1.
+  #  - "fuse.sshfs at the source ancestor and overlay below the checkout".
+  #    Two rows are added: "2 1 0:2 / /vault rw - fuse.sshfs sshfs rw", with
+  #    nodes moving to it, and the node-free
+  #    "3 1 0:3 / /checkout/subtree rw - overlay overlay rw".
+  #  - "overlay on nine mounts below the checkout". For k from 1 to 9, the
+  #    node-free row "<k+1> 1 0:<k+1> / /checkout/m<k> rw - overlay overlay rw".
+  #  - "a 65-byte type at the checkout root".
+  #    "2 1 0:2 / /checkout rw - <type> disk rw", where the type is "x"
+  #    repeated 65 times. Nodes move.
+  #  - "a type holding an escaped space at the checkout root". The same row
+  #    with the type field written fuse\040x, which decodes to "fuse x".
+  #    Nodes move.
+  #  - "a mount point holding byte 0xff below the checkout". The node-free row
+  #    "2 1 0:2 / /checkout/\377 rw - overlay overlay rw". Its mount point is
+  #    written as a backslash and the three digits 377, which decodes to
+  #    "/checkout/" followed by byte 0xff.
+  #  - "overlay then fuse at the checkout root".
+  #    "2 1 0:2 / /checkout rw - overlay overlay rw" in the first table; the
+  #    same row with type fuse in the final table. Nodes move.
+  #  - "overlay at the checkout root in both observations". The overlay row
+  #    just described, in both tables. Nodes move.
+  #  - "a 512-byte mount point below the checkout". The node-free row
+  #    "2 1 0:2 / {512-byte point} rw - overlay overlay rw". {512-byte point}
+  #    is "/checkout/", then 200 "a", "/", 200 "a", "/" and 100 "a": exactly
+  #    512 bytes, the longest P rule 3 keeps.
+  #  - "a 513-byte mount point below the checkout". The same row, with a last
+  #    component of 101 "a": 513 bytes.
+  # A cell lists the expected warnings as "P on F", joined by "; ", in order.
+  # {512-byte point} in a cell stands for the path defined above.
+  @wip @slice-61 @ID-CREDAPPROVAL-32
+  Scenario Outline: Credential filesystem warnings are deduplicated, sorted, capped and printable
+    Given a credential admission observation fixture requesting "claude" with independent matching policy and source-checkout pins
+    When the admission contract runs "<command>" with the all-ext4 control then with filesystem layout "<layout>"
+    Then the varied admission succeeds exactly like its ext4 control apart from its credential warnings
+    And the varied admission reports exactly the credential warnings "<warnings>" with omitted count <omitted>
+    And the varied admission reports no credential.filesystem problem
+
+    Examples:
+      | command                          | layout                                                         | warnings                                                                                                                                                                 | omitted |
+      | doctor --json                    | tmpfs at / beside the ext4 root                                | / on tmpfs                                                                                                                                                               | 0       |
+      | doctor                           | fuse.sshfs at the source ancestor and overlay below the checkout | /checkout/subtree on overlay; /vault on fuse.sshfs                                                                                                                      | 0       |
+      | doctor --credentials-only --json | overlay on nine mounts below the checkout                      | /checkout/m1 on overlay; /checkout/m2 on overlay; /checkout/m3 on overlay; /checkout/m4 on overlay; /checkout/m5 on overlay; /checkout/m6 on overlay; /checkout/m7 on overlay; /checkout/m8 on overlay | 1       |
+      | doctor                           | overlay on nine mounts below the checkout                      | /checkout/m1 on overlay; /checkout/m2 on overlay; /checkout/m3 on overlay; /checkout/m4 on overlay; /checkout/m5 on overlay; /checkout/m6 on overlay; /checkout/m7 on overlay; /checkout/m8 on overlay | 1       |
+      | doctor --json                    | a 65-byte type at the checkout root                            | /checkout on (unprintable)                                                                                                                                               | 0       |
+      | doctor --credentials-only        | a type holding an escaped space at the checkout root           | /checkout on (unprintable)                                                                                                                                               | 0       |
+      | doctor --json                    | a mount point holding byte 0xff below the checkout             | (unprintable) on overlay                                                                                                                                                 | 0       |
+      | doctor --credentials-only --json | overlay then fuse at the checkout root                         | /checkout on fuse; /checkout on overlay                                                                                                                                  | 0       |
+      | doctor                           | overlay at the checkout root in both observations              | /checkout on overlay                                                                                                                                                     | 0       |
+      | doctor --json                    | a 512-byte mount point below the checkout                      | {512-byte point} on overlay                                                                                                                                              | 0       |
+      | doctor                           | a 513-byte mount point below the checkout                      | (too long) on overlay                                                                                                                                                    | 0       |
+
+  # The defect is applied to the claude-a node after the overlay placement:
+  #  - "group-readable mode 0640": mode 0100640.
+  #  - "two links": link count 2.
+  #  - "owner UID 1001": UID 1001.
+  #  - "an alias inside the checkout": a node /checkout/alias with claude-a's
+  #    device and inode, one link, mode 0100600 and UID 1000.
+  # Before the work, the permissions, links and owner rows refuse with
+  # credential.filesystem and fail the first Then. The location rows already
+  # report credential.location and fail at the warning assertion.
+  @wip @slice-61 @ID-CREDAPPROVAL-33
+  Scenario Outline: An independent source refusal still applies beside a filesystem warning
+    Given a credential admission observation fixture requesting "claude" with independent matching policy and source-checkout pins
+    When the admission contract runs "<command>" with "overlay" at "source ancestor" in the "first" mount observation and claude-a "<defect>"
+    Then the varied admission reports "<rule>" at "/credentials/0/source" with exit <exit> and no usable approval candidate
+    And the varied admission reports exactly the credential warnings "/vault on overlay" with omitted count 0
+    And the varied admission reports no credential.filesystem problem
+    And the refused admission publishes neither approval nor frozen input and reads no source data
+
+    Examples:
+      | command                          | defect                       | rule                   | exit |
+      | doctor --json                    | group-readable mode 0640     | credential.permissions | 1    |
+      | terminal approve with yes        | group-readable mode 0640     | credential.permissions | 1    |
+      | terminal approve with yes        | two links                    | credential.links       | 1    |
+      | doctor --credentials-only --json | owner UID 1001               | credential.owner       | 1    |
+      | doctor --json                    | an alias inside the checkout | credential.location    | 1    |
+      | terminal approve with yes        | an alias inside the checkout | credential.location    | 1    |
+
+  # ID-CREDENTIALS-51 and 54's layouts, now accepted with their warning. In
+  # each, overlay or FUSE shows the source's inode under another device, so
+  # no identity or coordinate places it in a protected tree (rule 2's
+  # accepted risk). The source is /checkout-sources/token, and the fixture's
+  # "/" row is ext4. If a layout instead meets another refusal, stop and
+  # report it; do not change the fixture.
+  @wip @slice-61 @ID-CREDAPPROVAL-34 @linux
+  Scenario Outline: Stacking filesystems that hide a source alias are accepted with a warning
+    Given a credential observation fixture for "protected state" with "distinct outside file"
+    And credential observation exposes the source through "<filesystem>" at "<point>"
+    When the credential observation contract runs in JSON mode
+    Then it exits with code 0
+    And its credential JSON reports exactly the claude-token grant at "token", no problems and the credential warnings "<point> on <filesystem>" with omitted count 0
+    And its error output says "warning credential.filesystem"
+    And the credential observation recorded no state record enumeration or metadata visits
+
+    Examples:
+      | filesystem   | point                                |
+      | overlay      | /checkout                            |
+      | fuse.bindfs  | /checkout-sources                    |
+      | fuseblk.ntfs | /state/private                       |
+      | fuse         | /account/.local/state/itos-container |
+
+  # ID-CREDENTIALS-60 and 61's layouts, now accepted with their warnings. The
+  # export's row at <point> is relevant to a protected root, and its second
+  # mount at /checkout-sources is the source's ancestor row. The source's
+  # second-mount coordinate and identity never fall inside a protected tree.
+  # Stop and report if another refusal occurs.
+  @wip @slice-61 @ID-CREDAPPROVAL-35 @linux
+  Scenario Outline: NFS and 9p exports that hide a source alias are accepted with warnings
+    Given a credential observation fixture for "protected state" with "distinct outside file"
+    And the credential source is a second "<filesystem>" mount of "<subdirectory>" from the export mounted at "<point>"
+    When the credential observation contract runs in JSON mode
+    Then it exits with code 0
+    And its credential JSON reports exactly the claude-token grant at "token", no problems and the credential warnings "<warnings>" with omitted count 0
+    And the credential observation recorded no state record enumeration or metadata visits
+
+    Examples:
+      | filesystem | subdirectory                                  | point    | warnings                                          |
+      | nfs4       | /checkout/private                             | /        | / on nfs4; /checkout-sources on nfs4              |
+      | nfs        | /state/private                                | /        | / on nfs; /checkout-sources on nfs                |
+      | nfs4       | /account/.local/state/itos-container/sessions | /account | /account on nfs4; /checkout-sources on nfs4       |
+      | 9p         | /checkout/private                             | /        | / on 9p; /checkout-sources on 9p                  |
+      | 9p         | /account/.local/state/itos-container/sessions | /account | /account on 9p; /checkout-sources on 9p           |
 
   # The API fixture pauses at image inspection after the first metadata check.
   # A premature policy gate must reach Then as a failed readiness assertion.
@@ -780,6 +1374,39 @@ Feature: Review and remember credential grants without delivering them
     And a new selection using generation "4" refuses as superseded without another snapshot
     And the credential freeze contract reads no source data and creates no worker or staged material
 
+  # Slice-61 rule 5, through the admission assembly's "preflight" route: the
+  # real run domain Preflight over the shared readiness, as for ID-19, with
+  # the approved record equal to the request. For the first ext4 run and then
+  # the varied run, the When does the following. It hands the returned Durable
+  # to Store.New of session porttest's memory Store, which uses the real
+  # session codec.JSON and is seeded with the snapshot that Preflight
+  # published. It keeps the first published record bytes. It then saves the
+  # store's next valid transition (intent to owned, with a full container ID).
+  # Last, it attempts three saves: one adding a warning to the ext4 record,
+  # one changing the varied record's filesystem text, and one dropping its
+  # warnings. The disk store's publication is proven by
+  # TestSessionStoreCredentialWarningPublication, and its saves use the same
+  # Record.ValidTransition (see the slice-61 block). Public run is untouched. Preflight
+  # becomes ready only after Engine.Open, so each successful run opens the
+  # fake engine once; the last Then compares the assembly's engine.Opens for
+  # the varied run with the ext4 run's.
+  @wip @slice-61 @ID-CREDAPPROVAL-36
+  Scenario Outline: Run's preflight carries filesystem warnings into the session intent record it publishes
+    Given a credential admission observation fixture requesting "claude" with independent matching policy and source-checkout pins
+    When the admission contract runs the real local preflight for the approved claude grant with ext4 then "<filesystem>" at "<placement>" in the "<observation>" mount observation and publishes each first session intent
+    Then the varied preflight succeeds and its selection carries exactly the credential warnings "<path> on <filesystem>" with omitted count 0
+    And the varied first intent record carries exactly those credential warnings and no omitted count member
+    And the ext4 first intent record has neither credential warning member
+    And the next valid save keeps the recorded warnings byte for byte while saves that add change or drop them are refused
+    And the preflight contract reads no source data and opens the engine exactly as often as its ext4 control
+
+    Examples:
+      | filesystem | placement              | observation | path                                         |
+      | overlay    | source                 | first       | /vault/claude-a                              |
+      | fuse.sshfs | checkout descendant    | final       | /checkout/subtree                            |
+      | nfs4       | selected state root    | first       | /state                                       |
+      | 9p         | fixed state descendant | final       | /account/.local/state/itos-container/subtree |
+
   # Status reads protected historical authority. Seeded absence avoids depending
   # on a delivered worker or on T-40's network implementation.
   @slice-30 @ID-CREDAPPROVAL-21 @local-engine-fixture
@@ -809,6 +1436,90 @@ Feature: Review and remember credential grants without delivering them
     And the second status reports "recovery.invalid-state" with exit 2 and no session entry
     And neither status reads current grants or repairs protected records
 
+  # Slice-61 rules 6 and 7. The new Given adds the members to the seeded
+  # intent record directly, as run would have published them. The record's
+  # schema stays the seeded one. A cell lists "P on F" warnings joined by
+  # "; ", and omitted count 0 means no omitted member. Paths need not match
+  # the sources, because status never consults current paths. The Given
+  # re-captures the protected tree (recoveryCapture) after its edit, so the
+  # reused last Then compares against the seeded record as it stands. The
+  # Given writes the members as json.Marshal does, so "<", ">" and "&" become
+  # six-byte \u escapes, as in a record that run published.
+  # Two named cells cover the size bound in rule 6:
+  #  - "{eight longest}" is eight warnings. Warning k, for k from 1 to 8, has
+  #    path "/" followed by 510 "<" and the digit k (512 bytes) and
+  #    filesystem "<" repeated 64 times. With omitted count 32760, this is
+  #    the largest warning content rule 6 allows, at its worst escaping.
+  #  - "{eight longest} in a 65536-byte record" is the same warnings. The
+  #    Given then inserts spaces before the record's final "}" until the file
+  #    is exactly 65536 bytes, which is the largest record Decode accepts.
+  # Before the work the decoder refuses the extra members, so status reports
+  # recovery.invalid-state and the first Then fails.
+  @wip @slice-61 @ID-CREDAPPROVAL-37 @local-engine-fixture
+  Scenario Outline: Status shows the filesystem warnings a credential session recorded
+    Given an independently seeded stopped credential session on "<network>" with both frozen grants
+    And the seeded intent record also carries the credential warnings "<warnings>" with omitted count <omitted>
+    When credential session status is invoked in plain and JSON modes
+    Then both status results succeed with the original fingerprint and exactly the frozen grants
+    And JSON status lists exactly the recorded credential warnings and omitted count for that session
+    And plain status prints exactly the recorded credential warning lines after the session's credential grant lines
+    And status neither reads mutable requests approvals or source data nor changes protected records
+
+    Examples:
+      | network   | warnings                                                                                                                         | omitted |
+      | offline   | /vault on fuse.sshfs                                                                                                             | 0       |
+      | allowlist | / on tmpfs; /checkout on overlay                                                                                                 | 0       |
+      | offline   | /m1 on overlay; /m2 on overlay; /m3 on overlay; /m4 on overlay; /m5 on overlay; /m6 on overlay; /m7 on overlay; /m8 on overlay | 3       |
+      | offline   | (unprintable) on (unprintable)                                                                                                   | 0       |
+      | allowlist | (too long) on overlay                                                                                                            | 0       |
+      | offline   | {eight longest}                                                                                                                  | 32760   |
+      | offline   | {eight longest} in a 65536-byte record                                                                                           | 32760   |
+
+  # Slice-61 rule 6, by ID-22's pattern. The first status proves that the
+  # seeded valid warnings decode. Then the fixture rewrites only the intent
+  # record's warning members with the named defect. "Eight" and "nine" mean
+  # /m1 to /m8 or /m9 on overlay. Nothing else is hashed or referenced, so
+  # nothing but the defect can make the second status refuse. Like ID-22's
+  # When, the new When keeps the first JSON status as the only entry of
+  # w.approval.results, re-captures the protected tree after the defect, and
+  # leaves the second status as the current result for the reused Thens.
+  # The two size defects are the next byte above ID-CREDAPPROVAL-37's
+  # largest valid cells:
+  #  - "a 513-byte path" replaces the path with "/vault/" followed by 506 "a".
+  #  - "the eight longest warnings in a 65537-byte record" writes ID-37's
+  #    {eight longest} with omitted count 32760, then pads with spaces before
+  #    the final "}" to exactly 65537 bytes. Each member is valid, so only
+  #    the size can make this second status refuse.
+  # Before the work the first status already refuses and the first Then fails.
+  @wip @slice-61 @ID-CREDAPPROVAL-38 @local-engine-fixture
+  Scenario Outline: A malformed recorded filesystem warning makes the session record invalid
+    Given an independently seeded stopped credential session on "offline" with both frozen grants
+    And the seeded intent record also carries the credential warnings "/vault on fuse.sshfs" with omitted count 0
+    When status is invoked then the fixture applies the recorded warning defect "<defect>" and invokes status again
+    Then the first status succeeds with exactly the original frozen grants
+    And the first status lists exactly the seeded credential warnings
+    And the second status reports "recovery.invalid-state" with exit 2 and no session entry
+    And neither status reads current grants or repairs protected records
+
+    Examples:
+      | defect                                          |
+      | nine warnings without an omitted count          |
+      | two warnings out of order                       |
+      | a repeated warning                              |
+      | an empty warnings array                         |
+      | a rule other than credential.filesystem         |
+      | an extra member in the warning                  |
+      | a relative path                                 |
+      | a path with a dot-dot component                 |
+      | a filesystem containing a space                 |
+      | a 65-byte filesystem                            |
+      | an omitted count of 2 beside one warning        |
+      | an omitted count of 0 beside eight warnings     |
+      | an omitted count of 2 without warnings          |
+      | an omitted count written as a string beside eight warnings |
+      | a 513-byte path                                 |
+      | the eight longest warnings in a 65537-byte record |
+
   # The consent/host-agent assertions already pass before slice-30. Keep them as
   # regression checks; the missing exposure disclosure is this scenario's red.
   # Help must preview all three credential disclosure lines, both allowlist-only
@@ -824,6 +1535,13 @@ Feature: Review and remember credential grants without delivering them
     And approval help retains the offline no-credential fingerprint route and unchanged-settings no-prompt rule
     And approval help says an unsandboxed host agent can fake a terminal and approval records what not who
     And it exits with code 0
+
+  # Slice-61 rule 8. The phrase stays on one help line, so wrapping cannot split it.
+  @wip @slice-61 @ID-CREDAPPROVAL-39
+  Scenario: Doctor help says other credential filesystems warn rather than refuse
+    When itos-container runs with "doctor --help"
+    Then it exits with code 0
+    And its standard output says "Filesystems other than ext4, btrfs and xfs give credential.filesystem warnings, not refusals"
 
   @slice-30 @ID-CREDAPPROVAL-30
   Scenario Outline: Unsupported credential inspection hosts refuse before reading the policy pin identity
