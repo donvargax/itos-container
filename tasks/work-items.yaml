@@ -1255,6 +1255,9 @@ items:
       point to add is the order of work. Until the person answers, T-40's teardown copy and
       slice-26, slice-27 and slice-28 must carry the disclosure that an incomplete log cannot be
       detected. Slice-28 shows a count as complete only after the decision.
+    deferred: >
+      Wait until idea intake can resume an unanswered question without terminating the active queue
+      session. Resume this idea after that fix.
   - id: T-43
     title: The Engine failure diagnostics step prints each failed scenario's godog step error and annotates it
     phase: 1
