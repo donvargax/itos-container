@@ -414,3 +414,8 @@ questions:
     question: "Should a credential filesystem type that cannot exclude a backing alias by itself refuse a run on the trusted local machine?"
     answer: "On 2026-11-26 the project owner directed that credential.filesystem become a recorded doctor and run warning. Detect the affected path and filesystem type, report both in doctor, and preserve the warning for status. Continue when filesystem type alone prevents excluding an alias, including on overlay, FUSE, NFS and 9p. The local machine, repositories and accounts are trusted. This applies the 2026-11-24 rule that a security refusal must address a real outsider."
     decision: 41
+  - id: q-102
+    item: "slice-40"
+    question: "Does approval of the whole OpenCode auth.json cover providers added to that file later, and what must each run and its status show?"
+    answer: "The person confirmed on 2026-11-26 that the approved whole-file grant covers providers added to the host OpenCode auth.json later. Adding a provider requires no fresh approval. Each run records the provider names present for that run. Its status shows those recorded names. Both contain provider names only and never credential values."
+    decision: 42
