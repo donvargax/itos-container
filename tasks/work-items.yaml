@@ -2952,6 +2952,10 @@ items:
       filesystem-type refusal in q-64 and its standing summary. Update the credential policy and
       approval scenarios and prove the doctor, run and status outcomes.
     refs: [docs/decisions/0041-record-credential-filesystem-type-as-a-warning-on-the-trusted-local-host.md, docs/decisions/0027-credential-source-inspection.md, docs/decisions/0029-credential-approval.md, features/credentials-policy.feature, features/credentials-approval.feature]
+    deferred: >
+      Four red commits lost the existing ID-CREDAPPROVAL-29 scenario. Resume the retained attempt
+      when the red commit preserves that scenario and its steps until the feature commit. Decision
+      0041 and the warning scenarios still apply.
   - id: p2-readiness-approval-refusal-inventory
     title: Identify the outsider each readiness and approval refusal stops
     phase: 1
