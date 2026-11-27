@@ -2936,7 +2936,7 @@ items:
     title: Record credential.filesystem as a warning in doctor and run status
     phase: 1
     owner: donvargax
-    status: todo
+    status: doing
     depends_on: []
     kind: slice
     why: >
