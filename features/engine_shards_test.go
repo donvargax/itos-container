@@ -58,7 +58,7 @@ func engineFeatureFiles(dir string) ([]string, error) {
 // this tree keeps outside offline, lifecycle and egress.
 var shardOtherFiles = []string{
 	"anchors.feature", "checkout-overlap.feature", "claude-home.feature", "doctor.feature",
-	"hardlinks.feature", "recovery.feature", "run_terminal.feature", "session.feature",
+	"exec.feature", "hardlinks.feature", "recovery.feature", "run_terminal.feature", "session.feature",
 	"sockets.feature",
 }
 

@@ -261,7 +261,11 @@ func (l *lifecycleNative) escalationWindow(first, kill offlineRequest) error {
 }
 
 func (w *world) lifecycleNoHostSignals() error {
-	data, err := os.ReadFile(w.lifecycle.signalTrace)
+	return noHostSignals(w.lifecycle.signalTrace)
+}
+
+func noHostSignals(path string) error {
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}

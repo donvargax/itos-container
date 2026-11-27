@@ -156,6 +156,11 @@ func (a *offlineAPI) serve(out http.ResponseWriter, request *http.Request) {
 			a.requests[index].Status = response.StatusCode
 			a.mu.Unlock()
 			if response.StatusCode == http.StatusSwitchingProtocols {
+				if strings.HasPrefix(entry.Path, "/exec/") && a.w.exec != nil && a.w.exec.native != nil {
+					a.mu.Lock()
+					a.w.exec.native.attachments[entry.Path] = response.Body
+					a.mu.Unlock()
+				}
 				return nil
 			}
 			if a.lifecycle != nil && strings.HasSuffix(entry.Path, "/wait") && response.StatusCode == http.StatusOK {
@@ -301,6 +306,9 @@ func (b *offlineWaitBody) Close() error {
 // mistaken for product-enforced isolation. Only owned IDs may be mutated.
 func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 	w := a.w
+	if strings.HasPrefix(entry.Path, "/exec/") {
+		return a.execSessionRequest(*entry)
+	}
 	if strings.HasPrefix(entry.Path, "/volumes/") {
 		return a.anchorVolumeAllowed(r, entry)
 	}
@@ -360,6 +368,8 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 	}
 	if r.Method == "POST" {
 		switch operation {
+		case "exec":
+			return a.execProbeCreate(*entry, observed)
 		case "attach":
 			for key, values := range r.URL.Query() {
 				if key == "detachKeys" && a.terminal && object(observed["Config"])["Tty"] == true &&
@@ -381,7 +391,7 @@ func (a *offlineAPI) allowed(r *http.Request, entry *offlineRequest) bool {
 		case "kill":
 			return len(r.URL.Query()) == 1 && len(r.URL.Query()["signal"]) == 1 &&
 				(r.URL.Query().Get("signal") == "SIGTERM" || r.URL.Query().Get("signal") == "SIGKILL" ||
-					((a.lifecycle != nil || a.terminal) && r.URL.Query().Get("signal") == "SIGINT"))
+					((a.lifecycle != nil || a.terminal || (w.exec != nil && w.exec.native != nil)) && r.URL.Query().Get("signal") == "SIGINT"))
 		case "resize":
 			columns, colErr := strconv.Atoi(r.URL.Query().Get("w"))
 			rows, rowErr := strconv.Atoi(r.URL.Query().Get("h"))
