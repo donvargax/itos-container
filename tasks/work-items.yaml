@@ -2991,14 +2991,15 @@ items:
     status: todo
     depends_on: [slice-30, T-48, T-77]
     kind: task
-  - id: claude-run-admission-delivery
+  - id: slice-62
     title: run admits an approved version-3 Claude request, rechecks sources after engine inspection, and stages the checked inode as the read-only token file or starts nothing
     phase: 1
     owner: null
     status: todo
     depends_on: [T-95, T-97, slice-61]
-    kind: idea
+    kind: slice
     why: >
+      Was claude-run-admission-delivery.
       This slice lifts run's version-3 gate (cmd/itos-container/main.go:337) for no-grant and
       claude-token requests only. Lifting it turns on at once readiness's located source refusals
       before and after engine inspection (internal/engine/readiness/domain/inspect.go:67 and :103)
@@ -3026,7 +3027,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [claude-run-admission-delivery, T-95, slice-27, T-84]
+    depends_on: [slice-62, T-95, slice-27, T-84]
     kind: idea
     why: >
       This slice turns the first task's red native rows green in CI. CREDRUN-08 covers the offline
