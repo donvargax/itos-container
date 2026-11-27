@@ -2158,12 +2158,11 @@ items:
     depends_on: [T-48, slice-34, slice-30]
     kind: slice
     why: >
-      Specify the OpenCode counterpart to slice-32. The source is auth.json under
-      ~/.local/share/opencode and may include the OpenCode Go provider key alongside other provider
-      entries. Under decisions 0035 and 0040 the person approves the whole file after seeing every
-      provider it holds. Run makes the host file writable at OpenCode's normal login path so
-      refreshes reach the host. Specify cleanup and how the login stays out of the checkout,
-      engine configuration and logs. Use synthetic markers and fake endpoints for the scenarios.
+      Target OpenCode 2.2.1. Run supplies the one approved OpenCode Go key through a
+      provider-key input the supported client reads. Keep the host SQLite login store and
+      sessions outside the workload. Record the delivered provider name in the run record
+      and status. Specify cleanup and keep key values out of the checkout, engine
+      configuration, records and logs. Use synthetic keys and fake endpoints in scenarios.
       Name any unresolved account decision explicitly. Any harness may be the first in the container
       (the person, 2026-11-24), so this slice need not wait for the Codex and Claude slices.
     refs: [docs/decisions/0043-deliver-one-approved-opencode-go-key-to-opencode-2-2-1.md, docs/decisions/0039-slice-40-s-redraft-may-reuse-the-earlier-spec-on-slice-40-old-and-the-partial-implementation-on-slice-40-d9e5a2d.md]

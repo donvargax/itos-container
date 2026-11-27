@@ -13,9 +13,9 @@ coordinator made. A change to a line is the person's, and it replaces the line.
   logins, API keys and credential brokering are for remote sandboxes only; invent no threat
   model for the local case. 2026-11-20. `docs/charter.md:143`
 - Codex uses the ChatGPT subscription, not an API key. 2026-11-20. `docs/charter.md:148`
-- Approval of the host OpenCode auth.json shows all its providers and grants the whole file.
-  Run shares it writable at OpenCode's normal login path for host refreshes. 2026-11-26.
-  `docs/decisions/0040-share-the-approved-whole-opencode-login-file-at-its-normal-path.md:20`
+- OpenCode 2.2.1 receives the one approved OpenCode Go key through its provider-key input.
+  The host retains its SQLite login store and sessions. The run record and status show the
+  provider name only. 2026-11-26. `docs/decisions/0043-deliver-one-approved-opencode-go-key-to-opencode-2-2-1.md`
 - Container runs may use real credentials, one form per provider: a long-lived subscription
   token where the provider issues one, else its auth file mounted, shared with the host and
   refreshed in place. Claude gets a `claude setup-token` token, read from
