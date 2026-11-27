@@ -10028,7 +10028,8 @@
     harness that T-96 and slice-62 to slice-64 reuse: the native /var/tmp fixture and its
     verification, the cooperative hash probe and its positive control, the marker detectors and
     theirs, an engine passthrough journal, the inotify checkout observer with its calibrated
-    policy-edit bracket, and the engine-free regression TestCredentialRunPolicyEditBracket. It adds
+    policy-edit bracket, the engine-free regression TestCredentialRunPolicyEditBracket, and the
+    definitions check TestCredentialRunNativeStepsDefined. It adds
     no product code, no workflow edit and no new scenario ID. The work is one test commit under
     features/ only. The implementer may commit freely in its own workspace; the host makes the
     landing commits and handles itos, submission, publication and review. Agents never get an
@@ -10111,10 +10112,12 @@
         # recursive inotify write observer on every checkout directory (create,
         # modify, attrib, close-write, moves, delete and queue overflow) and proves it
         # with a fixture-made transient create, write and remove of its own. Later
-        # fixture or probe control writes go only to one fixture control directory and
-        # are journaled by exact name. Sources, state roots and the account home lie
-        # outside every checkout, so their fixture edits are not checkout events. The
-        # only fixture edits inside a checkout are three policy edits, each a single
+        # fixture control writes go only to one fixture control directory and are
+        # journaled by exact name. The cooperative probe and any child it runs write
+        # nothing under /workspace, only under the worker's private tmpfs /tmp.
+        # Sources, state roots and the account home lie outside every checkout, so
+        # their fixture edits are not checkout events. The only fixture edits inside a
+        # checkout are three policy edits, each a single
         # journaled operation on that checkout's exact itos-container.yaml path: 05's
         # policy row replaces it while run is held at its post-freeze barrier; 10
         # replaces the first project's after every earlier run's controller has
@@ -10336,10 +10339,19 @@
     of them. A plan holds a nonce, the target path (the fixed
     /run/itos-container/credentials/claude-token) and the paths the probe must fail to open. For 08
     these are the host source and its sibling; for 10 the other project's host source; for a
-    no-grant plan both host sources. In 08's allowlist row the plan also names slice-27's probe as a
-    child, built and placed the same way as /workspace/slice-27-probe. Its plan has one canonical
-    allowed name and the ordinary unlisted name refused.example on 443, and it runs before the first
-    report. The probe writes no file. It prints one JSON object per line on stdout and waits on
+    no-grant plan both host sources. In 08's allowlist row the plan also carries a child:
+    slice-27's probe, built and placed the same way as /workspace/slice-27-probe, and that probe's
+    own plan inline as a JSON value, with one canonical allowed name, the ordinary unlisted name
+    refused.example on 443 and no barrier step. slice-27's probe writes its barrier and report
+    files beside its plan (features/testdata/slice-27/probe/main.go:479, :493-494, :503), so its
+    plan never goes under /workspace. Before the first report the credrun probe makes a private
+    0700 directory with os.MkdirTemp under the worker's /tmp, which is a tmpfs outside the checkout
+    (internal/engine/session/docker/run.go:111). It writes the child plan there as
+    slice-27-plan.json and runs /workspace/slice-27-probe with that file's path as its one argument
+    and that directory as its working directory. Every child write therefore lands in that /tmp
+    directory. After the child exits, the credrun probe reads slice-27-report.json there and relays
+    its summary. The probe writes nothing under /workspace; its only writes are the child's plan in
+    that /tmp directory. It prints one JSON object per line on stdout and waits on
     stdin, which is the barrier the harness holds. Each report has the nonce, the phase (first, read
     or final), euid and egid. For the target it gives one result: 'file' when lstat shows a regular
     file and the read succeeds, with the sha256 of the exact bytes, the mode as four octal digits
@@ -10426,6 +10438,21 @@
     then one with an open-write, and each fails. On a non-Linux build it skips with the unsupported
     error; on Linux any setup error fails it. It is not scenario red evidence.
 
+    TestCredentialRunNativeStepsDefined is an ordinary go test in its own file. It uses no engine
+    and runs no step. One method, (w *world) credentialRunSteps(sc lifecycleStepRegistrar),
+    registers every new step of the three rows, and initializeScenario reaches it the way it
+    reaches egressNativeSteps. The test lists the whole step registry the way
+    TestHomeNativeStepDefinitions does (features/harness_home_native_harness_test.go:103). It builds
+    a godog.TestSuite over credentials-run.feature with Format progress, ShowStepDefinitions and a
+    ScenarioInitializer that calls initializeScenario(sc, "unused-root", "unused-binary"). It
+    requires Run to exit 2 and parses each listed expression. It then retrieves the feature's
+    pickles and selects those tagged @ID-CREDRUN-08, @ID-CREDRUN-09 or @ID-CREDRUN-10, by ID and
+    never by @slice-31. It requires exactly 6 selected pickles and 69 selected steps (13 in each 08
+    row, 9 in each 09 row and 12 in 10). Each step's text must match exactly one expression of the
+    whole registry, so an undefined step and an ambiguity with any existing definition both fail
+    it. A failure names the step text and its match count, never a marker. T-96 widens the
+    selection and the counts when it adds 11 and 12.
+
     Whens. Each product run starts the way homeNativeStart does: its own context with a 90-second
     fixture deadline, stdout and stderr captured, and stdin held open as the barrier. A When waits
     for the probe's first report or the run's exit. A report means the run is live, and the When
@@ -10455,8 +10482,15 @@
 
     Thens. Each row's first Then checks the recorded verification and every JSON doctor transcript:
     exit 0, ok true, problems empty, and inspection.ready true with checkout, engine and image
-    members. approval.status is 'matching', and credentials is exactly the row's grant with target
-    /run/itos-container/credentials/claude-token, or absent for a no-grant project. That Then passes
+    members. approval.status is 'matching'. For a credential project, approval.effective.profile is
+    'offline-credentials-v1', or 'allowlist-credentials-v1' in 08's allowlist row, and
+    approval.effective.credentials is exactly the one grant {kind claude-token, source <that
+    project's absolute source path>, target /run/itos-container/credentials/claude-token}, compared
+    as credentialApprovalProfile compares it (features/credential_approval_steps_test.go:156-171).
+    For 10's no-grant third project, approval.effective.profile is 'offline-v1' and
+    approval.effective.credentials is absent. The top-level credentials member is absent from every
+    one of these ready transcripts, because full JSON doctor fills it only when there are credential
+    issues (internal/slices/doctor/command/readiness.go:107-125, omitempty at :143). That Then passes
     today because doctor and approve accept version 3 (cmd/itos-container/main.go:332) and run
     refuses only later. The first behaviour Then is the step after it: 08's 'the worker reports the
     exact source hash ...', 09's 'both reads in that worker report ...' and 10's 'each credential
@@ -10476,11 +10510,13 @@
     header left open (fixture layout, probe interface, detector and surface lists, the passthrough
     journal, observer mechanics, the regression's subtests and removing the pending entry) are
     proposed by this spec on 2026-11-27. The check fails today: neither
-    TestCredentialRunPolicyEditBracket nor the 'credentials-run red inventory' subtest exists, so
-    neither PASS line is printed.
+    TestCredentialRunPolicyEditBracket, TestCredentialRunNativeStepsDefined nor the
+    'credentials-run red inventory' subtest exists, so no PASS line is printed. On a tree with the
+    feature file and the other two tests but missing, undefined or ambiguous credrun steps, the
+    definitions check fails and so does the check.
   done_when:
     - run: >-
-        out=$(go test ./features -run '^(TestEngineShards|TestCredentialRunPolicyEditBracket)$' -v 2>&1); status=$?; printf '%s\n' "$out" | tail -n 40; [ "$status" -eq 0 ] && printf '%s\n' "$out" | grep -qF -- '--- PASS: TestEngineShards/credentials-run_red_inventory (' && printf '%s\n' "$out" | grep -qF -- '--- PASS: TestCredentialRunPolicyEditBracket ('
+        out=$(go test ./features -run '^(TestEngineShards|TestCredentialRunPolicyEditBracket|TestCredentialRunNativeStepsDefined)$' -v 2>&1); status=$?; printf '%s\n' "$out" | tail -n 40; [ "$status" -eq 0 ] && printf '%s\n' "$out" | grep -qF -- '--- PASS: TestEngineShards/credentials-run_red_inventory (' && printf '%s\n' "$out" | grep -qF -- '--- PASS: TestCredentialRunPolicyEditBracket (' && printf '%s\n' "$out" | grep -qF -- '--- PASS: TestCredentialRunNativeStepsDefined ('
       timeout: 900
 - id: T-96
   type: test
