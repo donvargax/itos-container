@@ -2,7 +2,6 @@
 phases:
   1: null
 queue:
-  - slice-31
   - slice-40
   - slice-61
   - T-76
@@ -1541,20 +1540,9 @@ items:
     title: run hands the approved Claude token to the workload; it appears nowhere in docker inspect, the checkout, status or logs
     phase: 1
     owner: donvargax
-    status: todo
+    status: dropped
     depends_on: [slice-30, T-48, T-77]
     kind: slice
-    why: >
-      Was p1-credentials-claude-token-run.
-      The first user-visible credential behaviour, charter step 2. Scenarios first, real-engine ones
-      in CI, using a synthetic token marker and no real account. With an approved Claude grant, run
-      makes the token readable by the workload in the form the decision record chose. A scenario
-      that fails without the isolation shows that docker inspect of the worker, the session's
-      recovery and approval records, status output, doctor output, the refusal log and run's own
-      diagnostics never contain the marker, and that nothing is written under the checkout. Without
-      an approved grant, or after the source file changes mode or owner, run refuses before creating
-      anything. A second worker or project does not receive it. Offline runs without grants are
-      unchanged. Broken down from p1-credentials-passed-in.
     refs: [docs/decisions/0035-real-credentials-for-container-runs-a-subscription-token-where-the-provider-issues-one-else-its-auth-file-shared.md]
   - id: slice-32
     title: run bind-mounts the approved Codex auth.json, and its lock file when present, read-write as single files
@@ -2970,3 +2958,90 @@ items:
       the trust boundary for the local machine, repositories and accounts. Where there is no
       outsider, list the refusal as a candidate for a recorded warning, with its reason, for a
       separate decision on changing behavior.
+  - id: T-95
+    title: credentials-run.feature lands on main with CREDRUN-08 to -10 @wip and their native step definitions, red in CI
+    phase: 1
+    owner: donvargax
+    status: doing
+    depends_on: [slice-30, T-48, T-77, T-84]
+    kind: task
+  - id: T-96
+    title: CREDRUN-11 and -12 join credentials-run.feature @wip with native recorder and controller-kill step definitions, red in CI
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-95, T-84]
+    kind: task
+  - id: T-97
+    title: A shared raw CredentialFS contract runs unchanged against the I/O-free fake and the disk adapter
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-30, T-48, T-77]
+    kind: task
+  - id: slice-62
+    title: run admits an approved version-3 Claude request, rechecks sources after engine inspection, and stages the checked inode as the read-only token file or starts nothing
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [T-95, T-97, slice-61]
+    kind: slice
+    why: >
+      Was claude-run-admission-delivery.
+      This slice lifts run's version-3 gate (cmd/itos-container/main.go:337) for no-grant and
+      claude-token requests only. Lifting it turns on at once readiness's located source refusals
+      before and after engine inspection (internal/engine/readiness/domain/inspect.go:67 and :103)
+      and T-48's staging and inspected-bind checks. So this slice owns every local scenario that
+      turns green then: CREDRUN-01, -02, -03, -04, -05, -06 and -07. Each is red on its base because
+      run refuses version 3 with policy.version exit 2. CREDRUN-04 fails at its source-problem Then.
+      CREDRUN-06 fails at its rule-and-exit Then: a denied open, a short read or a size change after
+      a full read must give run.credential-refused; a non-tmpfs staging root or a short write must
+      give run.credential-unavailable; a writable bind, one naming the source or one with another
+      target must give run.isolation-unverified; and none of these may start the workload.
+      CREDRUN-03 is edited in place under decision 0041. Its tmpfs and nfs4 rows move to an outline
+      beside it with an ID minted by `itos tests next-id`, in which the Claude run proceeds with
+      slice-61's recorded credential.filesystem warning, while the rows for an independently
+      observed location still refuse. Delivery reuses T-48's seam: a copy from the retained
+      descriptor, private tmpfs staging, and one read-only bind at
+      /run/itos-container/credentials/claude-token. Requests that include GitHub keep the
+      policy.version exit-2 gate. The slice changes neither run help nor status output, so
+      CREDRUN-13 and CREDRUN-14 stay red for their owners. In its feat commit it replaces
+      CREDENTIALS-13's blanket version-3 run rows and CREDAPPROVAL-17's Claude row, and removes the
+      blanket version-3 run warning for supported requests. Its author writes the local step
+      definitions red first. Its local evidence reuses the first task's detectors and edit bracket.
+      Broken down from slice-31.
+  - id: slice-63
+    title: Native runs give only the approved workload the read-only staged Claude file, rotation reaches only later runs, and help and docs disclose the limits
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-62, T-95, slice-27, T-84]
+    kind: slice
+    why: >
+      Was claude-run-native-delivery.
+      This slice turns the first task's red native rows green in CI. CREDRUN-08 covers the offline
+      rows plus the allowlist row through slice-27's proxy, with a nonempty ordinary refusal.
+      CREDRUN-09 covers rotation reaching only the next run, under decision 0035. CREDRUN-10 covers
+      no access from another project or from a later no-grant run. It also owns CREDRUN-13's run
+      help, which stays red on the admission slice's tree. In the same feat commit it brings the
+      CLI, CONFIG, security and arc42 status docs up to date, and revises AC-36's row in
+      docs/plans/container-pilot.md and ADR 0025's question-6 prose to q-56's wording, without
+      claiming the redaction that p1-platform-log-redaction owns. Broken down from slice-31.
+  - id: slice-64
+    title: Lost start acknowledgement and controller loss recover staged credentials from original authority, and status shows credential staging
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-63, T-96]
+    kind: slice
+    why: >
+      Was claude-run-staging-recovery.
+      This slice owns the credential_staging projection in status JSON (present, absent or unknown,
+      from T-48's observation) and the session-labeled 'credential staging: <value>' plain line,
+      which is omitted for no-grant sessions. It also owns the recovery rules that use them.
+      Unlinking the staged file never proves the workload did not run. Start is never retried.
+      Cleanup is complete only when both the worker and the staging are absent. Recovery never
+      deletes a substituted inode. Stop and status reread no source, current policy or active
+      approval. It turns CREDRUN-11 and -12 green in CI and owns the local CREDRUN-14, which fails
+      today at its first status Then because status has no credential staging line. Broken down from
+      slice-31.

@@ -10017,3 +10017,49 @@
     Git over the network... remain outside this milestone' is also replaced by the charter's steps 2
     to 4 in order. The charter is not touched. Drafters of slice-29 to slice-33 and T-48 would
     otherwise meet two disagreeing authorities, as T-38's did.
+- id: T-95
+  type: test
+  title: credentials-run.feature lands on main with CREDRUN-08 to -10 @wip and their native step definitions, red in CI
+  why: >
+    Native red evidence must exist before product code turns it green. Main's egress-shard placement
+    also needs credentials-run.feature to hold genuine @engine rows as soon as the file exists. This
+    task carries the reviewed CREDRUN-08, -09 and -10 onto current main with @wip kept. It revises
+    the header to decision 0035 (the staged claude-token file, never replaced by rotation), to
+    decision 0041 and to the egress placement. It also adds their native step definitions and the
+    shared harness the later children reuse: the native /var/tmp fixture verification, the
+    cooperative hash probe, the marker detectors (raw and base64 at all three offsets) each with a
+    positive control, the inotify checkout observer with its calibrated policy-edit bracket, and the
+    engine-free regression TestCredentialRunPolicyEditBracket. No product code. Broken down from
+    slice-31.
+  done_when:
+    - run: go test ./features -run '^(TestEngineShards|TestCredentialRunPolicyEditBracket)$' passes on the combined tree. A red_scenarios dispatch of main's actual CI workflow shows ID-CREDRUN-08, -09 and -10 selected only in the egress shard, each failing at its first behaviour Then after the fixture and doctor control Then passes
+- id: T-96
+  type: test
+  title: CREDRUN-11 and -12 join credentials-run.feature @wip with native recorder and controller-kill step definitions, red in CI
+  why: >
+    The rows for a lost start acknowledgement and for recovery by a fresh controller need their own
+    native machinery. One part is a recorder that loses the start acknowledgement after mount
+    acquisition, holds the first worker-ending request until the staged file is unlinked and the
+    probe has reported (bounded at half the call budget), and injects removal faults. The other is a
+    synchronized controller kill at the two recorded barriers. This task adds the reviewed scenarios
+    beside their topic blocks in the same egress-shard file, with their step definitions committed
+    red first and @wip kept, so the recovery slice has real red evidence to turn green. Broken down
+    from slice-31.
+  done_when:
+    - run: go test ./features -run '^TestEngineShards$' passes. A red_scenarios dispatch of main's actual CI workflow shows ID-CREDRUN-11 and -12 selected only in the egress shard, each failing at its first behaviour Then after the fixture and doctor control Then passes
+- id: T-97
+  type: test
+  title: A shared raw CredentialFS contract runs unchanged against the I/O-free fake and the disk adapter
+  why: >
+    CredentialContract observes only the domain's CredentialResult, so the raw shapes that run
+    admission will trust are not pinned. A refused Open returns handle 0 and CredentialNode{} and
+    keeps no pin. A failed Entries returns nil, false, false, even after a partial batch. This task
+    adds a raw section in internal/engine/readiness/port/porttest covering invalid and closed
+    handles, missing, open, stat, metadata and identity refusals, and directory failures, with
+    oracles for the result and for retained pins. It states those shapes in the CredentialFS comment
+    in port/credentials.go and proves the oracle rejects a deliberately faulty fake. It also runs
+    T-48's ReadPath and checked-source contracts, so a closed or refused capability cannot read or
+    alias a retained source. These are regression checks of shapes that already hold, not behaviour
+    scenarios. Broken down from slice-31.
+  done_when:
+    - run: go test ./internal/engine/readiness/... ./internal/engine/session/... passes with the new raw contract run against both the fake and the disk adapter, and the oracle fails on the faulty-fake negative control
