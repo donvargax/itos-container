@@ -3004,3 +3004,21 @@ items:
       scenarios beside their topic blocks in the same egress-shard file, with their step definitions
       committed red first and @wip kept, so the recovery slice has real red evidence to turn green.
       Broken down from slice-31.
+  - id: credentialfs-raw-contract
+    title: A shared raw CredentialFS contract runs unchanged against the I/O-free fake and the disk adapter
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-30, T-48, T-77]
+    kind: idea
+    why: >
+      CredentialContract observes only the domain's CredentialResult, so the raw shapes that run
+      admission will trust are not pinned. A refused Open returns handle 0 and CredentialNode{} and
+      keeps no pin. A failed Entries returns nil, false, false, even after a partial batch. This
+      task adds a raw section in internal/engine/readiness/port/porttest covering invalid and closed
+      handles, missing, open, stat, metadata and identity refusals, and directory failures, with
+      oracles for the result and for retained pins. It states those shapes in the CredentialFS
+      comment in port/credentials.go and proves the oracle rejects a deliberately faulty fake. It
+      also runs T-48's ReadPath and checked-source contracts, so a closed or refused capability
+      cannot read or alias a retained source. These are regression checks of shapes that already
+      hold, not behaviour scenarios. Broken down from slice-31.
