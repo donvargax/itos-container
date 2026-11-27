@@ -13,12 +13,12 @@ import (
 	"time"
 )
 
-func (w *world) lifecycleSignalAction(signal string, repeat bool) {
+func (w *world) lifecycleSignalAction(signal string, repeat bool) error {
 	l := w.lifecycle
 	w.lifecycleStart()
 	if !w.lifecycleReadyAction(func() { w.lifecycleSignal(signal) }) {
 		w.lifecycleAbortEarly()
-		return
+		return w.lifecycleActionError()
 	}
 	if repeat {
 		l.aliveBeforeGrace = lifecycleRepeatedSignals(l.run, l.signalled, w.lifecycleSignal, func() bool {
@@ -27,6 +27,7 @@ func (w *world) lifecycleSignalAction(signal string, repeat bool) {
 	}
 	w.lifecycleCollect()
 	w.lifecycleFreshRecovery(false)
+	return w.lifecycleActionError()
 }
 
 // The last repeated signal goes this long after cancellation. A grace timer it
@@ -98,13 +99,13 @@ func lifecyclePipePrelude(file *os.File, stdout bool) ([]byte, error) {
 	return data, err
 }
 
-func (w *world) lifecycleCleanupSignals() {
+func (w *world) lifecycleCleanupSignals() error {
 	l := w.lifecycle
 	w.lifecycleStart()
 	l.barrierReached = recoveryBarrier(l.fault.ready, l.run)
 	if !l.barrierReached {
 		w.lifecycleAbortEarly()
-		return
+		return w.lifecycleActionError()
 	}
 	a := w.offline.api
 	a.mu.Lock()
@@ -125,6 +126,7 @@ func (w *world) lifecycleCleanupSignals() {
 	w.lifecycleCollect()
 	l.fault.restore()
 	w.lifecycleFreshRecovery(true)
+	return w.lifecycleActionError()
 }
 
 func (w *world) lifecycleHeartbeat() int {
@@ -136,20 +138,20 @@ func (w *world) lifecycleHeartbeat() int {
 	return value
 }
 
-func (w *world) lifecycleDisconnect() {
+func (w *world) lifecycleDisconnect() error {
 	l := w.lifecycle
 	if err := w.lifecycleControl(false); err != nil {
 		l.err = err
-		return
+		return w.lifecycleActionError()
 	}
 	w.lifecycleStart()
 	if !w.lifecycleReadyAction(w.lifecycleDisconnectReady) {
 		w.lifecycleAbortEarly()
-		return
+		return w.lifecycleActionError()
 	}
 	if l.err != nil {
 		w.lifecycleAbortEarly()
-		return
+		return w.lifecycleActionError()
 	}
 	w.lifecycleCollect()
 	w.lifecycleDisconnectProgress()
@@ -159,6 +161,7 @@ func (w *world) lifecycleDisconnect() {
 	l.err = errors.Join(l.err, err)
 	l.fault.restore()
 	w.lifecycleFreshRecovery(true)
+	return w.lifecycleActionError()
 }
 
 func (w *world) lifecycleDisconnectProgress() {
@@ -216,13 +219,13 @@ func (w *world) lifecycleDisconnectReady() {
 	w.offline.api.closeConnections()
 }
 
-func (w *world) lifecycleCrash() {
+func (w *world) lifecycleCrash() error {
 	l := w.lifecycle
 	w.lifecycleStart()
 	l.barrierReached = recoveryBarrier(l.fault.ready, l.run)
 	if !l.barrierReached {
 		w.lifecycleAbortEarly()
-		return
+		return w.lifecycleActionError()
 	}
 	w.recoveryDiscover()
 	if l.barrier == "after accepted start before reply" {
@@ -238,20 +241,21 @@ func (w *world) lifecycleCrash() {
 	}
 	l.fault.restore()
 	w.lifecycleFreshRecovery(true)
+	return w.lifecycleActionError()
 }
 
-func (w *world) lifecycleStreams() {
+func (w *world) lifecycleStreams() error {
 	l := w.lifecycle
 	if l.condition != "quiet workload and stdin" {
 		if err := w.lifecycleControl(true); err != nil {
 			l.err = err
-			return
+			return w.lifecycleActionError()
 		}
 	}
 	w.lifecycleStart()
 	if !w.lifecycleReady() {
 		w.lifecycleAbortEarly()
-		return
+		return w.lifecycleActionError()
 	}
 	if l.condition == "quiet workload and stdin" {
 		if w.duringQuiet != nil {
@@ -259,7 +263,7 @@ func (w *world) lifecycleStreams() {
 		}
 		if !lifecycleUntil(l.run, l.ready.Add(engineQuietInterval)) || !w.recoveryNativePresent(true) {
 			w.lifecycleAbortEarly()
-			return
+			return w.lifecycleActionError()
 		}
 	}
 	if l.pipe != nil {
@@ -272,20 +276,20 @@ func (w *world) lifecycleStreams() {
 			if err != nil {
 				l.err = errors.Join(l.err, err)
 				w.lifecycleAbortEarly()
-				return
+				return w.lifecycleActionError()
 			}
 		}
 		if err := os.WriteFile(filepath.Join(w.doctor.checkout, "slice-12-release-output"), []byte("release"), 0600); err != nil {
 			l.err = err
 			w.lifecycleAbortEarly()
-			return
+			return w.lifecycleActionError()
 		}
 		l.blocked = w.lifecycleAwait(5*time.Second, func() bool {
 			return lifecycleFullPipe(l.pipe)
 		})
 		if !l.blocked {
 			w.lifecycleAbortEarly()
-			return
+			return w.lifecycleActionError()
 		}
 	}
 	w.lifecycleSignal("SIGTERM")
@@ -297,6 +301,7 @@ func (w *world) lifecycleStreams() {
 		lifecycleQuietControls.results[w.bin] = observed
 		lifecycleQuietControls.Unlock()
 	}
+	return w.lifecycleActionError()
 }
 
 type lifecycleQuietEvidence struct {
@@ -333,14 +338,34 @@ func (w *world) lifecycleControl(quiet bool) error {
 		return err
 	}
 	if quiet {
-		control.lifecycleStreams()
+		if err := control.lifecycleStreams(); err != nil {
+			return err
+		}
 		lifecycleQuietControls.Lock()
 		w.lifecycle.quiet = lifecycleQuietControls.results[w.bin]
 		lifecycleQuietControls.Unlock()
 	} else {
-		control.lifecycleSignalAction("SIGTERM", false)
+		if err := control.lifecycleSignalAction("SIGTERM", false); err != nil {
+			return err
+		}
 	}
 	// Existing exit-17 behaviour is the healthy control. New typed cancellation
 	// diagnostics are asserted separately on the product under test.
 	return errors.Join(control.lifecycleReceipts("SIGTERM", 17), control.lifecycleComplete())
+}
+
+func (w *world) lifecycleActionError() error {
+	l := w.lifecycle
+	if l.err != nil {
+		code := -1
+		if l.run != nil {
+			select {
+			case <-l.run.done:
+				code = l.run.exit
+			default:
+			}
+		}
+		return w.lifecycleResultEvidence(code)
+	}
+	return w.recovery.actionError()
 }

@@ -143,7 +143,7 @@ func credentialAdmissionCommand(t *testing.T, request credentialAdmissionRequest
 	var stdout, stderr bytes.Buffer
 	presentation := &credentialAdmissionPresentation{UI: au.UI{Out: &stdout, Err: &stderr}}
 	ui := &cli.UI{Stdout: &stdout, Stderr: &stderr}
-	command := doctor.CLI{JSON: true, Approval: service, Presentation: presentation, Policies: policies, RootPolicies: policies,
+	command := doctor.CLI{JSON: true, Approval: service, Readiness: readiness, Presentation: presentation, Policies: policies, RootPolicies: policies,
 		Credentials: inspection.Credentials{Checkout: pin, Input: rp.CredentialInput{Root: request.Root, State: request.State, UID: 1000, OS: "linux", Architecture: "amd64"}, Observer: inspector.Sources}}
 	code := 0
 	if strings.Contains(request.Argv, "--credentials-only") {

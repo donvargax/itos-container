@@ -41,7 +41,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
-      - uses: donvargax/itos@9ef058985451a656893d16d28b22eeeece3f6fab # v8.46.4
+      - uses: donvargax/itos@ba19f5b59555a2032211a6513f91ea40232347d4 # v8.49.0
       - name: Range
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
@@ -69,13 +69,13 @@ jobs:
       matrix:
         include:
           - shard: offline
-            features: offline.feature harness-home.feature
+            features: offline.feature harness-home.feature credentials-run-native.feature
           - shard: lifecycle
             features: lifecycle.feature
           - shard: other
-            features: anchors.feature checkout-overlap.feature doctor.feature hardlinks.feature recovery.feature run_terminal.feature session.feature sockets.feature
+            features: anchors.feature checkout-overlap.feature claude-home.feature doctor.feature hardlinks.feature recovery.feature run_terminal.feature session.feature sockets.feature
           - shard: egress
-            features: egress.feature
+            features: egress.feature credentials-run.feature
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -107,6 +107,7 @@ jobs:
           ITOS_CONTAINER_ENGINE_FEATURES: ${{ matrix.features }}
           ITOS_CONTAINER_ENGINE_SHARD: ${{ matrix.shard }}
           ITOS_CONTAINER_RED_SCENARIOS: ${{ github.event_name == 'workflow_dispatch' && inputs.red_scenarios || '' }}
+          ITOS_CONTAINER_RED_REPORT: ${{ runner.temp }}/red-scenarios.json
           ITOS_CONTAINER_ENGINE_FIXTURE_IMAGE: ${{ steps.fixture.outputs.image }}
           ITOS_CONTAINER_ENGINE_FIXTURE_ID: ${{ steps.fixture.outputs.image_id }}
           ITOS_CONTAINER_ENGINE_FIXTURE_UID: ${{ steps.fixture.outputs.uid }}
@@ -205,6 +206,13 @@ jobs:
         shell: bash
         timeout-minutes: 1
         run: tools/bin/engine-fixture cleanup
+      - name: Upload red scenario report
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.red_scenarios != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: red-scenarios-engine-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/red-scenarios.json
+          if-no-files-found: ignore
 
   # The one check name that ci, release and the repository's settings use. It takes the
   # matrix job's result in needs to be success only when every shard succeeded.
@@ -271,6 +279,14 @@ jobs:
         env:
           RAPID_CHECKS: 1
           ITOS_CONTAINER_RED_SCENARIOS: ${{ github.event_name == 'workflow_dispatch' && inputs.red_scenarios || '' }}
+          ITOS_CONTAINER_RED_REPORT: ${{ runner.temp }}/red-scenarios.json
+      - name: Upload red scenario report
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.red_scenarios != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: red-scenarios-platform-macos
+          path: ${{ runner.temp }}/red-scenarios.json
+          if-no-files-found: ignore
 
   platform-windows:
     name: Tests (windows-latest)
@@ -294,6 +310,14 @@ jobs:
         env:
           RAPID_CHECKS: 1
           ITOS_CONTAINER_RED_SCENARIOS: ${{ github.event_name == 'workflow_dispatch' && inputs.red_scenarios || '' }}
+          ITOS_CONTAINER_RED_REPORT: ${{ runner.temp }}/red-scenarios.json
+      - name: Upload red scenario report
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.red_scenarios != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: red-scenarios-platform-windows
+          path: ${{ runner.temp }}/red-scenarios.json
+          if-no-files-found: ignore
 
   # Only a fully successful push to main can publish this SHA (T-25).
   release:

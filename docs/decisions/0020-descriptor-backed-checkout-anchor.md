@@ -689,3 +689,61 @@ tests also assert both supported no-new-privileges encodings and reject
 unknown detector values, addressing the two reported survivors. No local
 mutation run was made. CI still owes fresh mutation proof and native evidence
 at the eventual pushed head after the fixture contract is resolved.
+
+## Audit finding at 7236d68 and its closure
+
+Written 2026-11-23, under T-80. This section records which part of an audit
+finding is closed and which part stays open. It re-decides nothing above and
+adds no rule for the open point.
+
+### The finding
+
+A read-only, static audit of main at `7236d68` (Codex, 2026-11-06, no Docker
+run) found that `run.go:68` and `registered_run.go:179` at that commit passed
+Docker the checkout pathname as a bind source. After the final identity checks
+and before `ContainerStart`, a worker whose checkout contains another approved
+checkout could rename the inner one and put a symlink to the host home in its
+place. The second worker would then mount an unapproved host directory. The
+line numbers are a historical citation of that commit, not of main.
+
+### Decided, slice-17: the descriptor-backed volume
+
+Slice-17, under this decision, replaces that source. The worker's `/workspace`
+is an owned local volume mounted with copying disabled (`internal/engine/session/docker/run.go`).
+Its options are exactly `type=none`, `o=bind` and `device=/proc/<controller-pid>/fd/<n>`
+(`internal/engine/session/docker/anchor.go`). The source is an `O_PATH`
+descriptor of the validated checkout (`internal/engine/session/disk/anchor_linux.go`),
+held from the final identity check until `ContainerStart` returns. The post-start
+detector, `detectAnchor` in `internal/engine/session/domain/anchor.go`, compares
+the worker's `/workspace` device and inode with the validated identity.
+Recovery releases the retained volume only after the worker is confirmed absent
+and never recreates it from the current checkout pathname.
+
+The live engine rows are ID-OFFLINE-29 and ID-OFFLINE-30, and ID-ANCHORS-09 to
+ID-ANCHORS-13, the recovery rows of slice-18 merged into slice-17 under q-36.
+The assertion-level red for the pathname race is run
+[42309692365](https://github.com/donvargax/itos-container/actions/runs/42309692365)
+at `51a9f48e81e61f4654208d9779f6a49992e35692`, where Docker 28.0.4 ran the
+replacement's inode and nonce. That red is evidence of the race, not of the
+fix. This section claims no container-host support and no native result beyond
+the cited runs and the live rows.
+
+### Decided, slice-16 under decision 0014: overlap refusal inside one state root
+
+Slice-16, under decision 0014, refuses a checkout that overlaps another worker's
+checkout, as a strict ancestor or descendant, with `run.checkout-overlap`. The
+comparison is made by `checkAdmission` in `internal/engine/session/disk/admission.go`
+against the admission records and registrations of the selected control-state
+root (`XDG_STATE_HOME` tree). ID-OVERLAP-06 is its live engine row.
+
+### Open: nested checkouts across state roots
+
+Two workers whose checkouts nest, started under different state roots, are both
+admitted, because `checkAdmission` sees only the selected tree. The anchor still
+defeats the mount redirect of the finding there: each worker's volume pins its
+own validated inode. The outer worker can still change what the inner worker
+runs, which is the exposure slice-16 closed inside one tree.
+
+This gap is the idea `p2-admission-nested-checkouts-across-state-roots`. Its
+rule is the person's to make (itos decision). This section decides nothing
+about it.

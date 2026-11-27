@@ -51,6 +51,11 @@ func (i Inspector) InspectBeforeEngine(input port.Input, check func(port.Result)
 		// Inspection and approval opt into version 3; run keeps its credential gate.
 		p = policyport.Result{Issues: []policyport.Issue{{Kind: policyport.Version, Path: []string{"version"}, Version: p.Policy.Version}}}
 	}
+	if p.Policy != nil && p.Policy.Home != nil && p.Policy.Home.Harness != "" && !i.AllowVersion3 {
+		// Run cannot seed a Codex home yet, so it never starts a worker for one.
+		// Inspection and approval opt in and show what the selection requests.
+		p = policyport.Result{Issues: []policyport.Issue{{Kind: policyport.HomeHarnessGated, Path: []string{"home", "harness"}, Version: p.Policy.Version}}}
+	}
 	result.Policy = &p
 	if p.Policy == nil || len(p.Issues) != 0 {
 		return result
@@ -70,7 +75,7 @@ func (i Inspector) InspectBeforeEngine(input port.Input, check func(port.Result)
 			return result
 		}
 	}
-	m := manifest.Inspect(p.Policy.Manifest, i.Files, i.Parser, i.References)
+	m := manifest.Inspect(p.Policy.Manifest, i.Files, i.Parser, i.References, p.Policy.ReservedEnvironment()...)
 	result.Manifest = &m
 	if m.Effective == nil || len(m.Issues) != 0 {
 		return result
@@ -92,12 +97,14 @@ func (i Inspector) InspectBeforeEngine(input port.Input, check func(port.Result)
 	if check != nil && !check(result) {
 		return result
 	}
-	session, failure := i.Engine.Open(input.Host, checkout.Root, 5*time.Second)
+	const engineBudget = 5 * time.Second
+	session, failure := i.Engine.Open(input.Host, checkout.Root, engineBudget)
 	if failure != port.None {
 		result.Issues = []port.Issue{{Kind: failure, Subject: "DOCKER_HOST"}}
 		return result
 	}
 	defer session.Close()
+	result.EngineDeadline = session.Deadline()
 	i.inspectEngine(&result, session)
 	if i.AllowVersion3 {
 		observation := i.Sources.Inspect(p.Policy.Credentials)

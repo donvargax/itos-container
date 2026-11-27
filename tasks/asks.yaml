@@ -350,13 +350,77 @@ questions:
   - id: q-87
     item: "slice-28"
     question: "slice-28: the implementer (attempt 9) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-28-implementer-9.result.json"
+    answer: "The person, 2026-11-22: status and stop both exit 75 with recovery.temporary when the refusal log survives but its report, egress-refusals.json, is missing."
   - id: q-88
     item: "slice-42"
     question: "slice-42: the drafter (attempt 24) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-42-drafter-24.result.json"
+    answer: "Option a. Five scenario IDs were claimed outside the sandbox on 2026-11-22 with itos tests next-id scenario ID-SOCKETS --count 5: @ID-SOCKETS-04, @ID-SOCKETS-05, @ID-SOCKETS-06, @ID-SOCKETS-07 and @ID-SOCKETS-08. Put one after @slice-42 on each of the five @wip @slice-42 tag lines, in file order."
   - id: q-89
     item: "slice-43"
     question: "slice-43: the drafter (attempt 1) needs a decision before it can go on; the question and its options are in .git/itos/loop/slice-43-drafter-1.result.json"
+    answer: "Question 2, the person, 2026-11-22: when there is no checkout socket backend, only the person at a real terminal may consent to 'late host sockets reachable'. Every --fingerprint approval of such a candidate is refused, as for network and credential grants (the draft's option A). Question 1: ten scenario IDs were claimed outside the sandbox on 2026-11-22 with itos tests next-id scenario ID-APPROVAL --count 10: @ID-APPROVAL-61 to @ID-APPROVAL-70, one after @slice-43 on each of the ten @wip @slice-43 tag lines, in file order."
   - id: q-90
     item: "p2-credential-brokering"
     question: "For p2-credential-brokering: how a sandboxed agent gets credentials it cannot keep after the run (design: docs/plans/credential-brokering.md).\n\nWhich credential direction should itos-container take?\n\nRecommended, option E. Keep passing model credentials in (the Claude setup-token, and a Codex API key as the default instead of the shared read-write ChatGPT login), and mint a one-hour GitHub App installation token per run, limited to the approved repository and revoked at teardown. Build no TLS interception, and defer a base-URL broker.\n\nOption A keeps passing everything in as chartered, adding only least-scope rules such as a one-repository fine-grained token with an expiry.\n\nOption B brokers with TLS interception and a planted CA. It first moves the proxy to its own repository, and it cannot carry a Claude subscription under Anthropic's terms.\n\nOption C brokers API keys through a plain-HTTP base URL now, as a component separate from the egress proxy, leaving gh and the Claude subscription on passing in.\n\nThe design's Questions section lists seven narrower questions (Claude login, Codex login, GitHub, runs over an hour, where a base-URL broker lives, interception, microVMs), each with its recommendation."
     answer: "The person's direction, 2026-11-20, recorded by the coordinator on their word; it replaces the option E recommendation and the earlier Codex correction. Locally run sandboxes share the host's own harness logins: the host's real Codex auth.json through the q-72 mount, unchanged, and Claude's credentials mounted the same way, so a token refresh lands in the same file every other instance uses. No sandbox-only login, no API key, no brokering and no minted model tokens for the local case. Brokering and separate logins apply only to remote sandboxes (microVMs on cloud providers, later): the broker design in docs/plans/credential-brokering.md is deferred until remote sandboxes exist. Still open for the person (the design's question 4): GitHub in the local case, read as keeping the chartered token file. Mounting Claude's refreshing login changes the charter's step 2 line, which the person changes."
+  - id: q-91
+    item: "p3-registration-before-intent"
+    question: "May the next control-lock holder delete orphaned temporaries in protected host state automatically: the .intent-<nonce>.tmp a killed publisher leaves, and the copy temporaries that decision 0022 says nothing sweeps (docs/decisions/0022-egress-proxy.md:824)?"
+    answer: "The person, 2026-11-23: yes. Orphaned temporaries in protected host state, the .intent-<nonce>.tmp a killed publisher leaves and the copy temporaries decision 0022 says nothing sweeps, may be deleted automatically by the next control-lock holder on durable evidence. How long completed sessions' real state is kept stays with p3-session-state-retention."
+    decision: 34
+  - id: q-92
+    question: "Decision 0025's question 5 (docs/decisions/0025-credentials-passed-in.md:493): may real credentials be used for container runs, the person's smoke check included, and in what form does each harness get its credential?"
+    answer: "The person, 2026-11-23: real credentials are allowed for container runs, in one of two forms per provider. Where the provider issues a long-lived subscription token, the run gets that token: for Claude, a claude setup-token token, read from CLAUDE_CODE_OAUTH_TOKEN, as slice-31's approved token. Otherwise the run gets the provider's auth file mounted, shared with the host and refreshed in place: for Codex, which has no subscription token, its auth.json. itos-container is told which credential each harness gets. A credentials-manager integration is needed but not started; until it exists, credential sources are files, one secret per file, mode 0600, in a directory of mode 0700, so nothing waits on it."
+    decision: 35
+  - id: q-93
+    item: "slice-28"
+    question: "slice-28: the implementer (attempt 9) needs a decision before it can go on: whether status and stop exit 75 with recovery.temporary when the refusal log survives but its report, egress-refusals.json, is missing. q-87 asked the same and is answered; this is its record for attempt 9."
+    answer: "The person, 2026-11-22, as answered in q-87: status and stop both exit 75 with recovery.temporary when the refusal log survives but its report, egress-refusals.json, is missing."
+  - id: q-94
+    item: "slice-40"
+    question: "slice-40: the implementer (attempt 1) stopped incomplete, with 2 of 9 scenarios done on branch slice-40 (d9e5a2d). Continue from those?"
+    answer: "Yes, the coordinator, 2026-11-24: continue from the 2 of 9 scenarios done on branch slice-40 (d9e5a2d)."
+  - id: q-95
+    item: "slice-38"
+    question: "slice-38: its implementer (attempt 2) returned blocked, asking for a dispatched red run of @ID-EXEC-12 to -16 at fb23b67 before runtime work. Does it still wait on that?"
+    answer: "No longer waiting: run 45557542073 shows EXEC-12..16 failing in the When step (exec not implemented), not at the first Then. The re-take fixes the native When steps so a missing or refused exec is recorded and asserted in the Then, and records first-Then red in CI before runtime work. (The coordinator, 2026-11-24, for the person.)"
+  - id: q-96
+    item: "p2-control-state-upgrade-contract"
+    question: "p2-control-state-upgrade-contract: does itos-container owe existing v0.1.0 control state an upgrade path, a migration or a documented manual cleanup, and does a schema bump drop the persisted binding device field or does a stable filesystem ID replace it?"
+    answer: "The person, 2026-11-24: itos-container stays on v0 until the design is final, so it makes no backwards-compatibility promise. Breaking changes to state or schema ship with a documented manual cleanup, never a migration, so old v0.1.0 state gets documented manual cleanup. A schema bump drops the persisted binding device field, with no filesystem-ID replacement."
+    decision: 37
+  - id: q-97
+    item: "slice-60"
+    question: "slice-60: its kept attempt fails the red check only because TestCancelledSweepDoesNotInspectDirectories (internal/engine/approval/disk/control_sweep_test.go) passes on red. How must that test prove the cancelled sweep?"
+    answer: "The coordinator, 2026-11-24: TestCancelledSweepDoesNotInspectDirectories only asserts absence (with a cancelled context the sweep opens no directory and finds no names), so an implementation that does nothing passes it on red, and the red check is right to refuse it as proof. Keep the test and pair it, in the same test, with a positive control: the same tree swept with a live context opens the root and removes an orphaned .intent-<nonce>.tmp, and only the cancelled sweep opens nothing and removes nothing. Then it fails on red and passes on green. Fix it in the kept attempt; nothing else in the attempt changes for this."
+    decision: 38
+  - id: q-98
+    item: "slice-40"
+    question: "slice-40: its spec is drafted fresh from current main now that its old branch is renamed slice-40-old. What may the drafter and the implementer reuse from the earlier attempt?"
+    answer: "The coordinator, 2026-11-24: the earlier spec is kept on branch slice-40-old. Its scenarios are in the 'test: specify slice-40' commits ending at 4f52914 ('require worker absence before home reuse'). The drafter may reuse any of them that still match slice-40's why and decision 0035, where the one grant is the OpenCode Go provider entry from auth.json. The earlier implementer's work on two of those nine scenarios is commit d9e5a2d ('feat: read the OpenCode login request in policy version 4'), kept on branch slice-40-d9e5a2d. Once the new spec is accepted, the implementer may reuse it where the new spec keeps those two scenarios. Nothing from either branch is reused unread, and the new spec decides."
+    decision: 39
+  - id: q-99
+    item: "slice-38"
+    question: "slice-38 and slice-39 (exec and TTY into an owned session): should they wait for harness support in the container?"
+    answer: "Yes. The person, 2026-11-25: slice-38 and slice-39 come after harness support in the container: OpenCode (slice-40), Claude Code (slice-31 and the children it is broken into), Codex (slice-48 to slice-53), and later possibly further harnesses. They are neither deferred nor dropped. slice-38 depends on slice-40, slice-31 and slice-53 (slice-53 ends the Codex chain), and slice-39 already waits on slice-38. When slice-31's breakdown names its children, slice-38 depends on those instead."
+    decision: none
+  - id: q-100
+    item: "slice-40"
+    question: "What does one OpenCode login grant authorize when the host auth.json holds more than one provider?"
+    answer: "On 2026-11-26 the project owner’s local-login rule and decision 0035 were applied to OpenCode. The person approves the whole host OpenCode auth.json. Approval shows every provider it holds, including OpenCode Go and GitHub Copilot OAuth when both are present. Run makes that same file available writable at OpenCode’s normal login path so refreshes land on the host. A filtered copy would add maintenance without protecting against an outsider on the trusted local machine."
+    decision: 40
+  - id: q-101
+    item: "slice-61"
+    question: "Should a credential filesystem type that cannot exclude a backing alias by itself refuse a run on the trusted local machine?"
+    answer: "On 2026-11-26 the project owner directed that credential.filesystem become a recorded doctor and run warning. Detect the affected path and filesystem type, report both in doctor, and preserve the warning for status. Continue when filesystem type alone prevents excluding an alias, including on overlay, FUSE, NFS and 9p. The local machine, repositories and accounts are trusted. This applies the 2026-11-24 rule that a security refusal must address a real outsider."
+    decision: 41
+  - id: q-102
+    item: "slice-40"
+    question: "Does approval of the whole OpenCode auth.json cover providers added to that file later, and what must each run and its status show?"
+    answer: "The person confirmed on 2026-11-26 that the approved whole-file grant covers providers added to the host OpenCode auth.json later. Adding a provider requires no fresh approval. Each run records the provider names present for that run. Its status shows those recorded names. Both contain provider names only and never credential values."
+    decision: 42
+  - id: q-103
+    item: "slice-40"
+    question: "How does slice-40 deliver an approved login to OpenCode 2.2.1, which stores credentials and sessions in SQLite?"
+    answer: "On 2026-11-26 the person selected credential-only access for OpenCode 2.2.1. Run gives OpenCode the one approved OpenCode Go key through a provider-key input that this version reads. The host SQLite login store and the host sessions are never shared with the workload."
+    decision: 43

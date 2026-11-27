@@ -14,3 +14,12 @@ func TestHelpNamesControlStateExitCodes(t *testing.T) {
 		}
 	}
 }
+
+func TestHelpNamesBackendDetection(t *testing.T) {
+	help := (CLI{}).Help()
+	for _, text := range []string{"checkout socket backend", "not enforcement", "runsc runtime that cannot be identified", "backend detection included"} {
+		if !strings.Contains(help, text) {
+			t.Errorf("help lacks %q", text)
+		}
+	}
+}

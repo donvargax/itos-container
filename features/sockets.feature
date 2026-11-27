@@ -64,6 +64,137 @@ Feature: Checkout Unix sockets have an explicit milestone boundary
       | seqpacket-connect | .git/nested/a/b/c/d/e/socket   |
       | dgram-sendto      | .git/nested/a/b/c/d/e/socket   |
 
+  # Slice-42: ordinary doctor names the checkout socket backend the host offers,
+  # so the person sees it before approving. Authorities: docs/charter.md, second
+  # milestone step 5 (Landlock ABI 9 or later by default, gVisor as fallback,
+  # with neither only "late host sockets reachable"), T-64's ledger entry and
+  # T-66's fixture (features/README.md). These scenarios live here, not in
+  # doctor.feature, because TestDoctorStepDefinitions requires a definition for
+  # every doctor.feature pickle, @wip included, so a spec-only commit there turns
+  # go test ./features red (p2-harness-lists-undefined-wip-steps).
+  #
+  # Detection: ordinary doctor (no --policy-only, --manifest-only or
+  # --credentials-only; those modes make no Landlock query and no runtime lookup)
+  # calls T-64's checkoutsockets Detector once per invocation, afresh, with
+  # cmd's native Landlock probe and docker Runtimes adapter bound to the
+  # selection doctor already validated. cmd adds no Landlock seam, default or
+  # environment switch. Detection runs only once the checkout and engine
+  # inspections have succeeded, whatever the image outcome: a checkout, host or
+  # engine refusal leaves no Landlock query, no member and no sockets problem,
+  # as there is no cascaded image problem today. It runs inside doctor's
+  # existing five-second engine inspection bound. A detection that bound
+  # cancels reports the existing doctor.engine.timeout with exit 75. Doctor
+  # persists nothing about the selection.
+  #
+  # Output: a confirmed selection adds /inspection/checkout_sockets, exactly
+  # {"backend":"landlock"}, {"backend":"gvisor"} or {"backend":"neither"}.
+  # Neither is a confirmed outcome, not a problem: ok and inspection.ready
+  # stay true and the exit stays 0, because slice-43's consent to "late host
+  # sockets reachable" needs doctor and approve to reach it. Plain output adds
+  # the one line "checkout socket backend: landlock", "checkout socket backend:
+  # gvisor" or "checkout socket backend: neither; late host sockets reachable"
+  # after the image line, and still says "runtime isolation is not
+  # established". Naming a backend is not enforcement: run does not use it
+  # until slice-44, slice-46 and slice-47. docs/CLI.md documents the member,
+  # the line and the rules below. docs/security.md says the report is not
+  # enforcement.
+  #
+  # A typed detection failure omits the member, sets ok and inspection.ready
+  # false and adds one problem, listed after any image problems; the process
+  # exit is the highest problem exit, as ID-DOCTOR-19 settles. Each problem has
+  # rule, exit, message, fix and the flat string subject field, fixed as follows:
+  #   ABIQuery, ABIInvalid  doctor.sockets.kernel    exit 75  field landlock_abi
+  #   RuntimeInspect        doctor.sockets.runtimes  exit 75  field runtimes
+  #   RuntimeRegistration   doctor.sockets.runsc     exit 1   field runtimes.runsc
+  # Exit 1 is used because a runsc that permits host sockets, or that cannot
+  # be identified, is a host configuration doctor does not support. Messages
+  # carry no errno text, daemon text or runtime arguments. Unsupported and
+  # NoProbe cannot reach a correctly assembled doctor on Linux amd64: the
+  # earlier doctor.host.unsupported refusal and cmd's assembly rule them out,
+  # and unit tests cover them as doctor.sockets.kernel exit 75. Doctor's help
+  # names backend detection under exits 1 and 75. In this slice the backend
+  # enters no fingerprint, approval record, review or run decision; approve,
+  # run and status are unchanged (slice-43 to slice-45).
+  #
+  # Given steps only pin the kernel's answer (pinKernelAnswer) and name the
+  # fixture daemon's inventory (chooseRuntimeInventory), passing the texts and
+  # names through unchanged. The rows run in the ordinary local tier on Linux
+  # amd64. Red-first: commit the new step definitions in a test commit with the
+  # tags still @wip, then lift @wip locally for the evidence run. Today each
+  # row fails at its first Then, as the commit body names, because doctor
+  # reads neither the kernel nor /info's Runtimes. The implementer may commit
+  # freely in its workspace; the host makes the landing commits.
+  @slice-42 @ID-SOCKETS-04 @local-engine-fixture
+  Scenario Outline: Doctor reports the checkout socket backend the host offers
+    Given a doctor checkout
+    And a local Engine API fixture
+    And the kernel answers the Landlock version query with "<answer>"
+    And the fixture daemon reports the runtime inventory "<inventory>"
+    When itos-container runs with "doctor --json"
+    Then its JSON value at "/inspection/checkout_sockets" is:
+      """
+      {"backend":"<backend>"}
+      """
+    And its JSON inspection is ready without asserting approval or runtime isolation
+    And it exits with code 0
+    And doctor asked the kernel for its Landlock ABI once and made no other Landlock call
+    And the Engine API journal contains only ping, version, info and the requested image inspection
+    And the checkout and host control state are unchanged
+
+    # ABI 9 with a missing inventory shows Landlock settles without the lookup.
+    Examples:
+      | answer     | inventory         | backend  |
+      | ABI 9      | runc only         | landlock |
+      | ABI 12     | runc and runsc    | landlock |
+      | ABI 9      | missing inventory | landlock |
+      | ABI 8      | runc and runsc    | gvisor   |
+      | ENOSYS     | runc and runsc    | gvisor   |
+      | EOPNOTSUPP | runc and runsc    | gvisor   |
+      | ABI 8      | runc only         | neither  |
+      | ENOSYS     | runc only         | neither  |
+      | EOPNOTSUPP | runc only         | neither  |
+
+  @slice-42 @ID-SOCKETS-05 @local-engine-fixture
+  Scenario Outline: Plain doctor names the backend and says when late host sockets stay reachable
+    Given a doctor checkout
+    And a local Engine API fixture
+    And the kernel answers the Landlock version query with "<answer>"
+    And the fixture daemon reports the runtime inventory "<inventory>"
+    When itos-container runs with "doctor"
+    Then its standard output lists "<line>"
+    And its standard output says "runtime isolation is not established"
+    And it exits with code 0
+
+    Examples:
+      | answer | inventory      | line                                                          |
+      | ABI 9  | runc only      | checkout socket backend: landlock                             |
+      | ABI 8  | runc and runsc | checkout socket backend: gvisor                               |
+      | ABI 8  | runc only      | checkout socket backend: neither; late host sockets reachable |
+
+  # A failure never carries a backend. EPERM with runsc registered shows a
+  # kernel failure stops detection before the fallback could choose gVisor.
+  @slice-42 @ID-SOCKETS-06 @local-engine-fixture
+  Scenario Outline: Doctor refuses to name a backend it could not detect
+    Given a doctor checkout
+    And a local Engine API fixture
+    And the kernel answers the Landlock version query with "<answer>"
+    And the fixture daemon reports the runtime inventory "<inventory>"
+    When itos-container runs with "doctor --json"
+    Then its JSON output has a doctor problem "<rule>" with exit <exit>
+    And the problem identifies the field "<field>"
+    And its JSON inspection reports no checkout socket backend
+    And doctor asked the kernel for its Landlock ABI once and made no other Landlock call
+    And no engine mutation or image acquisition was attempted
+    And the checkout and host control state are unchanged
+
+    Examples:
+      | answer | inventory                    | rule                    | exit | field          |
+      | EPERM  | runc and runsc               | doctor.sockets.kernel   | 75   | landlock_abi   |
+      | ABI 0  | runc and runsc               | doctor.sockets.kernel   | 75   | landlock_abi   |
+      | ABI 8  | missing inventory            | doctor.sockets.runtimes | 75   | runtimes       |
+      | ABI 8  | runsc permitting host sockets | doctor.sockets.runsc    | 1    | runtimes.runsc |
+      | ENOSYS | unidentified runsc           | doctor.sockets.runsc    | 1    | runtimes.runsc |
+
   # The remaining scenarios are deferred continuous-enforcement specifications.
   # Preserve all five operations: stream/seqpacket connect, datagram connect,
   # unconnected sendto and sendmsg. Every phase/process/alias must report, with

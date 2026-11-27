@@ -50,16 +50,18 @@ func (m *homeNativeManagement) flag() string {
 	return "--reset"
 }
 
-func (w *world) homeNativeManage() {
+func (w *world) homeNativeManage() error {
 	f, peer := w.home.native, w.home.native.second
 	m := f.management
-	peer.homeNativeCompleted("write", "beta", "alpha")
+	if run := peer.homeNativeCompleted("write", "beta", "alpha"); run.err != nil {
+		return run.err
+	}
 	p := w.homeNativeStart("write-hold", "alpha", "beta")
 	f.ended = p
 	if p.id == "" || p.run.home == nil {
 		p.cancel()
 		m.initial = p.finish()
-		return
+		return errors.Join(m.initial.err, fmt.Errorf("home worker did not reach its registered barrier (exit %d)", m.initial.exit))
 	}
 	m.id = strings.TrimPrefix(fmt.Sprint(p.run.home["Name"]), "itos-container-home-")
 	m.live = w.homeNativeConsent(m.id, m.flag())
@@ -68,51 +70,51 @@ func (w *world) homeNativeManage() {
 	f.stopped = w.homeNativeInvoke("stop", p.id, "--json")
 	m.initial = p.finish()
 	f.runs = append(f.runs, m.initial)
+	if err := errors.Join(m.err, m.live.err, m.initial.err, f.stopped.err); err != nil {
+		return err
+	}
 	entry, err := homeNativeSession(f.stopped, p.id)
 	if err != nil {
-		m.err = errors.Join(m.err, err)
-		return
+		m.err = err
+		return nil
 	}
 	if err := homeNativeCompletedSession(entry, p.id, w.approval.project, w.approval.fingerprint, fmt.Sprint(p.run.home["Name"])); err != nil {
-		m.err = errors.Join(m.err, err)
-		return
+		m.err = err
+		return nil
 	}
 	// Confirm product cleanup before the fixture simulates external storage loss.
 	if err := w.homeNativeEphemeralAbsent(); err != nil {
-		m.err = errors.Join(m.err, err)
-		return
+		m.err = err
+		return nil
 	}
 	if m.action == "reset externally missing home" {
 		var current map[string]any
 		name := fmt.Sprint(p.run.home["Name"])
 		if err := w.doctor.real.read("/volumes/"+name, &current, 200); err != nil || !homeNativeSameVolume(current, p.run.home) {
-			m.err = errors.Join(err, errors.New("external-loss fixture refused an untracked home"))
-			return
+			return errors.Join(m.err, err, errors.New("external-loss fixture refused an untracked home"))
 		}
 		if err := w.homeNativeRemove("/volumes/" + name); err != nil {
-			m.err = err
-			return
+			return errors.Join(m.err, err)
 		}
 	}
 	if m.action == "delete obsolete home" {
 		m.obsolete = filepath.Join(w.dir, "slice-34-original-git")
 		if err := os.Rename(filepath.Join(w.doctor.checkout, ".git"), m.obsolete); err != nil {
-			m.err = err
-			return
+			return errors.Join(m.err, err)
 		}
 		// A different Git inode makes the selected home obsolete. Management
 		// must still use the original protected identity, never today's checkout.
 		if err := os.Mkdir(filepath.Join(w.doctor.checkout, ".git"), 0700); err != nil {
-			m.err = err
-			return
+			return errors.Join(m.err, err)
 		}
 	}
 	m.before, m.err = runTree(w.doctor.env["SLICE_21_ACCOUNT_HOME"])
 	if m.err != nil {
-		return
+		return m.err
 	}
 	m.retired = w.homeNativeConsent(m.id, m.flag())
 	m.catalog = w.homeNativeInvoke("status", "--homes", "--json")
+	return errors.Join(m.retired.err, m.catalog.err)
 }
 
 func homeNativeHomeEntry(result homeNativeResult, id string, code int, rule string) (map[string]any, error) {
@@ -257,6 +259,9 @@ func (w *world) homeNativeAfterRetirement() error {
 		return err
 	}
 	m.later = w.homeNativeCompleted("write", "successor", "alpha")
+	if m.later.err != nil {
+		return m.later.err
+	}
 	if m.flag() == "--delete" {
 		m.deletionRetry = w.homeNativeConsent(m.id, "--delete")
 		before, err := runTree(w.doctor.env["SLICE_21_ACCOUNT_HOME"])
@@ -268,12 +273,14 @@ func (w *world) homeNativeAfterRetirement() error {
 		if entry, err := homeNativeHomeEntry(m.reset, m.id, 0, ""); err == nil {
 			m.successor, _ = entry["successor"].(string)
 		}
-		w.homeNativeCompleted("write", "successor", "alpha")
+		if run := w.homeNativeCompleted("write", "successor", "alpha"); run.err != nil {
+			return run.err
+		}
 	}
 	// Repeating the old reset after successor data exists may never retarget it.
 	m.retry = w.homeNativeConsent(m.id, "--reset")
 	m.reread = w.homeNativeCompleted("read", "successor", "alpha")
-	return nil
+	return errors.Join(m.deletionRetry.err, m.reset.err, m.retry.err, m.reread.err)
 }
 
 func (w *world) homeNativeSuccessor() error {

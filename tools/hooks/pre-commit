@@ -25,7 +25,8 @@ tools/bin/architecture-check --fixtures-if-staged
 
 # golangci-lint at its pinned release, its download checked against the
 # SHA-256 in tools/bin/pinned; the linters are .golangci.yml's.
-tools/bin/pinned golangci-lint run ./...
+# Wait for an existing lint run to release the lock before checking this checkout.
+tools/bin/pinned golangci-lint run --allow-serial-runners ./...
 
 # govulncheck at the version go.mod's tool block pins, go.sum checking it: a
 # vulnerability the code, its tests included, reaches. It asks the

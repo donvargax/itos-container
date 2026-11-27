@@ -149,11 +149,15 @@ native CI evidence; the loop owns native runs and closure.
 **Shards.** The tier runs as the matrix of the `engine-shard` job in `.github/workflows/ci.yml`.
 Each shard is whole feature files on its own native `ubuntu-latest` runner and daemon, with its own
 checkout of the exact `${{ env.TO }}` head, preflight, fixture preparation and cleanup: **offline**
-(`offline.feature`, `harness-home.feature`), **lifecycle** (`lifecycle.feature`, whose four
+(`offline.feature`, `harness-home.feature`, `credentials-run-native.feature`, which slice-31 brings and the shard skips and logs as pending until the file exists), **lifecycle** (`lifecycle.feature`, whose four
 `ID-LIFECYCLE-09` rows stay nested in `ID-LIFECYCLE-13`'s quiet row), **other** (`anchors.feature`,
-`checkout-overlap.feature`, `doctor.feature`, `hardlinks.feature`, `recovery.feature`,
-`run_terminal.feature`, `session.feature`, `sockets.feature`) and **egress** (`egress.feature`;
-`egress_lifecycle.feature` joins it when it exists). Nothing crosses runners, `fail-fast` is off
+`checkout-overlap.feature`, `claude-home.feature`, `doctor.feature`, `hardlinks.feature`,
+`recovery.feature`, `run_terminal.feature`, `session.feature`, `sockets.feature`; `claude-home.feature` is slice-36's and is skipped and
+logged as pending until the file exists) and **egress** (`egress.feature`,
+`credentials-run.feature`, which slice-31 brings and the shard skips and logs as pending until the
+file exists, and `egress_lifecycle.feature`, which joins it when it exists). `pendingEngineFeatures`
+in `features_test.go` is the one reviewed list of such names, each with its item and its one permitted shard; any other absent or `@engine`-less name
+is refused. Nothing crosses runners, `fail-fast` is off
 so a red shard hides no other, no feature is ever split, and shards run on main pushes, non-draft
 pull requests and manual dispatch. Move a whole feature to another shard only on measured shard
 times that show the need; the loop records each shard's step time, runner image and the
@@ -321,7 +325,7 @@ set included, skips with `no live @engine scenarios (count 0)`.
 
 T-20's [helper](../tools/bin/engine-fixture) runs only in the engine shard job, after preflight.
 Both `prepare` and `cleanup` refuse outside GitHub Actions on an actual Linux amd64 host, before
-engine access. Agents never invoke these modes against an engine or spoof CI. The helper uses the
+engine access. Agents never invoke these modes against an engine or spoof CI, outside the hermetic T-81 cleanup test, whose child sees only a recording fake docker. The helper uses the
 existing Docker CLI, shell/coreutils, curl, jq and tar and installs nothing. Every engine call
 clears Docker host/context/TLS/API overrides, uses `unix:///var/run/docker.sock` explicitly and
 supplies a disposable empty Docker configuration, without logins or credential helpers. It never
@@ -339,7 +343,7 @@ Tags identify the provenance only; CI never resolves them. The maintained
 the push/pull round trip, and [BusyBox](https://hub.docker.com/_/busybox) supplies a small shell
 and basic probes. No image or archive is published outside the disposable runner-local registry.
 This acquisition is CI scaffolding: it adds no product acquisition, registry dependency or
-permission for worker egress.
+permission for worker egress. The [Codex fixture](testdata/codex-fixture/README.md) image is built the same way.
 
 The reviewed [Dockerfile](testdata/engine-fixture/Dockerfile) takes the runner's numeric
 effective UID/GID, refusing UID zero before build, sets `USER`, clears `ENTRYPOINT` and uses
@@ -513,13 +517,17 @@ excluded selection reports its IDs, reasons and count, runs no setup and supplie
 Eligible selections must finish all expected cases successfully for the test command to pass;
 actual failures stay failed.
 
-Draft PRs skip automatic CI. The coordinator dispatches on the item branch after it contains the
-complete step commit and the workflow/harness changes, which must also be on the default branch
-for GitHub manual dispatch.
+Draft PRs skip automatic CI. The coordinating loop dispatches on the item branch once its
+published red commit contains the complete step definitions and the workflow/harness changes.
+GitHub manual dispatch also requires the workflow/harness changes on the default branch.
 
 1. The behaviour implementer commits complete step definitions in a `test` commit while cases
-   remain `@wip`, retaining `@engine` wherever setup, steps or cleanup need it. The agent stops.
-2. The loop publishes the item branch and invokes the coordinator-only command:
+   remain `@wip`, retaining `@engine` wherever setup, steps or cleanup need it. The implementer
+   stops after that commit only when red evidence will not be recorded at landing.
+2. The loop publishes the red commit, dispatches on it and records the result before publishing
+   the fix commit.
+   When it records red at landing, that red commit consists of the item's base, its tests and
+   any stubs needed for the red tree to build. The loop invokes the coordinator-only command:
 
    ```sh
    gh workflow run ci.yml --ref <item> -f 'red_scenarios=<ids>'
@@ -528,11 +536,17 @@ for GitHub manual dispatch.
    Substitute whitespace-separated complete tags for `<ids>`. No tag-removal commit, evidence
    branch, smoke edit or draft-guard exception is needed. Ordinary Linux and proof jobs keep their
    normal inputs; only the engine and manual macOS/Windows jobs receive this selector.
-3. The coordinator records the **resolved tested SHA**, input IDs, run URL, runner/tier, scenario
-   ID/outline row and failing **Then** assertion. Infrastructure, setup and undefined-step
+3. Download the red scenario artifacts from the run summary. Jobs that execute eligible
+   scenarios upload Godog's Cucumber JSON as `red-scenarios-engine-shard-<shard>`,
+   `red-scenarios-platform-macos` or `red-scenarios-platform-windows`. Each contains
+   `red-scenarios.json` with the scenario rows, step outcomes and error text. Uploads
+   run after success or failure, and the job logs still show Godog's pretty output.
+   Jobs that skip all selected cases produce no report. The coordinator records the
+   **resolved tested SHA**, input IDs, run URL, runner/tier, scenario ID/outline row and
+   failing **Then** assertion from the report. Infrastructure, setup and undefined-step
    failures and empty or excluded selections are not red proof. A passing run is not red proof
    either; no forced failure or ignored test failure is permitted. Keep the failed run visible.
-4. Implement, remove `@wip` in the behaviour commit and require green CI at the actual pushed head
+4. Remove `@wip` in the behaviour commit and require green CI at the actual pushed head
    **with no red input**. Expected-red dispatches are never merge/closure prerequisites or
    substitutes for that green run. The loop alone publishes, dispatches, reads results and closes.
 

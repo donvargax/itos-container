@@ -57,18 +57,21 @@ func engineFeatureFiles(dir string) ([]string, error) {
 // shardOtherFiles is the other shard's fixed set of files (T-59): every engine feature
 // this tree keeps outside offline, lifecycle and egress.
 var shardOtherFiles = []string{
-	"anchors.feature", "checkout-overlap.feature", "doctor.feature", "hardlinks.feature",
-	"recovery.feature", "run_terminal.feature", "session.feature", "sockets.feature",
+	"anchors.feature", "checkout-overlap.feature", "claude-home.feature", "doctor.feature",
+	"hardlinks.feature", "recovery.feature", "run_terminal.feature", "session.feature",
+	"sockets.feature",
 }
 
-// egressShardFiles is the egress shard's complete pinned set: egress.feature, plus
-// egress_lifecycle.feature while the engine inventory has it, so slice-28's file joins
-// this shard when it lands on this tree (T-59's placement). The pin is this explicit
+// egressShardFiles is the egress shard's complete pinned set: credentials-run.feature
+// (T-77's placement, held whether or not the file is on this tree yet: see
+// pendingEngineFeatures), egress.feature, plus egress_lifecycle.feature while the engine
+// inventory has it, so slice-28's file joins this shard when it lands on this tree
+// (T-59's placement). The list is sorted, as shardFileIssue compares it. The pin is this explicit
 // allowlist, never the inventory's leftover: a new engine file is not allowed to hide
 // in egress (slice-37's run_terminal.feature belongs in other, never here) and fails
 // visibly until a shard's set or a new shard takes it.
 func egressShardFiles(engine []string) []string {
-	files := []string{"egress.feature"}
+	files := []string{"credentials-run.feature", "egress.feature"}
 	if slices.Contains(engine, "egress_lifecycle.feature") {
 		files = append(files, "egress_lifecycle.feature")
 	}
@@ -77,7 +80,7 @@ func egressShardFiles(engine []string) []string {
 
 // The offline and lifecycle shards each pin their complete set of feature files.
 var (
-	shardOfflineFiles   = []string{"harness-home.feature", "offline.feature"}
+	shardOfflineFiles   = []string{"credentials-run-native.feature", "harness-home.feature", "offline.feature"}
 	shardLifecycleFiles = []string{"lifecycle.feature"}
 )
 
@@ -149,7 +152,12 @@ func engineShardIssues(data []byte) []string {
 		require(len(fields) > 0, "empty shard "+entry.Shard)
 		for _, name := range fields {
 			require(name == filepath.Base(name) && !strings.ContainsAny(name, `/\:`) && strings.HasSuffix(name, ".feature"), "feature path "+strconv.Quote(name)+" in shard "+entry.Shard)
-			require(err != nil || slices.Contains(want, name), "unknown engine feature "+strconv.Quote(name))
+			held, pending := pendingEngineFeatures[name]
+			if pending && entry.Shard != held.shard {
+				require(false, "pending feature "+strconv.Quote(name)+" in shard "+entry.Shard+": only "+held.shard+" may name it")
+			} else {
+				require(err != nil || slices.Contains(want, name) || pending, "unknown engine feature "+strconv.Quote(name))
+			}
 			placed[name]++
 		}
 	}
@@ -359,6 +367,10 @@ func testShardPartition(t *testing.T, include []shardEntry) {
 	if len(include) == 0 {
 		t.Fatal("the workflow lists no engine shards")
 	}
+	engineFiles, err := realEngineFeatures()
+	if err != nil {
+		t.Fatal(err)
+	}
 	total, placed := 0, map[string]string{}
 	var union []string
 	byShard := map[string][]string{}
@@ -385,6 +397,14 @@ func testShardPartition(t *testing.T, include []shardEntry) {
 				entry.Shard, selection.count, selection.ids, selection.skip, wantCount, wantIDs)
 		}
 		t.Log(shardReportLine(entry.Shard, selection.count, len(selection.ids), files))
+		for _, line := range selection.pending {
+			t.Log(line)
+		}
+		for _, file := range files {
+			if held, pending := pendingEngineFeatures[file]; pending && !slices.Contains(engineFiles, file) && !slices.ContainsFunc(selection.pending, func(line string) bool { return strings.Contains(line, file) && strings.Contains(line, held.item) }) {
+				t.Errorf("shard %s does not log %s as pending for %s", entry.Shard, file, held.item)
+			}
+		}
 		total += selection.count
 		union = append(union, selection.ids...)
 		byShard[entry.Shard] = selection.ids
@@ -395,10 +415,6 @@ func testShardPartition(t *testing.T, include []shardEntry) {
 	slices.Sort(union)
 	if !slices.Equal(union, unsharded.ids) {
 		t.Errorf("the shards' IDs %v are not the unsharded tier's %v exactly once each", union, unsharded.ids)
-	}
-	engineFiles, err := realEngineFeatures()
-	if err != nil {
-		t.Fatal(err)
 	}
 	for _, file := range engineFiles {
 		if placed[file] == "" {
@@ -434,7 +450,7 @@ func shardBaseline(t *testing.T) []byte {
       fail-fast: false
       matrix:
         include:
-          - {shard: offline, features: "offline.feature harness-home.feature"}
+          - {shard: offline, features: "offline.feature harness-home.feature credentials-run-native.feature"}
           - {shard: lifecycle, features: lifecycle.feature}
           - {shard: other, features: "%s"}
           - {shard: egress, features: "%s"}
@@ -503,6 +519,8 @@ func testBrokenShardWorkflows(t *testing.T) {
 		{"a feature in two shards", "feature in two shards", replaceFeatures("lifecycle", "lifecycle.feature", "lifecycle.feature offline.feature")},
 		{"a feature twice in one shard", "feature in two shards", replaceFeatures("offline", "offline.feature", "offline.feature offline.feature")},
 		{"an unknown feature", "unknown engine feature", replaceFeatures("other", "doctor.feature", "doctor.feature absent.feature")},
+		{"a pending file in the other shard", "pending feature", replaceFeatures("other", "doctor.feature", "doctor.feature credentials-run.feature")},
+		{"the pending file missing from egress", "shard egress files", replaceFeatures("egress", "credentials-run.feature", "")},
 		{"a path", "feature path", replaceFeatures("other", "doctor.feature", "features/doctor.feature")},
 		{"an absolute path", "feature path", replaceFeatures("other", "doctor.feature", "/doctor.feature")},
 		{"an empty shard", "empty shard", editShard(func(j *workflowJob) { j.Strategy.Matrix.Include[2].Features = " " })},

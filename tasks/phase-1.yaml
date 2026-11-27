@@ -9362,8 +9362,83 @@
     wording that suggests an unrestricted push or automatic three-platform runs. Leave the egress
     and credential deferral lines to p1-docs-admit-milestone-two-egress. Stay within the file's
     doc-caps cap. Broken down from p1-refresh-remaining-template-guidance.
-  done_when:
-    - run: grep -qi 'bugbot' docs/ORCHESTRATING.md && grep -qi 'draft' docs/ORCHESTRATING.md && tools/bin/doc-caps
+
+    The problem today. In docs/ORCHESTRATING.md the only text on CI and pushes is the bullet in
+    "## Start of a session" that begins "- [CI](../.github/workflows/ci.yml) has no stack/feature
+    branch filters." and ends "Preserve the helpers' itos-template/itos attribution." It covers
+    releases and the manual macOS/Windows jobs. It says nothing of pull requests, drafts, review
+    or direct pushes, and never names Bugbot. One sentence in it is stale: "Before the first real
+    tag, require the version/notes dry run ...". v0.1.0 was published on 2026-11-08
+    (docs/charter.md:49), and the dry-run procedure stays in docs/upgrading.md.
+
+    The source of each fact, and which wins. The section states what the configuration at the
+    implementer's base sets, read by key and not by line number. The keys are itos.yaml's `push:`
+    block (mode, pr.draft, pr.review_by, pr.reviewers and pr.direct's types and except) and ci.yml's
+    `on:` triggers, each job's `if:` and the release job's `needs`. The facts listed below are
+    what those keys set on main at 305d971: mode pr; draft true; review_by [cursor]; reviewers
+    Codex (kind codex) and cursor (kind bugbot); direct types [docs] except features/**; ci,
+    engine-shard, engine and platform all skip a draft pull request; platform's matrix is
+    ubuntu-latest alone, while platform-macos and platform-windows run only on workflow_dispatch;
+    release needs ci, engine and platform and runs only on a push to main. "Codex is still asked,
+    best effort" is how docs/decisions/STANDING.md:40 reads the fact that Codex is in reviewers but
+    not in review_by. If a key at the implementer's base differs from this list, the configuration
+    wins: write what it sets and report the difference. Never write a fact no key sets. For that
+    reason the section does not say that Codex's review threads must be resolved before merge
+    (T-67's note), since no key in `push:` sets it. T-46 was dropped and changes nothing.
+
+    Who acts. The text names the loop as the one that marks a pull request ready and that makes
+    every push, direct docs commits included (STANDING.md:79). Nothing may suggest that an agent
+    pushes. The merge stays passive ("merged once ..."), because no record here says who performs
+    it. "## Responsibility at handoff" is left as it is.
+
+    The rule. Replace that one bullet, in place under "## Start of a session", with exactly two
+    bullets. Add no heading. Change no other line in the file. The budget is the old bullet's 604
+    bytes plus the 133 bytes left under the 6144-byte cap (the file is 6011 bytes at 305d971), so the
+    two bullets together take at most 737 bytes, newlines included. The first bullet states how
+    work reaches main. The second states CI and releases. The facts are mandatory, in this order:
+    (1) each item reaches main through one pull request, a draft until the loop marks it ready,
+    then merged once its checks pass and Cursor Bugbot has reviewed it; (2) Codex is still asked,
+    best effort; (3) docs-only commits outside features/ go straight to main, and the loop makes
+    every push; (4) CI runs on ready pull requests, pushes to main and manual dispatch; (5) the
+    macOS and Windows jobs run only on dispatch; (6) releases need ci, engine and Linux platform
+    green at the pushed main SHA, and pull requests and dispatch never publish; (7) the five
+    archives are distribution targets, not container-host support. Keep the link to ci.yml. If the
+    budget runs short, drop optional words first, in this order: the link to release.yml, then the
+    clause that a draft runs no CI job (fact 4's "ready" already implies it). The old bullet's other
+    sentences go: "no stack/feature branch filters" (fact 4 lists the triggers), "T-25 enables",
+    the stale first-tag sentence, and the helpers' attribution sentence, which the next bullet
+    already covers ("Preserve attribution to donvargax and infrastructure provenance from itos and
+    itos-template"). This wording was measured at 717 bytes, leaving the file at 6124 bytes. The
+    implementer may reword it, but must keep its facts and stay within the budget:
+      - Each item reaches `main` through one pull request (itos.yaml's `push`): a draft, which
+        runs no CI job, until the loop marks it ready, then merged once its checks pass and
+        Cursor Bugbot has reviewed it; Codex is still asked, best effort. Docs-only commits
+        outside `features/` go straight to `main`. The loop makes every push.
+      - [CI](../.github/workflows/ci.yml) runs on ready pull requests, pushes to `main` and manual
+        dispatch; macOS/Windows jobs run only on dispatch. [Releases](../.github/workflows/release.yml)
+        need `ci`, `engine` and Linux `platform` green at the pushed `main` SHA; pull requests
+        and dispatch never publish. The five archives are distribution targets, not
+        container-host support.
+
+    Bounds. Change docs/ORCHESTRATING.md only. Leave the egress and credential line ("Egress,
+    credentials, network Git ... stay deferred") to p1-docs-admit-milestone-two-egress, and the
+    other stale lines (the unimplemented-commands sentence among them) as they are. Leave
+    tools/bin/doc-caps and its cap unchanged: raising a cap is a decision, not a fix. No workflow,
+    itos.yaml, code or scenario changes. Nothing touches a proof.code path, so there is no mutation
+    proof, and none is fabricated.
+
+    Commits and proof. One docs commit with Item: T-75 carries docs/ORCHESTRATING.md alone. The
+    implementer may commit freely in its workspace. The host makes the landing commits and runs
+    itos, submission, publication and review. The range is prose-only (docs/** and tasks/** are
+    ci.prose.paths), and on such a range CI keeps only a task's static checks and those declaring
+    prose: true, while itos work done runs no late check. So the check declares prose: true. It
+    uses only POSIX sh and grep, as on ubuntu-latest.
+
+    How the check fails today. Its first grep exits 1, because docs/ORCHESTRATING.md never says
+    Bugbot. Its second grep already matches today, through "drafter", so it adds nothing before
+    the work. doc-caps passes today at 6011 bytes, and fails if the new bullets push the file past
+    6144 bytes. The check cannot tell whether the facts are right or whether the old bullet went.
+    Review of the diff against this entry and the configuration's keys judges that.
 - id: T-76
   type: docs
   title: Decision 0032 settles lock binding, credential-set aliases, version-4 home and delivery forms, the session record and metadata fixtures
@@ -9570,3 +9645,564 @@
   done_when:
     - run: for h in 'Lock binding through mount acquisition' 'Credential-set aliases' 'Version 4, harness home and delivery gates' 'Session record and source-check publication' 'Deterministic metadata fixtures'; do grep -qxF "## $h" docs/decisions/0032-codex-shared-directory.md || exit 1; done
       prose: true
+- id: T-77
+  type: ci
+  title: credentials-run.feature joins the egress engine shard whole, before slice-31 lands
+  why: >
+    The person agreed on 2026-11-21 that slice-31's features/credentials-run.feature stays whole and
+    joins a CI engine shard through this repository's own pull request, before slice-31 lands.
+    slice-31 is redrafted without splitting the feature and depends on this item. Decision 0024
+    (docs/decisions/0024-engine-tier-shards.md:79-80) moves only whole features, placed by measured
+    shard times. The "Engine scenarios" step on eight green main runs (44931447744 to 44959728012,
+    2026-11-21) took 27-34 s in egress, 41-81 s in offline, 46-116 s in lifecycle and 76-167 s in
+    other. Egress has the most room under the 180-second target, so credentials-run.feature goes to
+    egress. Its five @engine rows are ID-CREDRUN-08 to -12, all @wip on slice-31 at 48ce147. The
+    file is not on this tree, and today the shard runner refuses a listed name that no feature file
+    with an @engine case bears (features/features_test.go:279). TestEngineShards refuses an unknown
+    engine feature (features/engine_shards_test.go:152). Listing it now would fail every egress run.
+    T-59's rule that only files present on this tree belong in the matrix is replaced, for this file
+    only, by one reviewed pending list. Add it in the features harness: a fixed map from a pending
+    feature basename to the item that brings it, holding only credentials-run.feature -> slice-31. -
+    A name in the pending map that no file under features/ has is skipped by selectScenarios. The
+    shard logs one line naming it as pending and the item. It is refused, as today, outside the
+    engine tier. - Any other absent or @engine-less name is refused exactly as today. - Once the
+    file exists, it is an ordinary file: its @engine case is required and its rows are selected. The
+    pending entry then has no effect, and slice-31 removes it in its own test commit. In one ci
+    commit, change .github/workflows/ci.yml's egress include to "egress.feature
+    credentials-run.feature". In features/engine_shards_test.go, the egress pinned set always holds
+    credentials-run.feature, and still holds egress_lifecycle.feature while the inventory has it
+    (slice-28). The real partition check skips a pending file absent from the tree and covers it
+    exactly once when present. Keep every other shard's pinned set and every existing negative
+    control. Add these controls: - An absent name outside the pending map is still refused. - An
+    absent pending name is skipped, and its pending line is logged. - A present pending file with no
+    @engine case is refused. - A pending name in a shard other than egress fails TestEngineShards.
+    Update the shard lists in features/README.md and in docs/architecture/arc42.md's engine
+    inventory. Add a "Credentials-run placement, 2026-11-21" subsection to decision 0024 citing the
+    person and the timings above. No scenario, assertion or limit changes. Run the engine-free
+    self-tests below locally. Before implementation, the check exits 1 at the grep. Engine timing
+    for the new rows is judged in CI once slice-31 lands; this item claims none.
+- id: T-78
+  type: ci
+  title: claude-home.feature joins the other engine shard, as slice-36's branch places it, before slice-36 lands
+  why: >
+    slice-36's reviewed spec branch (origin/slice-36 at 6135810, PR 65) places its new
+    features/claude-home.feature, whose @engine rows are ID-CLAUDEHOME-09, -10 and -11, in the other
+    engine shard. It does that in .github/workflows/ci.yml and in features/engine_shards_test.go's
+    shardOtherFiles. The agent that implements slice-36 may not edit .github/workflows: the person's
+    2026-11-20 call routes workflow edits through this repository's own pull requests
+    (docs/charter.md:163). So the placement lands on main first, as T-77 did for slice-31's
+    credentials-run.feature. The change on main is byte-identical to the branch's, so the branch's
+    merge of main stays clean. - .github/workflows/ci.yml: the other include's features value
+    becomes "anchors.feature checkout-overlap.feature claude-home.feature doctor.feature
+    hardlinks.feature recovery.feature run_terminal.feature session.feature sockets.feature", on one
+    line. - features/engine_shards_test.go: shardOtherFiles takes the branch's three lines exactly
+    (git diff origin/main...origin/slice-36 -- features/engine_shards_test.go). Any other shard
+    would list the file twice once the branch merges main, and the implementing agent could not
+    repair that. The measured times on decision 0024's credentials-run placement would favour
+    offline (41-81 s against other's 76-167 s). Decision 0024
+    (docs/decisions/0024-engine-tier-shards.md:79-80) allows a later whole-file move on measured
+    times, once slice-36's rows run. The file is not on this tree yet, so it joins the reviewed
+    pending map in features/features_test.go. That map now names credentials-run.feature for
+    slice-31 and allows it only in egress. Make each entry carry its item and its one permitted
+    shard: credentials-run.feature -> slice-31 in egress, and claude-home.feature -> slice-36 in
+    other. engineShardIssues refuses a pending name in any shard but its own and names that shard.
+    Every existing pending behaviour and control stays: an absent pending name is skipped and
+    logged, a present one is ordinary, an absent name outside the map and a shard of pending names
+    alone are refused, and pending names are refused outside the engine tier. Add the second entry
+    to features/engine_pending_test.go's controls, along with a control that refuses
+    claude-home.feature in egress. slice-36 removes its entry in its own test commit once its file
+    lands. Add a "Claude-home placement, 2026-11-21" subsection to decision 0024 giving these
+    reasons, and update the shard lists in features/README.md and docs/architecture/arc42.md. No
+    scenario, assertion or limit changes. Run the engine-free self-tests below locally. Before the
+    work, the check exits 1 at its first grep.
+- id: T-79
+  type: test
+  title: "Architecture drift: reconcile session and runtime evidence status"
+  why: >
+    Reconcile arc42 with merged slice-9 ownership work and live engine scenarios, preserving the
+    distinction between implemented ownership, pending recovery and unproven runtime isolation. This
+    first-milestone documentation follow-up does not block the current offline owned-run step.
+    Include the q-11 ownership correction in this existing architecture-drift follow-up. Update
+    recovery.feature and arc42 to identify slice-14's native isolation proof and slice-15's
+    retained-isolation proof (ID-LIFECYCLE-15), which depends on slice-12 and slice-14. Preserve
+    slice-12's budgets, cancellation and loss scope so future briefs follow the settled order.
+- id: T-80
+  type: docs
+  title: The checkout mount is bound to the inode that passed validation
+  why: >
+    Isolation, this milestone. A read-only security audit of main at 7236d68 (Codex, 2026-11-06),
+    static, no Docker run; confirm with a scenario before building. Docker receives the checkout as
+    a pathname (internal/engine/session/docker/run.go:68; registered_run.go:179), so after the final
+    identity checks and before ContainerStart a worker whose checkout contains another approved
+    checkout can rename the inner one and put a symlink to the host home in its place; the second
+    worker then mounts an unapproved host directory. Fix: hand Docker an inode-bound source through
+    a protected mount anchor held through startup and recovery, and refuse overlapping worker
+    checkouts.
+- id: T-81
+  type: build
+  title: engine-fixture prepares, hands off and cleans up a verified pinned Codex 0.167.0 fixture image
+  why: >
+    Native real-Codex evidence needs the rust-v0.167.0 asset codex-x86_64-unknown-linux-musl.tar.gz.
+    Every host this uses is signed: github.com and release-assets.githubusercontent.com for CI's
+    download. features/testdata/codex-fixture/SHA256SUMS pins the asset and the extracted
+    executable, and CI compares only against that file. Inside the existing
+    `tools/bin/engine-fixture prepare` step, already called by ci.yml, it does the following. It
+    builds features/testdata/codex-fixture/Dockerfile FROM the pinned busybox, with the executable
+    root-owned 0555 at /usr/local/bin/codex. It pushes to a separate
+    itos-fixture-<run>-<attempt>-codex repository, verifies the manifest and config digests, removes
+    the tag and digest, and cold-pulls. Its ordered 0600 records (codex.repository, codex.tag,
+    codex.build.iid, codex.digest) exist only for cleanup. Its handoff (codex.reference, codex.iid)
+    is written only after the whole protocol passes. Prepare's four outputs and .github/workflows
+    stay unchanged, and no product code changes, so it has no product prerequisite. The spec states
+    that the implementer may commit freely in its workspace and that the host makes the landing
+    commits. Broken down from slice-35.
+
+    The pins, measured by the drafter on 2026-11-23. The release API
+    (api.github.com/repos/openai/codex/releases/tags/rust-v0.167.0) publishes the asset's digest as
+    sha256:9d64836106d5b374e90ee4454c7ebcde7ca7106558bd7e41a34b9f26ebda251a, size 122587028 bytes.
+    A download from github.com hashed to the same value. The gzip tar holds exactly one member, a
+    regular file named codex-x86_64-unknown-linux-musl (mode 0755, 320575976 bytes), whose SHA-256
+    is cdcb45aaa01d0f14e298985e09465aebccd47f64ecd298aea44814af7b62bbda. So the cross-check is done,
+    and the implementer needs no network. features/testdata/codex-fixture/SHA256SUMS holds exactly
+    two lines in sha256sum's format, each a hash, two spaces and a name, and nothing else. Line 1
+    is the archive hash above with codex-x86_64-unknown-linux-musl.tar.gz. Line 2 is the member
+    hash above with codex-x86_64-unknown-linux-musl. The member name is part of the pin. Any other
+    name, a second member, or either hash differing fails prepare, through codex_archive_verify
+    below, and nobody judges whether a difference is legitimate. T-81 never executes the binary;
+    slice-58 owns `codex --version`.
+
+    Archive verification. A new function, `codex_archive_verify <archive> <sums> <context>`, lives in
+    tools/lib/engine-fixture-checks.sh, so a test can run it; sourcing that file still does no I/O
+    or engine work. Its steps run in this order, each guarded with its own `|| fail`. (a) It reads
+    <sums> and requires exactly two lines, `<64 lowercase hex>  codex-x86_64-unknown-linux-musl.tar.gz`
+    and then `<64 lowercase hex>  codex-x86_64-unknown-linux-musl`, or fails with `codex pin file:`.
+    (b) It hashes <archive> with `sha256sum --binary` on stdin and requires line 1's hash, or fails
+    with `codex archive hash:`. Nothing is listed or extracted before this. (c) It lists the archive
+    with `tar -tzf` and requires the listing to be exactly the one pinned name, or fails with `codex
+    archive members:`. (d) It writes that member alone with `tar -xzOf <archive>
+    codex-x86_64-unknown-linux-musl` to `<archive>.member`, beside the archive and outside the
+    context. It hashes that file with `sha256sum --binary` on stdin and requires line 2's hash, or
+    fails with `codex member hash:`. (e) Only then does it run `chmod 0555` on that file and `mv --`
+    it to `<context>/codex`. So no failure leaves anything in the context. Each diagnostic is fail's
+    `engine-fixture: ` and then the named prefix, with expected and observed values bounded through
+    fixture_value.
+
+    Preparation. A new function codex_fixture runs inside prepare. It is called once, as
+    `codex_fixture "$port" "$fixture_uid" "$fixture_gid" || fail <message>`, after `remove_container
+    smoke || fail` and before `remove_container registry || fail`. So the registry is still up and
+    the existing warm-up order guards still hold. In order, it does the following. Each step is
+    guarded with its own `|| fail`, as the rest of the driver does, because set -e does not apply
+    inside a function called with `||`. The guarded lines begin with the exact forms the order
+    guard below lists, and use its variable names. (1) It makes codex_download=$state/codex-download
+    and codex_context=$state/codex-context with `mkdir -- `. It downloads
+    https://github.com/openai/codex/releases/download/rust-v0.167.0/codex-x86_64-unknown-linux-musl.tar.gz
+    with `curl --fail --location --silent --show-error --proto '=https' --proto-redir '=https'
+    --max-time 60 --output "$codex_download/codex-x86_64-unknown-linux-musl.tar.gz"`. (2) It runs
+    `codex_archive_verify "$codex_download/codex-x86_64-unknown-linux-musl.tar.gz"
+    "$workspace/features/testdata/codex-fixture/SHA256SUMS" "$codex_context" || fail <message>`.
+    (3) It writes codex.repository (`127.0.0.1:<port>/itos-fixture-<run>-<attempt>-codex`) and
+    codex.tag (`<repository>:fixture`). (4) It builds
+    codex_recipe=$workspace/features/testdata/codex-fixture/Dockerfile, supplied with `--file -` on
+    stdin, against "$codex_context", through d with `--platform linux/amd64 --pull=false --iidfile
+    "$state/codex.build.iid"`, the FIXTURE_UID and FIXTURE_GID build arguments and `--tag
+    "$codex_tag"`. It reads codex_built, codex_base and codex_registry from codex.build.iid, base.iid
+    and registry.iid. On one line beginning `digest_valid "$codex_built"` it requires the ID to be
+    digest_valid and to differ from both. (5) It pushes the tag. It saves the built ID to
+    $state/codex-built.tar and takes codex_config_path and codex_config through daemon_config_path
+    and daemon_config_digest. It fetches the registry manifest for the codex repository's `fixture`
+    tag as T-20 does, and sets `codex_digest=$(validate_manifest …)`. (6) It writes codex.digest,
+    which holds the bare `sha256:<64 hex>`. (7) It runs remove_codex_ref tag, then remove_codex_ref
+    digest, then requires exact absence of codex_reference=`<repository>@<digest>` through
+    inspect_image. (8) It cold-pulls that reference with `d image pull --platform linux/amd64`. It
+    inspects the reference into $state/codex-image.json and passes it to validate_cached with the
+    built ID and the runner's UID and GID: that is the cold-pull validation. Every Codex file is its
+    own file under $state, never cached-image.json, which the product warm-up reads. The recipe is
+    exactly: `FROM <the busybox pin>`, `ARG FIXTURE_UID`, `ARG FIXTURE_GID`, `COPY --chown=0:0 codex
+    /usr/local/bin/codex`, `USER ${FIXTURE_UID}:${FIXTURE_GID}`, `ENTRYPOINT []`, `CMD
+    ["/bin/true"]`. The classic builder keeps the context file's 0555 mode. A second function,
+    codex_handoff, is called once, as `codex_handoff "$fixture_uid" "$fixture_gid" || fail
+    <message>`, after the product warm-up call and before the single `>>"$GITHUB_OUTPUT"` append. It
+    reads codex_repository, codex_digest and codex_built back from their records, rebuilds
+    codex_reference from them and inspects it into $state/codex-final-image.json. It validates that
+    inspection with validate_cached while the registry is gone. Only then does it write
+    codex.reference (`<repository>@<digest>`), and then codex.iid (the built ID). These are the only
+    two writes of the handoff anywhere in the driver. slice-58 reads them from
+    $RUNNER_TEMP/T-20-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-engine-fixture/. New names the cleanup child
+    needs are exported on their own `export` line, leaving T-20's pinned export line as it is. The
+    179-second prepare bound, the four outputs and fixtureHelperRequirements stay unchanged. If CI
+    shows prepare exceeding its bound, stop and report; never raise it, because the 4-minute step
+    timeout sits in .github/workflows, outside this item. All four engine shards run prepare, so
+    each downloads and builds the image. That cost is accepted.
+
+    Cleanup. A new function, remove_codex_ref tag|digest, runs from cleanup as `(remove_codex_ref
+    tag) || failed=1` and `(remove_codex_ref digest) || failed=1`, after `(remove_image_ref
+    reference) || failed=1`. It returns 0 when its record (codex.tag or codex.digest) is absent.
+    Otherwise it reads codex.repository and requires it to match
+    `^127\.0\.0\.1:[0-9]{1,5}/itos-fixture-<run>-<attempt>-codex$`. It requires codex.tag to equal
+    `<repository>:fixture`, or codex.digest to be digest_valid, and forms the reference from them. It
+    inspects the reference with inspect_image. If the image is present, it reads codex.build.iid,
+    requires it to be digest_valid, and requires the inspected `.[0].Id` to equal it and to differ
+    from base.iid and registry.iid. Then it runs `d image rm` on that reference only and verifies
+    exact absence. On any mismatch, or on an unreadable record, it fails with a bounded
+    fixture_value diagnostic before any removal. Exact absence means there is nothing to do; any
+    other inspection failure fails. It never prunes, and never removes by image ID, by repository or
+    by a reference it did not record. The state directory is kept, as now.
+
+    The test, answering the cold reader's gaps. The test is TestEngineFixtureCodexCleanup in the new
+    file features/engine_fixture_codex_linux_test.go. Its helpers may sit in a sibling
+    _linux_test.go file so each file stays under the 600-line limit; engine_fixture_test.go is not
+    grown. The _linux suffix exists because the driver needs GNU
+    coreutils (readlink -e, timeout, stat -c), which the manual macOS and Windows jobs lack. The
+    approval kernel helper's _linux test is the precedent. The test builds a private PATH directory.
+    It holds symlinks to the host's bash, env, timeout, jq, sha256sum, readlink, id, mkdir, cat and
+    stat, found with exec.LookPath before the environment is replaced. It also holds four scripts the
+    test writes: docker, curl, tar and uname. Nothing else is on PATH, so no real docker is
+    reachable. The child environment is built from nothing, not from os.Environ(). It holds that
+    PATH, HOME, RUNNER_TEMP and GITHUB_WORKSPACE (each a fresh t.TempDir, so the checkout is never
+    the workspace), CI=true, GITHUB_ACTIONS=true, GITHUB_RUN_ID=4242, GITHUB_RUN_ATTEMPT=1 and
+    LC_ALL=C, and no DOCKER_* variable. It runs `<bash> <absolute tools/bin/engine-fixture>
+    cleanup` under a 40-second context. The CI and Linux amd64 guards stay in the driver unchanged,
+    and fixtureHelperRequirements still pins their text. They are satisfied only inside this child,
+    by the variables above and by the uname stub, which prints Linux for -s and x86_64 for -m. So
+    the test runs the same on any Linux host, arm64 included, and never skips. A missing host tool
+    fails the test and names the tool. In the subtest host_guard_still_refuses, the stub prints
+    aarch64 instead. The driver must then exit nonzero with `requires an actual Linux amd64 host`,
+    with zero docker calls, which shows that the stub does not hide the guard. Every stub is a bash
+    script whose first line is `#!` and the host bash's absolute path, found with exec.LookPath, and
+    which uses only bash builtins, so it needs nothing from PATH. The docker stub's store is one
+    file, `store`, in the stub's own directory, a path baked into the script. It holds one
+    `<reference><TAB><id>` line for each present reference. References hold no tab or newline, so
+    they need no encoding. The stub skips `--config X` and `--host X`, and appends the remaining
+    arguments, joined by spaces, as one line to `log` beside the store. For `image inspect R`, it
+    reads the store with `while IFS=$'\t' read -r`. On a match it prints `[{"Id":"<id>"}]` and exits
+    0; otherwise it writes `Error response from daemon: No such image: R` and exits 1. For `image rm
+    R`, it reads the store into an array, rewrites the file with printf, leaving out R's line, and
+    exits 0. If an optional file `deny` beside the store holds one line equal to R, `image inspect
+    R` instead writes `permission denied while trying to connect to the Docker daemon socket` and
+    exits 1. Any other call is logged and exits 99. The curl and tar stubs log their arguments to
+    the same log, prefixed `curl ` or `tar `, and exit 99. The test writes the state directory
+    itself ($RUNNER_TEMP/T-20-4242-1-engine-fixture, 0700, files 0600). It holds owner
+    (`T-20-4242-1`, which today's ownership check requires), base.iid=B, registry.iid=G,
+    codex.repository (127.0.0.1:5000/itos-fixture-4242-1-codex), codex.tag (`<repository>:fixture`)
+    and codex.build.iid=C. B, G, C, D and X are five distinct `sha256:<64 lowercase hex>` values.
+    Before each run, the store holds the busybox pin (Id B), the registry pin (Id G), and a decoy
+    `<repository>:decoy` whose Id is also C, so only the record protects it. The subtests are
+    these. failed_after_tag: the store adds the tag with Id C. failed_after_cold_pull: codex.digest=D
+    is added, the store holds `<repository>@D` with Id C, and the tag is absent. In both, the driver
+    exits 0 and prints `engine-fixture cleanup: PASS`. The only `image rm` calls name exactly the
+    recorded references present. Each one is preceded by an `image inspect` of the same reference
+    that answered Id C, and followed by one that answered absent. The decoy, busybox and registry
+    entries remain, and curl, tar and every other docker call stay unused. mismatched_id: as
+    failed_after_tag, but the tag answers Id X, not C.
+
+    Five refusal subtests each tamper with one thing, so that a cleanup missing that one protection
+    would remove an image that answers its record. decoy_record: as failed_after_tag, but codex.tag
+    holds `<repository>:decoy`. foreign_repository: codex.repository holds
+    `127.0.0.1:5000/itos-fixture-4242-1`, codex.tag holds that repository's `:fixture`, and the
+    store holds that reference with Id C, not the codex tag. invalid_digest_record: as
+    failed_after_cold_pull, but codex.digest holds `sha256:short` and the store's
+    `<repository>@sha256:short` answers Id C. pinned_input_identity: as failed_after_tag, but
+    codex.build.iid holds B and the tag answers Id B. transport_error: as failed_after_tag, with
+    `deny` naming the tag. In mismatched_id and every refusal subtest, the driver exits nonzero, the
+    log holds no `image rm`, and the store's bytes equal those written before the run, so the
+    decoy, busybox and registry entries remain. Every diagnostic remove_codex_ref writes itself
+    begins `codex owned-reference `. stderr holds `engine-fixture: codex owned-reference identity`
+    in mismatched_id and `engine-fixture: codex owned-reference ` in the first four refusals. In
+    transport_error it holds inspect_image's `engine-fixture: image inspection: `.
+
+    The subtest archive_verify runs codex_archive_verify itself, with the host's PATH, through a
+    runner like runFixtureValidator: `bash -euo pipefail -c 'source "$1"; shift; "$@" || exit "$?"'
+    T-81 ../tools/lib/engine-fixture-checks.sh codex_archive_verify <archive> <sums> <context>` under a
+    5-second context. The `|| exit` gives the call the `||` context production gives it, where set -e
+    is off inside the function. So a comparison left without its `|| fail` lets the function run on,
+    and the case fails. In its own t.TempDir, Go writes each gzip tar with archive/tar and
+    compress/gzip, every member a regular file of mode 0755. Beside it goes a sums file in the
+    pinned two-line format, with hashes computed from that archive and its member. The context is a
+    fresh, empty t.TempDir. The cases are these. match: one member named
+    codex-x86_64-unknown-linux-musl holding `T-81 fake codex` and a newline, and matching sums. Exit
+    0, and the context then holds exactly one entry, `codex`, a regular file of mode 0555 whose
+    bytes equal the member's. archive_hash: the same archive, with line 1's hash replaced by another
+    valid one; stderr holds `engine-fixture: codex archive hash:`. member_hash: the same archive,
+    with line 2's hash replaced; stderr holds `engine-fixture: codex member hash:`. member_name: the
+    one member is named `codex`, and line 1 matches its archive; stderr holds `engine-fixture: codex
+    archive members:`. second_member: the pinned member plus a second regular file, `extra`, and line
+    1 matches; stderr holds `engine-fixture: codex archive members:`. Every case except match exits
+    nonzero and leaves the context with no entries.
+
+    The subtest order_guard is in the same test. It reads the real driver and runs
+    codexFixtureOrderIssues over it. That function uses fixtureFunction and fixtureWarmupLines and
+    requires the following. In codex_fixture, the download curl comes before the
+    codex_archive_verify call, which comes before the codex.repository write. The codex.repository
+    and codex.tag writes come before the `d image build` line. That line carries `--iidfile
+    "$state/codex.build.iid"` and `"$codex_context"`. The codex.digest write follows
+    `codex_digest=$(validate_manifest` and comes before both remove_codex_ref calls and the cold
+    pull. The validate_cached of codex-image.json follows the cold pull. In prepare, codex_fixture
+    lies between the two removals named above, and codex_handoff lies after the product warm-up and
+    before the output append, each once. In codex_handoff, its validate_cached comes before both
+    handoff writes, and the driver holds no other handoff write. Both remove_codex_ref lines are
+    present in cleanup. Every step line is guarded, the way fixtureGuardIssues checks prepare: after
+    `\`-continuations are joined and any ` # ` comment is cut, each trimmed line that starts with one
+    of the forms below must match `\|\| fail `, and each form must start at least one line. In
+    prepare: `codex_fixture "$port" "$fixture_uid" "$fixture_gid"` and `codex_handoff
+    "$fixture_uid" "$fixture_gid"`. In codex_fixture: `mkdir -- `, `curl --fail --location `,
+    `codex_archive_verify "$codex_download/codex-x86_64-unknown-linux-musl.tar.gz"
+    "$workspace/features/testdata/codex-fixture/SHA256SUMS" "$codex_context"`, `printf '%s\n'
+    "$codex_repository" >"$state/codex.repository"`, `printf '%s\n' "$codex_tag"
+    >"$state/codex.tag"`, `d image build `, `codex_built=$(cat "$state/codex.build.iid")`,
+    `codex_base=$(cat "$state/base.iid")`, `codex_registry=$(cat "$state/registry.iid")`,
+    `digest_valid "$codex_built"`, `d image push "$codex_tag"`, `d image save `, `tar -xOf `,
+    `codex_config_path=$(daemon_config_path `, `codex_config=$(daemon_config_digest `, `curl --fail
+    --silent `, `codex_digest=$(validate_manifest `, `printf '%s\n' "$codex_digest"
+    >"$state/codex.digest"`, `remove_codex_ref tag`, `remove_codex_ref digest`, `d image pull `, `d
+    image inspect ` and `validate_cached `. In codex_handoff: `codex_repository=$(cat `,
+    `codex_digest=$(cat `, `codex_built=$(cat `, `d image inspect `, `validate_cached `,
+    `printf '%s\n' "$codex_reference" >"$state/codex.reference"` and `printf '%s\n' "$codex_built"
+    >"$state/codex.iid"`. The unedited driver must give no issue. Each of these edits must change
+    the text and give at least one issue: codex.repository moved after the build; codex.tag moved
+    after the build; codex.digest moved after `remove_codex_ref tag`; codex.digest moved after the
+    cold pull; the --iidfile path renamed; a codex.reference write moved into codex_fixture before
+    the cold pull; the codex.iid write moved before codex_handoff's validate_cached; the
+    codex_handoff call moved before the codex_fixture call; and the codex_archive_verify call moved
+    after the `d image build` line. Four more edits each comment out one guard, by replacing the
+    first occurrence of the left text with the right: `SHA256SUMS" "$codex_context" || fail` with
+    `SHA256SUMS" "$codex_context" # || fail`; `d image push "$codex_tag" || fail` with `d image
+    push "$codex_tag" # || fail`; `>"$state/codex.iid" || fail` with `>"$state/codex.iid" # ||
+    fail`; and `codex_fixture "$port" "$fixture_uid" "$fixture_gid" || fail` with `codex_fixture
+    "$port" "$fixture_uid" "$fixture_gid" # || fail`. The driver must contain each left text once,
+    so the codex_archive_verify and codex_fixture calls each sit on one physical line. The guard
+    and its edits sit inside TestEngineFixtureCodexCleanup, so the check below runs them.
+
+    Documents and commits. features/testdata/codex-fixture/README.md records the asset URL, the API
+    digest, the measured sizes and hashes, and Codex's Apache-2.0 licence
+    (https://github.com/openai/codex/blob/rust-v0.167.0/LICENSE). It also says the image is
+    published only to the disposable runner-local registry. features/README.md gains one link to it
+    and changes one sentence to "Agents never invoke these modes against an engine or spoof CI,
+    outside the hermetic T-81 cleanup test, whose child sees only a recording fake docker." doc-caps
+    must still pass under the 49152-byte cap; shorten the addition rather than raise the cap. The
+    first commit is a `test` commit holding only the new test file or files. Against today's driver,
+    it fails at failed_after_tag's removal assertion (exit 0, no `image rm`), at the expected
+    failure of mismatched_id and of each refusal subtest (today's cleanup reads no codex record and
+    exits 0), at archive_verify's match case (codex_archive_verify is undefined, so bash
+    exits 127 and the context stays empty), and at order_guard's baseline (no codex_fixture). The
+    work commit adds the driver functions, codex_archive_verify in the checks library, the recipe,
+    SHA256SUMS and the two READMEs, and changes nothing under
+    .github/workflows, cmd or internal, so there is no proof.code range. Real-engine evidence is the
+    engine shards' prepare and cleanup steps in CI. Nothing here claims that evidence locally, and
+    agents never run prepare. The implementer may commit freely in its workspace. The host makes
+    the landing commits and handles itos, submission, publication and review. The check fails
+    today: `go test` reports no tests to run and prints no PASS line for the test.
+- id: T-82
+  type: build
+  title: Bump go.opentelemetry.io/otel to v1.47.0 for GO-2026-6974
+  why: >
+    govulncheck now reports GO-2026-6974 in go.opentelemetry.io/otel/trace v1.35.0, fixed in
+    v1.47.0. The module is indirect, through the Docker client, but govulncheck finds it reachable
+    from internal/slices/count/input/input.go:33 and internal/engine/session/docker/run.go:294, so
+    the vulnerability gate refuses every commit and push until it moves. The work raises
+    go.opentelemetry.io/otel, otel/trace and otel/metric to v1.47.0, and otelhttp and the other otel
+    modules to their matching releases where the minimum version selection needs them, then runs go
+    mod tidy. It changes no code; the gate and the dependency's users stay as they are.
+- id: T-83
+  type: docs
+  title: Record the open decision on what evidence lets recovery retire an uncertain create
+  why: >
+    Some sessions can never be finished by status or stop because a create's outcome is uncertain.
+    Cases: the daemon answered a container or network create with an error (an exhausted address
+    pool, for example); VolumeCreate was sent, its reply was lost, and later lookups keep finding no
+    volume; a controller died after sending a create. slice-27's two network creates per egress run
+    make these cases reachable, and nested checkouts then stay blocked. The item's notes say twice
+    that the rule is the person's security decision: a name-only miss, elapsed time and repeated
+    misses do not prove the create finished. This task writes the open decision record with the
+    options and one recommendation, and builds nothing. Recovery for these cases is proposed only
+    after the person answers. Broken down from p3-registration-before-intent.
+- id: T-84
+  type: ci
+  title: credentials-run-native.feature joins the offline engine shard whole, before slice-31 lands
+  why: >
+    slice-31's breakdown adds a new features/credentials-run-native.feature, and the agent that
+    implements it may not edit .github/workflows (docs/charter.md:163). The person approved on
+    2026-11-24 placing the whole file in the offline engine shard, so the placement lands on main
+    first, as T-77 did for credentials-run.feature and T-78 for claude-home.feature. The Engine
+    scenarios step on the last four green main runs took 69-96 s in offline, 36-56 s in egress,
+    106-128 s in lifecycle and 143-176 s in other, against the 180 s budget. -
+    .github/workflows/ci.yml: the offline include's features value adds
+    credentials-run-native.feature, on one line. - features/engine_shards_test.go: shardOfflineFiles
+    holds the same three names, sorted. - features/features_test.go: the file is not on this tree
+    yet, so pendingEngineFeatures gains credentials-run-native.feature -> slice-31 in offline,
+    beside the two existing entries. - features/engine_pending_test.go: controls cover the new entry
+    and refuse credentials-run-native.feature in egress and other. slice-31 removes its entry in its
+    own test commit once the file lands. - Decision 0024 gets a 'Credentials-run-native placement,
+    2026-11-24' subsection quoting those times and the person's approval, and features/README.md and
+    docs/architecture/arc42.md update their shard lists. No scenario, assertion or limit changes.
+    Run only the engine-free tests named in the check locally; CI runs the rest. Before the work,
+    the check exits 1 at its first grep.
+- id: T-85
+  type: test
+  title: The non-engine feature tier writes a timing record for every scenario row and every harness regression test
+  why: >
+    Without per-row and per-test durations nobody can tell which fixtures make up the roughly 300 s.
+    T-33's engineTiming collector (features/engine_timing_test.go) and its `engine scenario timing:`
+    records exist only when the engine tier is enabled (features/features_test.go:174, 475-495).
+    Extend the same record shape, or a sibling `scenario timing:` prefix, to the non-engine run of
+    TestFeatures. Add one record per top-level harness Go test in ./features. Durations, IDs and
+    outcomes only. Selection, assertions and output are otherwise unchanged.
+    TestEngineScenarioTiming's existing pins keep holding. Start files:
+    features/engine_timing_test.go, features/engine_timing_regression_test.go,
+    features/features_test.go. No fake engine is needed. Broken down from
+    p2-profile-non-engine-feature-suite.
+  done_when:
+    - run: go test ./features -run 'TestEngineScenarioTiming|TestNonEngineScenarioTiming'
+- id: T-86
+  type: docs
+  title: "Record the non-engine suite's measured profile: slowest scenario rows, harness tests and fixture setup, with their shares of wall time"
+  why: >
+    The cuts must target overhead that was actually measured, not guessed. Measure on the first
+    uncached run of a commit, without rerunning a suite that already ran there and without adding
+    -count=1 by default (the charter's CPU rule). Then record in features/README.md the top rows and
+    tests by duration, grouped by feature file and fixture. Name the repeated costs the records
+    show, such as product or probe binary builds and fixed sleeps, each with its measured seconds.
+    Plain English, dated, labelled as measurement and not as a support claim. If no candidate
+    overhead shows up, say so, and the cut children close as not needed. Broken down from
+    p2-profile-non-engine-feature-suite.
+  done_when:
+    - run: grep -q '^## Non-engine suite profile' features/README.md
+- id: T-87
+  type: perf
+  title: Fixtures in the non-engine tier build each product or probe binary once per suite run, not once per fixture or row
+  why: >
+    The idea suspects redundant fixture builds. About 40 fixture files under features/ build or exec
+    their own binaries. Take this only for the builds the recorded profile names. Route them through
+    one memoised build per suite run, keyed by the same inputs, so that every scenario row,
+    assertion and cleanup is unchanged and per-scenario coverage routing (ITOS_CC_TEST_COVERDIR) is
+    kept. Commit a regression red first that counts builds per run. Wall time before and after goes
+    in the PR, from timing records. Broken down from p2-profile-non-engine-feature-suite.
+  done_when:
+    - run: go test ./features -run 'TestNonEngineFixtureBuildsOnce'
+- id: T-88
+  type: perf
+  title: Recovery and lifecycle fixtures wait on observed readiness instead of fixed sleeps, wherever the profile shows the sleep dominating a row
+  why: >
+    The idea names fixed waits in the recovery and lifecycle fixtures as the other suspected cost.
+    Many time.Sleep calls sit in lifecycle_*, recovery_* and overlap fixtures. Replace only the
+    sleeps the recorded profile names with a wait on the event the sleep stands in for, under the
+    same upper bound. A sleep that is itself the behaviour under test stays, such as grace windows
+    or fixed SIGKILL timing (decision 0009). The regression is committed red first and fails when a
+    listed fixture blocks for a fixed interval with readiness already observed. All assertions and
+    timing contracts stay unchanged. Broken down from p2-profile-non-engine-feature-suite.
+  done_when:
+    - run: go test ./features -run 'TestRecoveryLifecycleFixturesWaitOnReadiness'
+- id: T-89
+  type: ci
+  title: The push review gate waits on Codex alone while Cursor Bugbot reviews are paused
+  why: >
+    The person paused Cursor Bugbot reviews on 2026-11-24 for a couple of days, Codex only.
+    push.pr.review_by in itos.yaml names cursor alone (since T-67), so with Bugbot off itos push
+    --ready would wait on a review that never comes. review_by names chatgpt-codex-connector again,
+    Codex stays in reviewers so it is still asked, and the cursor bugbot reviewer is no longer
+    asked. A comment beside the setting says the change is temporary, until about 2026-11-27, when
+    review_by goes back to cursor and the bugbot reviewer returns. Nothing else in the push or proof
+    config changes. Start file: itos.yaml (the push block); model: 08dd3b2, the T-67 change it
+    reverses for now.
+- id: T-90
+  type: ci
+  title: Move to itos 8.49.0
+  why: >
+    itos 8.49.0 is out, and the pinned 8.46.4 now refuses commits until the project moves to it
+    (itos commit: 'itos 8.49.0 is out (this repository pins 8.46.4) ... itos upgrade moves this
+    repository to it'). Move the project the way T-22 moved it to 8.46.4: run itos upgrade 8.49.0,
+    which edits only what each release between them fixes exactly (itos.yaml's pin version and
+    checksums, the install script's version and sums, and any config key a release renames or
+    removes), and read each release's breaking changes and Upgrading footers it prints. Move the
+    workflows' itos action pins with it: donvargax/itos at the v8.49.0 commit in
+    .github/workflows/ci.yml and release.yml. Nothing else changes; a release note asking for more
+    is reported, not done here.
+- id: T-91
+  type: docs
+  title: Real-engine red evidence may be recorded in CI at landing, on the published red commit
+  why: >
+    AGENTS.md:20-25 and features/README.md's 'Manual red-first evidence' (steps 1-3, about lines
+    520-541) make the implementer stop after the step commit so that the coordinator dispatches
+    red_scenarios before any runtime work. The coordinating loop now records that red at landing
+    instead: it publishes a red commit, the item's base plus its tests and any stubs the red tree
+    needs to build, and dispatches red_scenarios for the engine scenarios on that commit before the
+    fix commit is published. That run is the same red evidence, failing at each scenario's behavior
+    assertion before the implementation exists, and it replaces the separate stop. Change the
+    wording so both are accepted: AGENTS.md's red-first line says real-engine red is recorded in CI,
+    either at a stop after the step commit or at landing on the published red commit, before the fix
+    commit is published. README's manual procedure keeps the dispatch command and the rules for what
+    counts as red proof (the failing Then, never infrastructure, setup or undefined-step failures,
+    never a passing run, never a merge or closure prerequisite), and says the implementer stops for
+    it only when nothing records red at landing. Nothing else in either file changes. Decided by the
+    coordinator on 2026-11-25.
+- id: T-92
+  type: ci
+  title: A red_scenarios dispatch uploads a per-scenario results report from each job that runs scenarios
+  why: >
+    Run 45557542073's red evidence could be read only from the job logs: it uploaded no artifact,
+    and godog prints only its pretty format to stdout (features/features_test.go:92-94). A reader
+    cannot tell per scenario and outline row which step failed, and the coordinating loop cannot
+    check red evidence from a report. When the harness runs in the red dispatch context, the one
+    where it already reads ITOS_CONTAINER_RED_SCENARIOS (CI, GitHub Actions and workflow_dispatch
+    established, features/features_test.go:135 and README 'Manual red-first evidence'), it also
+    writes godog's cucumber JSON report for the scenarios it ran to a file the workflow names. Each
+    engine shard and the manual macOS and Windows Tests jobs then upload that file with
+    actions/upload-artifact, pinned to a full commit SHA like the workflow's other actions, under a
+    name that says the job and shard. The step runs on success or failure, only for
+    workflow_dispatch with a nonempty red_scenarios. Pretty output to the log stays as it is.
+    Nothing changes for PR, push or local runs, and the report holds only scenario names, tags,
+    steps, statuses and error text, never environment or engine data beyond what the log already
+    prints. features/engine_workflow_test.go's pins and README's manual procedure describe the new
+    step. Decided by the coordinator on 2026-11-25.
+- id: T-93
+  type: test
+  title: A step that hits a harness failure fails at that step, so a report never shows it as the first Then's failure
+  why: >
+    In run 45557542073 the native exec When steps stored their action's error in the world and
+    returned nothing, and each first Then returned that stored error first, so godog marked the Then
+    failed for 'controller exited 2 before the barrier' (exec_native_steps_test.go and
+    exec_native_fixture_test.go on slice-38's branch, which say 'A process exit or missing barrier
+    is an observation for Then'). A report then cannot tell a harness failure from a behavior
+    assertion, and red evidence needs that difference. The rule: a Given or When that cannot finish
+    its own setup or action, a fixture that fails, a barrier or readiness that is never reached, a
+    timeout or an engine call that errors, returns that error itself, so the report marks that step
+    failed and later steps skipped. A step keeps for a Then only what the product was observed to
+    do: its exit status, streams, receipts and records, including a refusal or an early exit that
+    the scenario's Then asserts. Write a harness regression test, TestHarnessFailureFailsAtItsStep,
+    that runs a small godog fixture through the cucumber formatter and shows both cases: a When
+    whose barrier is never reached is reported failed at the When with its Then skipped, and a When
+    whose process exits with a refusal is reported passed, with the Then asserting the refusal. Then
+    apply the rule to the native step definitions on main that stash an action error for a later
+    Then, keeping every scenario's meaning, tags and assertions. Report each file changed.
+    slice-38's exec steps are not on main; its re-take follows the same rule. Decided by the
+    coordinator on 2026-11-25.
+- id: T-94
+  type: docs
+  title: PLAN.md, README and the orchestration docs stop saying proxy egress is outside the scope
+  why: >
+    Blocks the charter's milestone two, step 1 (egress through an allowlisting proxy). The charter
+    (ef653e7, 2026-11-09) says to specify and start it, but PLAN.md's milestone limits ("Proxy
+    egress, credentials/accounts, Git over the network... remain outside this milestone"),
+    README.md:38 and docs/ORCHESTRATING.md:12 still say it is deferred or unauthorized. AGENTS.md
+    sends every agent to the charter and then PLAN.md, so each drafter and reviewer of T-38 and
+    slice-25 to slice-28 meets two authorities that disagree, and may stop or refuse. Update PLAN.md
+    (current state, order of work, milestone limits), README and ORCHESTRATING to match the charter:
+    milestone two's steps in the charter's order, egress first and the rest when reached, while LAN
+    ingress, Compose, other platforms and the Docker socket stay out. Do not touch the charter.
+    Leave the 'deferred' headers in docs/CONFIG.md and docs/CLI.md to slice-25, which edits those
+    files for the allowlist field. Leave arc42's deferral text to T-38's decision record, per the
+    charter's architecture rule. AGENTS.md's opening paragraph is also stale ("container commands
+    and isolation are not implemented yet", v0.1.0 is published), but whether to edit AGENTS.md is
+    the person's. Documentation only: it touches no proof.code path. This item is already a
+    documentation-only edit of docs/ORCHESTRATING.md, whose empty 'Lessons' section is the
+    repository's place for this. Add one lesson there: a docs task whose checks read documents
+    declares `prose: true` on each such check, because on a prose-only range CI leaves out any other
+    late check and `itos work done` never runs one. Evidence: the T-38 spec review's P1 (itos
+    8.46.4); T-26 and T-6 had the same gap. Give it the section's required fields (recorded date,
+    last-seen date, and permanent status or the exit item). Its exit is the upstream itos fix, so
+    say that. The lesson is measured, not invented. It touches no proof.code path and is too small
+    to be its own item. The item already edits PLAN.md, README.md and docs/ORCHESTRATING.md to match
+    the charter's milestone two. Its text covers egress first and 'the rest when reached', but its
+    why and title name only egress. Widen it so the milestone-limits sentence 'credentials/accounts,
+    Git over the network... remain outside this milestone' is also replaced by the charter's steps 2
+    to 4 in order. The charter is not touched. Drafters of slice-29 to slice-33 and T-48 would
+    otherwise meet two disagreeing authorities, as T-38's did.

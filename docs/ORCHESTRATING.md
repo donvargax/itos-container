@@ -7,22 +7,26 @@
 - Read [the charter](charter.md) first, then [PLAN.md](../PLAN.md), including its
   [milestone limits](../PLAN.md#milestone-limits), the binding
   [pilot contract](plans/container-pilot.md), [AGENTS.md](../AGENTS.md) and the actual
-  [itos.yaml](../itos.yaml). The charter selects foundation, configuration/doctor/approval,
-  then the offline owned-run milestone. The broader pilot authorizes no later slice here.
-- Linux amd64 with native Docker is a target requiring runtime evidence. Egress, credentials,
-  network Git, LAN ingress, Compose and other container hosts stay deferred. Send open security
-  decisions to the person; a brief cannot settle them. Assume hostile checkout code: hooks
-  and agent instructions are workflow safeguards, not isolation.
-- This is one project on `main` and work branches. [cmd/itos-container/main.go](../cmd/itos-container/main.go)
-  exposes count, version and completion; [features/README.md](../features/README.md) documents
-  the godog runner. The planned `itos container` commands and isolation are unimplemented.
-- [CI](../.github/workflows/ci.yml) has no stack/feature branch filters. T-25 enables
-  [releases](../.github/workflows/release.yml) only when `ci`, `engine` and automatic Linux
-  `platform` all succeed at the pushed `main` SHA. Manual macOS/Windows jobs are not
-  prerequisites; pull requests and manual dispatch never publish. The five archives are
-  distribution targets, not container-host support. Before the first real tag, require
-  the [version/notes dry run](upgrading.md#binary-releases-t-25), then verify the pushed
-  main run and assets. Preserve the helpers' itos-template/itos attribution.
+  [itos.yaml](../itos.yaml). The charter selects the offline owned run, then egress through
+  an allowlisting proxy, passed-in credentials, a harness home, interactive use and
+  unreachable late host sockets.
+- Linux amd64 with native Docker is the target. Support claims require passing runtime
+  scenarios. LAN ingress, Compose, other container platforms and worker access to the
+  Docker socket are deferred. The person settles open security decisions. Assume hostile
+  checkout code. Hooks and agent instructions are workflow safeguards. Isolation relies
+  on container controls.
+- One project on `main` and work branches. [The entry point](../cmd/itos-container/main.go)
+  dispatches `doctor`, `approve`, `run`, `status` and `stop` alongside `count`, `version`
+  and `completion`. [The scenario guide](../features/README.md) covers the godog runner.
+- Each item reaches `main` through one pull request (itos.yaml's `push`): a draft, which
+  runs no CI job, until the loop marks it ready, then merged once its checks pass and
+  Cursor Bugbot has reviewed it; Codex is still asked, best effort. Docs-only commits
+  outside `features/` go straight to `main`. The loop makes every push.
+- [CI](../.github/workflows/ci.yml) runs on ready pull requests, pushes to `main` and manual
+  dispatch; macOS/Windows jobs run only on dispatch. [Releases](../.github/workflows/release.yml)
+  need `ci`, `engine` and Linux `platform` green at the pushed `main` SHA; pull requests
+  and dispatch never publish. The five archives are distribution targets, not
+  container-host support.
 - Preserve the counting example's standard-library Unicode whitespace and logical lines;
   its additive property uses newline-terminated pieces, not arbitrary concatenation.
   Preserve attribution to donvargax and infrastructure provenance from itos and itos-template
@@ -32,19 +36,14 @@
 ## Inspect and brief
 
 - Inspect with `itos work`, `itos work show <id>` and [tasks/phase-1.yaml](../tasks/phase-1.yaml).
-  `itos task` executes checks; it is not a read-only viewer and may run expensive or
-  state-writing measurements. T-8's completion checks included a full mutation measurement.
-  T-8 is done and those checks were removed on closure: read its ledger `why`, commit history
-  and [foundation report](proof/T-8-foundation-baseline.md) for original checks, results and
-  environment. Do not infer commands from an empty `done_when`, reopen it or
-  run a measurement merely to draft a brief.
+  `itos task` executes checks that may be expensive or write state. When drafting a brief,
+  do not infer commands from a closed task's empty `done_when`, reopen it or run a measurement.
 - Read `itos guide work` and `itos guide commit`; use `itos guide brief` for the handoff.
   Resolve all placeholders before handing off. Name the item, drafter or implementer
   role, ledger type, spec path, allowed edit paths, exact checks and neighbouring checks,
   required proof and commit type/footer.
 - Non-behaviour tasks follow the ledger's `why` and `done_when`, without inventing scenarios
-  or step definitions. T-8 is a historical test task example: its generated proof procedure
-  was superseded by T-13. T-9 is a docs task: only this file, cheap
+  or step definitions. T-9 is a docs task: only this file, cheap
   documentation checks, `docs` with `Item: T-9`, no mutation measurement.
 - Behaviour briefs require specified black-box scenarios. Commit their step definitions
   red first in a `test` commit while scenarios remain `@wip`. With `@wip` removed for the run,
@@ -86,3 +85,9 @@ container-host support. Docs-only work fabricates no mutation results.
 
 Keep at most ten lessons, each with recorded date, last-seen date and exit item or permanent
 status. Report tool gaps to the coordinator for upstream follow-up; invent no lesson or issue.
+
+- Set `prose: true` on each docs task check that reads documents. On ranges matching
+  `ci.prose.paths`, CI keeps only static checks and those marked `prose: true`.
+  `itos work done` runs no late check. Recorded 2026-11-25. Last seen 2026-11-09 in
+  T-38's spec review (itos 8.46.4, also T-26 and T-6). Exits with the upstream itos
+  fix, which no registry item holds.

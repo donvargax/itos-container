@@ -89,6 +89,12 @@ func (w *world) egressNativeWorld() (*egressNative, error) {
 // checkout and state, a synthetic approval written from independent canonical
 // data, and the worker probe. It asks the product for nothing.
 func (w *world) egressNativeCheckout(spellings, canonical []string) error {
+	return w.egressNativeCheckoutHome(spellings, canonical, false)
+}
+
+// egressNativeCheckoutHome also requests, and approves, a volume home with the
+// OpenCode harness when asked.
+func (w *world) egressNativeCheckoutHome(spellings, canonical []string, harness bool) error {
 	if err := doctorRealGuard(); err != nil {
 		return err
 	}
@@ -105,7 +111,12 @@ func (w *world) egressNativeCheckout(spellings, canonical []string) error {
 	d.engine.info["ID"], d.engine.image["Id"] = d.engineID, d.imageID
 	d.env["DOCKER_HOST"] = "unix://" + socket
 	w.approval = &approvalWorld{uid: strconv.Itoa(os.Geteuid()), gid: strconv.Itoa(os.Getegid()), policyVersion: 2, allow: canonical}
-	if err = os.WriteFile(filepath.Join(d.checkout, "itos-container.yaml"), []byte(egressAllowlistPolicy(spellings, "")), 0600); err != nil {
+	policy := egressAllowlistPolicy(spellings, "")
+	if harness {
+		policy += "home: {storage: volume, harnesses: [opencode]}\n"
+		w.approval.home = openCodeHome(true)
+	}
+	if err = os.WriteFile(filepath.Join(d.checkout, "itos-container.yaml"), []byte(policy), 0600); err != nil {
 		return err
 	}
 	if err = w.approvalSeed("1", false); err != nil {

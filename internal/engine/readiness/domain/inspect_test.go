@@ -38,12 +38,31 @@ func fixture() (Inspector, port.Input, *porttest.Engine, *porttest.Checkout) {
 
 func TestInspectSnapshot(t *testing.T) {
 	i, input, e, c := fixture()
+	e.Session.DeadlineValue = time.Date(2030, time.January, 2, 3, 4, 5, 0, time.UTC)
 	result := i.Inspect(input)
 	if !result.Ready || len(result.Issues) != 0 || *result.Checkout != c.Identity || result.Engine.ID != "engine-A" || result.Engine.Architecture != "amd64" || result.Image.Reference != porttest.Reference || !result.Manifest.Metadata.Checked || *result.Manifest.Metadata.Present {
 		t.Fatalf("snapshot = %#v", result)
 	}
 	if c.Opened || !e.Session.Closed || e.Budget != 5*time.Second || e.Selection != input.Host || e.Root != input.Root || e.Session.InfoReads != 2 || !reflect.DeepEqual(e.Session.ImageReads, []string{porttest.Reference}) {
 		t.Fatalf("capability lifecycle = %#v, %#v, %#v", c, e, e.Session)
+	}
+	if result.EngineDeadline != e.Session.DeadlineValue {
+		t.Fatalf("engine deadline = %v, want the session deadline %v", result.EngineDeadline, e.Session.DeadlineValue)
+	}
+}
+
+func TestImageRefusalRetainsTheEngineInspectionDeadline(t *testing.T) {
+	i, input, engine, _ := fixture()
+	deadline := time.Date(2030, time.January, 2, 3, 4, 5, 0, time.UTC)
+	engine.Session.DeadlineValue = deadline
+	delete(engine.Session.Images, porttest.Reference)
+
+	got := i.Inspect(input)
+	if got.Engine == nil || got.Ready || len(got.Issues) != 1 || got.Issues[0].Kind != port.ImageMissing {
+		t.Fatalf("expected a validated engine with a missing image, got %#v", got)
+	}
+	if got.EngineDeadline != deadline {
+		t.Fatalf("engine deadline = %v, want %v for the follow-up inspection", got.EngineDeadline, deadline)
 	}
 }
 
@@ -292,5 +311,62 @@ func TestLocalCheckpointRetainsPinAndCanRefuseEngine(t *testing.T) {
 		if !accept && (engine.Selection != "" || engine.Session.InfoReads != 0) {
 			t.Fatal("refused checkpoint contacted engine")
 		}
+	}
+}
+
+type admittingObserver struct{}
+
+func (admittingObserver) Boundary() port.CredentialResult { return port.CredentialResult{} }
+func (admittingObserver) Inspect([]policy.Credential) port.CredentialResult {
+	return port.CredentialResult{}
+}
+
+func codexFixture() (Inspector, port.Input, *porttest.Engine, *manifestfake.Files) {
+	i, input, e, _ := fixture()
+	i.Policy = &policyfake.Source{Value: policy.Value{Kind: policy.Object, Fields: map[string]policy.Value{
+		"version": {Kind: policy.Number, Number: policy.Decimal{Coefficient: "1", Exponent: "0"}}, "manifest": {Kind: policy.String, Text: "worker.json"},
+		"home": {Kind: policy.Object, Fields: map[string]policy.Value{"storage": {Kind: policy.String, Text: "volume"}, "harness": {Kind: policy.String, Text: "codex"}}},
+	}}}
+	files := i.Files.(*manifestfake.Files)
+	return i, input, e, files
+}
+
+func TestRunRefusesACodexHarnessBeforeTheManifestAndTheEngine(t *testing.T) {
+	i, input, engine, files := codexFixture()
+	got := i.Inspect(input)
+	want := []policy.Issue{{Kind: policy.HomeHarnessGated, Path: []string{"home", "harness"}, Version: 1}}
+	if got.Ready || got.Policy == nil || got.Policy.Policy != nil || !reflect.DeepEqual(got.Policy.Issues, want) || got.Manifest != nil || len(files.Reads) != 0 || engine.Opens != 0 {
+		t.Fatalf("run was not gated: %#v, reads %v, opens %d", got, files.Reads, engine.Opens)
+	}
+	// A version 3 file keeps its own refusal ahead of the Codex gate.
+	i.Policy = &policyfake.Source{Value: policy.Value{Kind: policy.Object, Fields: map[string]policy.Value{
+		"version": {Kind: policy.Number, Number: policy.Decimal{Coefficient: "3", Exponent: "0"}}, "manifest": {Kind: policy.String, Text: "worker.json"},
+		"home": {Kind: policy.Object, Fields: map[string]policy.Value{"storage": {Kind: policy.String, Text: "volume"}, "harness": {Kind: policy.String, Text: "codex"}}},
+	}}}
+	got = i.Inspect(input)
+	if got.Policy == nil || !reflect.DeepEqual(got.Policy.Issues, []policy.Issue{{Kind: policy.Version, Path: []string{"version"}, Version: 3}}) {
+		t.Fatalf("version 3 gate lost: %#v", got.Policy)
+	}
+	// A request without the harness is not gated.
+	i, input, _, _ = fixture()
+	if got = i.Inspect(input); !got.Ready {
+		t.Fatalf("a request without the harness is gated: %#v", got)
+	}
+}
+
+func TestInspectionAndApprovalReadACodexHarnessAndReserveItsName(t *testing.T) {
+	i, input, _, _ := codexFixture()
+	i.AllowVersion3 = true
+	i.Sources = admittingObserver{}
+	i.Parser = &manifestfake.Parser{Value: manifest.Value{Kind: manifest.Object, Fields: map[string]manifest.Value{
+		"image": {Kind: manifest.String, Text: porttest.Reference}, "containerUser": {Kind: manifest.String, Text: "1000"}, "remoteUser": {Kind: manifest.String, Text: "1000"},
+		"containerEnv": {Kind: manifest.Object, Fields: map[string]manifest.Value{"Codex_Home": {Kind: manifest.String, Text: "/x"}}},
+	}}}
+	got := i.Inspect(input)
+	if got.Policy == nil || got.Policy.Policy == nil || got.Policy.Policy.Home.Harness != "codex" || len(got.Policy.Issues) != 0 {
+		t.Fatalf("doctor did not read the harness: %#v", got.Policy)
+	}
+	if got.Ready || got.Manifest == nil || !reflect.DeepEqual(got.Manifest.Issues, []manifest.Issue{{Kind: manifest.Reserved, Path: []string{"containerEnv", "Codex_Home"}}}) {
+		t.Fatalf("CODEX_HOME is not reserved: %#v", got.Manifest)
 	}
 }

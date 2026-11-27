@@ -37,6 +37,10 @@ type homeSDKFixture struct {
 	anchors  map[string]volume.Volume
 	streams  map[string]net.Conn
 	created  []container.InspectResponse
+	// imageEnv adds synthetic image defaults and inspected records every worker
+	// inspection reply, as altered by the launch fixture's defect.
+	imageEnv  []string
+	inspected []container.InspectResponse
 }
 type homeSDKReadiness struct{ a *homeSDKFixture }
 
@@ -112,7 +116,7 @@ func (a *homeSDKFixture) serve(w http.ResponseWriter, r *http.Request) {
 	case path == "/info":
 		write(map[string]string{"ID": f.engine.DaemonID})
 	case strings.HasPrefix(path, "/images/"):
-		write(map[string]any{"Id": f.m.b.ImageID, "Config": map[string]any{"Env": []string{"HOME=/image-home", "TMPDIR=/image-temp", "XDG_CONFIG_HOME=/image-config", "XDG_DATA_HOME=/image-data", "XDG_STATE_HOME=/image-state", "XDG_CACHE_HOME=/image-cache"}}})
+		write(map[string]any{"Id": f.m.b.ImageID, "Config": map[string]any{"Env": append([]string{"HOME=/image-home", "TMPDIR=/image-temp", "XDG_CONFIG_HOME=/image-config", "XDG_DATA_HOME=/image-data", "XDG_STATE_HOME=/image-state", "XDG_CACHE_HOME=/image-cache"}, a.imageEnv...)}})
 	case path == "/volumes/create":
 		var v volume.Volume
 		var body struct {
@@ -234,6 +238,7 @@ func (a *homeSDKFixture) serve(w http.ResponseWriter, r *http.Request) {
 			if f.boundary != "" {
 				homeSDKDefect(&observed, f.boundary)
 			}
+			a.inspected = append(a.inspected, observed)
 			write(observed)
 		case "archive":
 			name := f.engine.Workers[id]
@@ -357,6 +362,8 @@ func homeSDKDefect(v *container.InspectResponse, defect string) {
 		v.Config.Env = append(v.Config.Env, "TMPDIR=/home/itos")
 	case "another unapproved mount":
 		v.Mounts = append(v.Mounts, container.MountPoint{Type: mount.TypeVolume, Name: "foreign", Destination: "/foreign", RW: true})
+	default:
+		openCodeInspectionDefect(v, defect)
 	}
 }
 

@@ -89,6 +89,9 @@ type CatalogEngine interface {
 
 // Session exposes only inspection; there is no acquisition or mutation method.
 type Session interface {
+	// Deadline returns the deadline of the context used for requests, or zero
+	// if it has none. Reading it does not renew the inspection budget.
+	Deadline() time.Time
 	Endpoint() string
 	Version() (Version, Failure)
 	Info() (Info, Failure)
@@ -137,6 +140,9 @@ type Result struct {
 	Issues      []Issue
 	Ready       bool
 	Credentials *CredentialResult
+
+	// EngineDeadline also bounds doctor observations that follow engine readiness.
+	EngineDeadline time.Time
 }
 
 // ContextEngine separates establishment from the retained inspection lifetime.

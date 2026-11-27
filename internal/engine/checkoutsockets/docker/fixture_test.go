@@ -105,7 +105,12 @@ type pin struct {
 	arrived chan struct{}
 }
 
-func (p *pin) Endpoint() string                    { return p.endpoint }
+func (p *pin) Endpoint() string { return p.endpoint }
+func (p *pin) Deadline() time.Time {
+	deadline, _ := p.lifetime.Deadline()
+	return deadline
+}
+
 func (p *pin) Image(string) (rp.Image, rp.Failure) { return rp.Image{}, rp.ImageInspect }
 func (p *pin) Unchanged() bool                     { return !p.changed.Load() }
 func (p *pin) Close()                              { p.closes.Add(1) }
@@ -145,6 +150,11 @@ func (p *pin) ForContext(ctx context.Context) rp.Session { return view{p, ctx} }
 type view struct {
 	*pin
 	ctx context.Context
+}
+
+func (v view) Deadline() time.Time {
+	deadline, _ := v.ctx.Deadline()
+	return deadline
 }
 
 func (v view) Version() (rp.Version, rp.Failure) { return v.versionOn(v.ctx) }

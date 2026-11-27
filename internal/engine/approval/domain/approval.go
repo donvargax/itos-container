@@ -75,7 +75,12 @@ type Service struct {
 
 // Inspect is read-only, including when host state is absent.
 func (s Service) Inspect() port.View {
-	v := port.View{Inspection: s.Readiness.Inspect(), Status: "missing"}
+	return s.InspectReadiness(s.Readiness.Inspect())
+}
+
+// InspectReadiness reads approval state for an existing readiness inspection.
+func (s Service) InspectReadiness(result readiness.Result) port.View {
+	v := port.View{Inspection: result, Status: "missing"}
 	if !v.Inspection.Ready {
 		if v.Inspection.Credentials != nil {
 			for _, issue := range v.Inspection.Credentials.Issues {

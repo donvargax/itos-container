@@ -50,10 +50,12 @@ type egressNativeRun struct {
 	stdout, stderr offlineBuffer
 	exit           int
 	started        bool
+	waitErr        error
 	timedOut       bool
 	reached        map[string]bool
 	observed       map[string]*egressObserved
 	attached       []string // the harness's own extra attachments, recorded apart
+	argv           []string // the workload when it is not the egress probe
 	report         egressProbeReport
 	remaining      []string
 	snapshotPath   string
@@ -67,8 +69,7 @@ func (n *egressNative) newRun(steps []egressStep, exit int) *egressNativeRun {
 	return run
 }
 
-// start launches the product. A refusal, a missing behaviour or a timeout is
-// captured for Then; only a harness fault is an error of the step itself.
+// start launches the product and preserves its exit status for assertions.
 func (run *egressNativeRun) start() error {
 	w := run.n.w
 	checkout := w.doctor.checkout
@@ -81,7 +82,11 @@ func (run *egressNativeRun) start() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 	run.cancel = cancel
-	run.cmd = exec.CommandContext(ctx, w.bin, "run", "--", "/workspace/slice-27-probe", "/workspace/slice-27-plan.json")
+	argv := []string{"run", "--", "/workspace/slice-27-probe", "/workspace/slice-27-plan.json"}
+	if run.argv != nil {
+		argv = append([]string{"run", "--"}, run.argv...)
+	}
+	run.cmd = exec.CommandContext(ctx, w.bin, argv...)
 	run.cmd.Dir, run.cmd.Env = checkout, setEnv(w.env(), "ITOS_ROOT", checkout)
 	run.cmd.Stdout, run.cmd.Stderr = &run.stdout, &run.stderr
 	run.cmd.WaitDelay = 5 * time.Second
@@ -91,7 +96,14 @@ func (run *egressNativeRun) start() error {
 	}
 	run.started, run.snapshotPath = true, w.runSnapshotPath()
 	go func() {
-		_ = run.cmd.Wait()
+		err := run.cmd.Wait()
+		var exited *exec.ExitError
+		if err != nil && !errors.As(err, &exited) {
+			run.waitErr = err
+		}
+		if ctx.Err() != nil {
+			run.waitErr = errors.Join(run.waitErr, ctx.Err())
+		}
 		close(run.done)
 	}()
 	return nil
@@ -207,8 +219,10 @@ func (run *egressNativeRun) finish(limit time.Duration) {
 	case <-run.done:
 	case <-time.After(limit):
 		run.timedOut = true
+		run.err = errors.Join(run.err, errors.New("egress product exceeded the fixture deadline"))
 		run.stop()
 	}
+	run.err = errors.Join(run.err, run.waitErr)
 	run.cancel()
 	if state := run.cmd.ProcessState; state != nil {
 		run.exit = state.ExitCode()
@@ -255,15 +269,21 @@ func (n *egressNative) driveRun(run *egressNativeRun) (*egressNativeRun, error) 
 	if err := run.start(); err != nil {
 		return run, err
 	}
-	if run.await("attach", 150*time.Second) {
-		run.observe("attach")
-		run.attach(run.observed["attach"])
-		if err := run.release("attach"); err != nil {
-			return run, err
-		}
+	if !run.await("attach", 150*time.Second) {
+		return run, run.missingBarrier("attach")
+	}
+	run.observe("attach")
+	run.attach(run.observed["attach"])
+	if err := run.release("attach"); err != nil {
+		return run, err
 	}
 	run.finish(3 * time.Minute)
-	return run, nil
+	return run, errors.Join(run.err, run.observed["attach"].err)
+}
+
+func (run *egressNativeRun) missingBarrier(name string) error {
+	run.finish(10 * time.Second)
+	return errors.Join(run.err, fmt.Errorf("worker did not reach egress barrier %q: %s", name, run.describe()))
 }
 
 func (n *egressNative) last() (*egressNativeRun, error) {

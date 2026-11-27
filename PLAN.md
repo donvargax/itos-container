@@ -2,7 +2,7 @@
 
 Read [docs/charter.md](docs/charter.md) first: it selects the scope this project may build
 from the binding [pilot contract](docs/plans/container-pilot.md). Those documents are
-authoritative; this plan describes the selected milestone and the work still needed.
+authoritative. This plan describes the selected milestones and the work still needed.
 
 `itos-container` is being built as the `itos container` extension to run a coding agent
 and every tool it executes inside a local container sandbox for one checkout. Core itos
@@ -10,10 +10,13 @@ retains work routing, commit rules and CI proof.
 
 ## Current state
 
-The repository has an inherited Go counting CLI, its domain-owned Files port, disk and
+v0.1.0 has been published. The entry point dispatches `doctor`, `approve`, `run`,
+`status` and `stop`, alongside `count`, `version` and `completion`. Sandbox claims
+are limited to what the scenarios prove. See the work registry (`itos work`) for
+which second-milestone items have landed.
+
+The inherited Go counting example retains its domain-owned Files port, disk and
 standard-input adapters, in-memory fake, unit/property tests and black-box scenarios.
-The entry point exposes count, version and completion. Container commands and isolation
-are not implemented yet; the counting example is no evidence of a sandbox.
 
 T-3 completed the itos 8 workflow migration and T-4 upgraded the pinned itos-cc. These
 are tool migrations, not completion of the foundation or sandbox. The inherited Go
@@ -21,6 +24,8 @@ checks and release tooling cover multiple platforms, not container-host support.
 cached mutation sample had zero eligible records; it did not establish a fresh baseline.
 
 ## Order of work
+
+### First milestone: an offline owned run
 
 1. **Project foundation:** complete project-specific guidance, adapt `docs/CLI.md` and
    `docs/CONFIG.md` to the planned extension and `itos-container.yaml`, comparing the
@@ -38,6 +43,16 @@ cached mutation sample had zero eligible records; it did not establish a fresh b
    preserving checkout edits and project state. Each property needs a black-box scenario
    that fails without it and passes with it before the milestone can be called complete.
 
+### Second milestone: a coding agent inside the sandbox
+
+1. [Egress through an allowlisting proxy][second-milestone].
+2. [Credentials passed in, never injected, never in the checkout][second-milestone].
+3. [A home for the harness][second-milestone].
+4. [Interactive use][second-milestone].
+5. [Late host sockets unreachable][second-milestone].
+
+[second-milestone]: docs/charter.md#the-second-milestone-a-coding-agent-inside-the-sandbox
+
 Foundation work has named task checks. Behaviour work starts with scenarios and red step
 commits. Domain tests use an engine fake; scenarios needing a real engine run only in CI.
 Agents never receive the Docker socket. Agents commit their work; the coordinating loop
@@ -46,10 +61,10 @@ required proof passes.
 
 ## Milestone limits
 
-The first milestone targets Linux amd64 with native Docker. Even that combination has no
-support claim until passing runtime evidence exists. Proxy egress, credentials/accounts,
-Git over the network, LAN ingress, Compose services and other platforms remain outside
-this milestone. The broader pilot contract does not authorize building them here yet.
+The milestones target Linux amd64 with native Docker. Support claims require passing
+runtime scenarios. The charter's deferred scope includes LAN ingress, Compose services,
+other container platforms and giving any worker the Docker socket. GitHub credentials
+stay on the host, which pushes and lands changes.
 
 Assume hostile checkout code, arbitrary tool execution, dependency scripts and
 prompt-injected instructions. Hooks and agent instructions are workflow safeguards, not

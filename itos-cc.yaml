@@ -186,15 +186,6 @@ mutation:
       replacement: "0"
       reason: "The buffer only lets the reader goroutine complete its send after the select has already returned on cancellation, so it exits instead of blocking. That completion is the only difference: every returned decision, prompt byte and terminal read is identical. A live context receives the same answer value through the same select whether the send must rendezvous or completes into the buffer, and a context that is cancelled before, during or after the prompt returns false through the same ctx.Done case either way. Nothing joins the goroutine, receives from the channel again, or observes its exit; its bufio reader is discarded with the call. The package tests drive real ptys with no goroutine-leak detector, so no black-box test can distinguish the two versions. This entry is the reviewed CI survivor from the slice-34 proof run."
       line_text: answer := make(chan bool, 1)
-    - file: cmd/itos-container/main.go
-      function: github.com/donvargax/itos-container/cmd/itos-container#run
-      hash: 741c4959f91f3dd1
-      line_in_function: 21
-      column: 15
-      original: ">"
-      replacement: ">="
-      reason: run replaces an empty args with the one-element --help line before anything parses, so len(args) is at least one wherever this guard is evaluated. Both len(args) > 0 and the mutant len(args) >= 0 are therefore always true there, and the args[0] comparison plus every following completion, parse and dispatch path is identical for every input, including an empty command line. No observable result can differ, so no test can fail on the mutant.
-      line_text: if len(args) > 0 && args[0] == "__complete" {
     - file: internal/slices/workerinit/landlock/landlock_linux.go
       function: github.com/donvargax/itos-container/internal/slices/workerinit/landlock#realCalls
       hash: 286cabc65bc78460
@@ -204,3 +195,12 @@ mutation:
       replacement: "1"
       reason: landlock_restrict_self takes two arguments, the ruleset descriptor and the flags. The Go syscall.Syscall wrapper always passes three words, so the trailing 0 is the unused third argument, which the kernel never reads. Replacing it with 1 hands the kernel the same two arguments and the same descriptor and flags, so the restriction applied, its error and every later result are identical. No test can observe an argument the kernel ignores.
       line_text: _, _, e := syscall.Syscall(unix.SYS_LANDLOCK_RESTRICT_SELF, uintptr(fd), uintptr(flags), 0) //nolint:gosec // a descriptor number fits uintptr
+    - file: internal/engine/readiness/domain/inspect.go
+      function: github.com/donvargax/itos-container/internal/engine/readiness/domain.Inspector#InspectBeforeEngine
+      hash: 64f4f45fb61a2d76
+      line_in_function: 23
+      column: 21
+      original: "||"
+      replacement: "&&"
+      reason: Policy inspection returns either a complete policy with no issues or a nil policy with at least one issue. Both readiness gates that replace the result likewise return a nil policy with an issue. At this guard the two predicates always have the same truth value, so changing OR to AND preserves every return and subsequent inspection.
+      line_text: if p.Policy == nil || len(p.Issues) != 0 {

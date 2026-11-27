@@ -255,6 +255,32 @@ any name or the proxy digest needs new consent. Offline retains `offline-v1`; ch
 policy version also needs consent. Run's changed-approval diagnostic lists sorted
 JSON-pointer paths, never their values.
 
+When a home requests the OpenCode harness, each output shows it differently. `doctor --json`
+gains no field: `approval.effective` carries the home object with
+`harnesses: [{"name":"opencode","profile":"opencode-v1"}]`, `approval.differences` lists
+`/home/harnesses` in the sorted order, and `approval.fingerprint` is the new digest. JSON
+names the profile only; the environment is bound by the profile ID. Plain `doctor` and
+bare `approve`'s review print the shared home disclosure, which then adds the line
+`OpenCode harness: profile opencode-v1.`, one `NAME=value` line per profile environment
+entry in sorted order and the disclosure sentences (where OpenCode keeps its state, which
+configuration layers apply and which override the profile, that the image's other
+`OPENCODE_*` defaults stay in effect and can redirect or turn off configuration layers,
+who chooses the provider and model, which providers are reachable, and that no login is
+delivered). Plain `doctor` prints no difference lines; only the review adds
+`/home/harnesses: null -> [...]`.
+
+When a home selects the Codex harness (`home: {storage: volume, harness: codex}`), `doctor --json`
+again gains no field: `approval.effective` carries the home object with
+`harness: {"kind":"codex","seed":"codex-v1","target":"/home/itos/.codex"}`, `approval.differences`
+lists `/home/harness` and `approval.fingerprint` is the new digest. Plain `doctor` and bare
+`approve`'s review print six lines after the home disclosure and before any OpenCode lines: the
+seed and its target, that each run sets `CODEX_HOME` and rewrites only `config.toml`, what the seed
+turns off, that other files under the target are hostile worker data kept for the next run, that
+`CODEX_HOME` is reserved and that no login, network or credential grant is delivered. Only the
+review adds `/home/harness: null -> {...}`. The matching `--fingerprint` shows no review. Until a run
+can seed the home, `run` refuses the selection as `policy.home_harness` (exit 2) before any engine
+connection; see [CONFIG](CONFIG.md#codex-harness-defaults).
+
 An unsandboxed agent on the host can fake a terminal; the offline fingerprint route
 also permits automation. Approval records what was approved, not who. See
 [security.md](security.md).
@@ -265,6 +291,38 @@ also permits automation. Approval records what was approved, not who. See
 workspace directory. Ordinary doctor currently performs these same file checks.
 Both refuse missing manifests rather than searching conventional locations or
 choosing a worker. `--policy-only`, `--manifest-only` and `--credentials-only` are mutually exclusive.
+
+## Checkout socket backend
+
+Ordinary doctor (not `--policy-only`, `--manifest-only` or `--credentials-only`, which make no
+Landlock query and no runtime lookup) names the checkout socket backend the host offers, so
+the person sees it before approving. It runs once the checkout and engine inspections have
+succeeded, whatever the image outcome, within the five-second engine inspection bound, and
+observes afresh on every invocation; a checkout, host or engine refusal leaves no query and no
+member. Landlock ABI 9 or later is chosen without consulting the engine; below that, or where
+Landlock is absent (ENOSYS, EOPNOTSUPP), a path-based `runsc` runtime with the default host
+socket policy selects gVisor. Doctor persists nothing about the selection.
+
+JSON success adds `/inspection/checkout_sockets`, exactly `{"backend":"landlock"}`,
+`{"backend":"gvisor"}` or `{"backend":"neither"}`. Neither is a confirmed outcome, not a problem:
+`ok` and `inspection.ready` stay true and the exit stays 0. Plain output adds one line after the
+image line, `checkout socket backend: landlock`, `checkout socket backend: gvisor` or
+`checkout socket backend: neither; late host sockets reachable`, and still says
+"runtime isolation is not established".
+
+A typed detection failure omits the member, sets `ok` and `inspection.ready` false and adds one
+problem after any image problems; the exit is the highest problem exit. Each has `rule`, `exit`, `message`, `fix`
+and a flat string `field`:
+
+| Failure | rule | exit | field |
+| --- | --- | --- | --- |
+| kernel ABI query failed or invalid | `doctor.sockets.kernel` | 75 | `landlock_abi` |
+| runtime inventory unreadable | `doctor.sockets.runtimes` | 75 | `runtimes` |
+| `runsc` permits host sockets or cannot be identified | `doctor.sockets.runsc` | 1 | `runtimes.runsc` |
+
+A detection that the five-second bound cancels reports `doctor.engine.timeout` (75). Messages carry
+no errno text, daemon text or runtime arguments. Naming a backend is not enforcement: approve,
+run and status do not use it yet, and it enters no fingerprint or approval record.
 
 JSON success has `schema: 1`, `scope: "manifest"`, `ok: true`, `problems: []` and
 `manifest` containing `valid`, `path`, all six `effective` fields, sorted `unused`
@@ -461,6 +519,22 @@ cleanup. Its diagnostic names the exact session and original state-root selectio
 An interrupted action retains its exact home ID and action as a retry, requiring
 fresh consent. Repeating a completed action cannot affect its successor. Missing
 storage is never recreated implicitly, and toggling policy does not undo deletion.
+
+### OpenCode harness request
+
+`home: {storage: volume, harnesses: [opencode]}` also binds the `opencode-v1` worker
+environment (see [CONFIG](CONFIG.md#opencode-harness-profile)). Ordinary `doctor` and bare
+`approve` show, before any consent, the harness, its profile, every environment name and
+value, that OpenCode's global configuration, data and state live in `/home/itos`, that the checkout's own OpenCode configuration applies, that managed configuration in the approved image overrides the profile, that the image's
+other `OPENCODE_*` defaults stay in effect and can redirect or turn off configuration
+layers, that the argv and the checkout choose the provider and model, that a provider is reachable only
+through the approved allowlist (for an offline policy, that none is) and that no OpenCode
+login is delivered. The sorted differences list `/home/harnesses`. Adding or removing the
+harness needs a fresh approval, and `run` reports the mismatch as `run.approval-changed`
+at `/home/harnesses` before any engine connection. Run adds no flag, model, prompt or
+wrapper: `opencode --standalone run --format json` is the person's own argv, and its JSON
+event lines reach stdout unchanged while run's diagnostics go to stderr. Run starts no
+OpenCode, claims no OpenCode compatibility and delivers no login.
 
 Local contracts cover these decisions. Native isolation and initialization remain
 subject to the CI engine scenarios at the pushed head.

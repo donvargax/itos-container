@@ -13,10 +13,29 @@ coordinator made. A change to a line is the person's, and it replaces the line.
   logins, API keys and credential brokering are for remote sandboxes only; invent no threat
   model for the local case. 2026-11-20. `docs/charter.md:143`
 - Codex uses the ChatGPT subscription, not an API key. 2026-11-20. `docs/charter.md:148`
-- Claude's login is the host's `~/.claude/.credentials.json`, mounted read-write as one file;
-  Codex's is the host's Codex home mounted read-write as a directory, with the worker's
-  `auth.json` a symlink into it, because Codex renames a new copy over the file. 2026-11-20.
-  `docs/charter.md:72`
+- OpenCode 2.2.1 receives the one approved OpenCode Go key through its provider-key input.
+  The host retains its SQLite login store and sessions. The run record and status show the
+  provider name only. 2026-11-26. `docs/decisions/0043-deliver-one-approved-opencode-go-key-to-opencode-2-2-1.md`
+- Container runs may use real credentials, one form per provider: a long-lived subscription
+  token where the provider issues one, else its auth file mounted, shared with the host and
+  refreshed in place. Claude gets a `claude setup-token` token, read from
+  `CLAUDE_CODE_OAUTH_TOKEN`, as slice-31's approved token. Codex, with no subscription token,
+  gets the host's Codex home mounted read-write as a directory, with the worker's `auth.json`
+  a symlink into it. itos-container is told which credential each harness gets. 2026-11-23.
+  `docs/decisions/0035-real-credentials-for-container-runs-a-subscription-token-where-the-provider-issues-one-else-its-auth-file-shared.md:22`
+- Credential sources are files, one secret per file, mode 0600, in a 0700 directory, until a
+  credentials-manager integration exists; nothing waits on it. 2026-11-23.
+  `docs/decisions/0035-real-credentials-for-container-runs-a-subscription-token-where-the-provider-issues-one-else-its-auth-file-shared.md:22`
+- The Codex grant binds the mounted directory's and its lock's device and inode; a changed
+  identity at the same path needs the person's consent again. This reopens 0029's rotation
+  and no-inode lines for the Codex home only. 2026-11-21.
+  `docs/decisions/0033-codex-home-identity-and-masks.md:15`
+- Inside the read-write Codex home mount, `config.toml` and `AGENTS.md` are read-only binds,
+  `sessions/` and the history files sit behind empty tmpfs, and `auth.json` and its lock stay
+  writable. A run notes an unknown file there as a finding, not a stop. A CI scenario proves
+  the refresh through the symlink with those masks. 2026-11-21.
+  `docs/decisions/0033-codex-home-identity-and-masks.md:35`,
+  `docs/decisions/0033-codex-home-identity-and-masks.md:51`
 - GitHub credentials stay on the host, and the host pushes and lands. A worker holds no
   GitHub token and no SSH key: an empty `gh` configuration and no SSH agent. If an agent must
   reach GitHub, it gets a one-hour token for one repository. 2026-11-17.
@@ -36,7 +55,7 @@ coordinator made. A change to a line is the person's, and it replaces the line.
   agents do and judge it against the item's scope; only an escalation reaches the person.
   2026-11-18. `docs/charter.md:165`
 - Edits to `.github/workflows` go through a normal pull request and this repository's own
-  gates, made by a worker in this repository. 2026-11-20. `docs/charter.md:168`
+  gates, made by a worker in this repository. 2026-11-20. `docs/charter.md:163`
 - CPU is precious and tokens matter less: the shared Go build cache, no `-count=1` by
   default, never rerun a suite on a commit that already ran. 2026-11-17.
   `docs/charter.md:171`
@@ -104,9 +123,9 @@ coordinator made. A change to a line is the person's, and it replaces the line.
 - Credentials are passed in per command, never injected, never in the checkout or in
   `docker inspect`; approval binds kinds and paths, never contents. `docs/charter.md:69`,
   `docs/decisions/0029-credential-approval.md:11`
-- A credential source's filesystem must be ext4, btrfs or xfs; NFS and 9p are refused
-  outright; overlay and FUSE with unmappable backing paths fail closed. 2026-11-15.
-  `docs/decisions/0027-credential-source-inspection.md:75`
+- On the trusted local host, a filesystem type that prevents excluding a backing alias raises
+  a warning with the path and type in doctor and run status. Independent refusals still apply.
+  2026-11-26. `docs/decisions/0041-record-credential-filesystem-type-as-a-warning-on-the-trusted-local-host.md:20`
 - The harness home is a writable volume or tmpfs, never the host home; `/tmp` is executable.
   `docs/charter.md:85`. The opt-in per-checkout named volume was selected by the coordinator
   and waits for the person to ratify. 2026-11-16.
@@ -152,6 +171,12 @@ coordinator made. A change to a line is the person's, and it replaces the line.
 - `run --tty` selects terminal attachment; stdin alone supplies dimensions; the terminal is
   restored only after the final bounded drain. 2026-11-18.
   `docs/decisions/0031-foreground-terminal.md:10`
+- The person: itos-container stays on v0 until the design is final, with no
+  backwards-compatibility promise. A breaking change to state or schema ships with a
+  documented manual cleanup, never a migration, so old v0.1.0 state gets a documented
+  manual cleanup. The persisted binding device field is dropped with a schema bump, with no
+  filesystem-ID replacement. 2026-11-24.
+  `docs/decisions/0037-control-state-stays-on-v0-with-no-compatibility-promise-old-state-gets-a-documented-manual-cleanup-and-the-persisted-device-field-is-dropped.md:23`
 
 ## Code and CI
 

@@ -36,6 +36,10 @@ func (j JSON) FrozenRecord(f port.Frozen) (port.Record, port.Failure) {
 	if json.Unmarshal([]byte(f.Settings), &s) != nil {
 		return port.Record{}, "state.invalid"
 	}
+	if s.Home != nil && s.Home.Harness != nil {
+		// Run cannot seed a Codex home yet, so no frozen input may carry one.
+		return port.Record{}, "state.invalid"
+	}
 	c := candidate(s)
 	if c.Canonical != f.Settings || c.Project != f.Project || c.Fingerprint != f.Fingerprint {
 		return port.Record{}, "state.invalid"

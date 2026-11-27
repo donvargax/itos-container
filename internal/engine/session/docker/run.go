@@ -86,6 +86,9 @@ func (c *runConnection) CreateRun(ctx context.Context, r port.Record, argv []str
 	environment := environment(image.Config.Env, env)
 	if c.binding.Home {
 		environment = homeEnvironment(environment)
+		if c.binding.OpenCode {
+			environment = openCodeEnvironment(environment)
+		}
 	}
 	pids, init := int64(4096), false
 	config := &container.Config{
