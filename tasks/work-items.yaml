@@ -3052,3 +3052,19 @@ items:
       blanket version-3 run warning for supported requests. Its author writes the local step
       definitions red first. Its local evidence reuses the first task's detectors and edit bracket.
       Broken down from slice-31.
+  - id: claude-run-native-delivery
+    title: Native runs give only the approved workload the read-only staged Claude file, rotation reaches only later runs, and help and docs disclose the limits
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [claude-run-admission-delivery, credrun-native-delivery-steps, slice-27, T-84]
+    kind: idea
+    why: >
+      This slice turns the first task's red native rows green in CI. CREDRUN-08 covers the offline
+      rows plus the allowlist row through slice-27's proxy, with a nonempty ordinary refusal.
+      CREDRUN-09 covers rotation reaching only the next run, under decision 0035. CREDRUN-10 covers
+      no access from another project or from a later no-grant run. It also owns CREDRUN-13's run
+      help, which stays red on the admission slice's tree. In the same feat commit it brings the
+      CLI, CONFIG, security and arc42 status docs up to date, and revises AC-36's row in
+      docs/plans/container-pilot.md and ADR 0025's question-6 prose to q-56's wording, without
+      claiming the redaction that p1-platform-log-redaction owns. Broken down from slice-31.
