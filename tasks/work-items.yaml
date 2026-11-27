@@ -3022,14 +3022,15 @@ items:
       blanket version-3 run warning for supported requests. Its author writes the local step
       definitions red first. Its local evidence reuses the first task's detectors and edit bracket.
       Broken down from slice-31.
-  - id: claude-run-native-delivery
+  - id: slice-63
     title: Native runs give only the approved workload the read-only staged Claude file, rotation reaches only later runs, and help and docs disclose the limits
     phase: 1
     owner: null
     status: todo
     depends_on: [slice-62, T-95, slice-27, T-84]
-    kind: idea
+    kind: slice
     why: >
+      Was claude-run-native-delivery.
       This slice turns the first task's red native rows green in CI. CREDRUN-08 covers the offline
       rows plus the allowlist row through slice-27's proxy, with a nonempty ordinary refusal.
       CREDRUN-09 covers rotation reaching only the next run, under decision 0035. CREDRUN-10 covers
@@ -3043,7 +3044,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [claude-run-native-delivery, T-96]
+    depends_on: [slice-63, T-96]
     kind: idea
     why: >
       This slice owns the credential_staging projection in status JSON (present, absent or unknown,
