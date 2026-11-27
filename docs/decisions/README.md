@@ -42,5 +42,6 @@ file and leaves this list, which itos decision record writes.
 - [ADR-0039: slice-40's redraft may reuse the earlier spec on slice-40-old and the partial implementation on slice-40-d9e5a2d](0039-slice-40-s-redraft-may-reuse-the-earlier-spec-on-slice-40-old-and-the-partial-implementation-on-slice-40-d9e5a2d.md)
 - [ADR-0040: Share the approved whole OpenCode login file at its normal path](0040-share-the-approved-whole-opencode-login-file-at-its-normal-path.md)
 - [ADR-0041: Record credential filesystem type as a warning on the trusted local host](0041-record-credential-filesystem-type-as-a-warning-on-the-trusted-local-host.md)
+- [ADR-0042: Keep the OpenCode file grant when providers change and record provider names per run](0042-keep-the-opencode-file-grant-when-providers-change-and-record-provider-names-per-run.md)
 
 <!-- itos:decisions:end -->
