@@ -417,3 +417,4 @@ questions:
   - id: q-102
     item: "slice-40"
     question: "Does approval of the whole OpenCode auth.json cover providers added to that file later, and what must each run and its status show?"
+    answer: "The person confirmed on 2026-11-26 that the approved whole-file grant covers providers added to the host OpenCode auth.json later. Adding a provider requires no fresh approval. Each run records the provider names present for that run. Its status shows those recorded names. Both contain provider names only and never credential values."
