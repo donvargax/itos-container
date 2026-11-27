@@ -2961,8 +2961,8 @@ items:
   - id: T-95
     title: credentials-run.feature lands on main with CREDRUN-08 to -10 @wip and their native step definitions, red in CI
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [slice-30, T-48, T-77, T-84]
     kind: task
   - id: T-96
