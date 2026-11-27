@@ -10033,3 +10033,17 @@
     slice-31.
   done_when:
     - run: go test ./features -run '^(TestEngineShards|TestCredentialRunPolicyEditBracket)$' passes on the combined tree. A red_scenarios dispatch of main's actual CI workflow shows ID-CREDRUN-08, -09 and -10 selected only in the egress shard, each failing at its first behaviour Then after the fixture and doctor control Then passes
+- id: T-96
+  type: test
+  title: CREDRUN-11 and -12 join credentials-run.feature @wip with native recorder and controller-kill step definitions, red in CI
+  why: >
+    The rows for a lost start acknowledgement and for recovery by a fresh controller need their own
+    native machinery. One part is a recorder that loses the start acknowledgement after mount
+    acquisition, holds the first worker-ending request until the staged file is unlinked and the
+    probe has reported (bounded at half the call budget), and injects removal faults. The other is a
+    synchronized controller kill at the two recorded barriers. This task adds the reviewed scenarios
+    beside their topic blocks in the same egress-shard file, with their step definitions committed
+    red first and @wip kept, so the recovery slice has real red evidence to turn green. Broken down
+    from slice-31.
+  done_when:
+    - run: go test ./features -run '^TestEngineShards$' passes. A red_scenarios dispatch of main's actual CI workflow shows ID-CREDRUN-11 and -12 selected only in the egress shard, each failing at its first behaviour Then after the fixture and doctor control Then passes

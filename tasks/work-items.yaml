@@ -2977,22 +2977,13 @@ items:
     status: todo
     depends_on: [slice-30, T-48, T-77, T-84]
     kind: task
-  - id: credrun-native-recovery-steps
+  - id: T-96
     title: CREDRUN-11 and -12 join credentials-run.feature @wip with native recorder and controller-kill step definitions, red in CI
     phase: 1
     owner: null
     status: todo
     depends_on: [T-95, T-84]
-    kind: idea
-    why: >
-      The rows for a lost start acknowledgement and for recovery by a fresh controller need their
-      own native machinery. One part is a recorder that loses the start acknowledgement after mount
-      acquisition, holds the first worker-ending request until the staged file is unlinked and the
-      probe has reported (bounded at half the call budget), and injects removal faults. The other is
-      a synchronized controller kill at the two recorded barriers. This task adds the reviewed
-      scenarios beside their topic blocks in the same egress-shard file, with their step definitions
-      committed red first and @wip kept, so the recovery slice has real red evidence to turn green.
-      Broken down from slice-31.
+    kind: task
   - id: credentialfs-raw-contract
     title: A shared raw CredentialFS contract runs unchanged against the I/O-free fake and the disk adapter
     phase: 1
@@ -3062,7 +3053,7 @@ items:
     phase: 1
     owner: null
     status: todo
-    depends_on: [claude-run-native-delivery, credrun-native-recovery-steps]
+    depends_on: [claude-run-native-delivery, T-96]
     kind: idea
     why: >
       This slice owns the credential_staging projection in status JSON (present, absent or unknown,
