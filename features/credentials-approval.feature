@@ -828,7 +828,9 @@ Feature: Review and remember credential grants without delivering them
   # record's top-level "credential_warnings" and
   # "credential_warnings_omitted", with doctor JSON's shapes and presence
   # rules. That publication is Store.New or Store.Prepare, in both the
-  # porttest memory store and the disk store. Record.ValidTransition keeps
+  # porttest memory store and the disk store, and the publication case
+  # below (TestSessionStoreCredentialWarningPublication) proves it on both
+  # against bytes the test reads itself. Record.ValidTransition keeps
   # both members equal for the record's whole life, including the schema-4
   # staging save in session domain Runner.prepareCredentials. A save that
   # adds, changes or drops them is refused. Public run on main still refuses
@@ -884,8 +886,12 @@ Feature: Review and remember credential grants without delivering them
   #    entry 22 for "/credential_warnings/<i>" plus 54, 54 and 66 for its
   #    rule, path and filesystem keys and values (196, so 1568 for eight),
   #    and 56 for "/credential_warnings_omitted": 1664 bytes.
-  # Session porttest's credential
-  # store contract gains one case on fake and disk. It builds a schema-4
+  # Size case. cmd/itos-container/session_store_test.go gains
+  # TestSessionCodecCredentialWarningSize. It needs the real session codec,
+  # sc.JSON{Approval: canonical.JSON{}, Parser: manifestjson.Parser{}} as
+  # sessionStoreFixture composes it, because neither session porttest's fake
+  # Codec nor the codec package's parser fake runs manifest.Parser's budgets,
+  # and only cmd assembles adapters. It builds a schema-4
   # record with home, egress, credential staging and anchor at their longest
   # valid values, and with these two members at their longest valid values:
   #  - engine_endpoint is "unix://" followed by a 108-byte absolute path, "/"
@@ -902,6 +908,51 @@ Feature: Review and remember credential grants without delivering them
   # and report; do not raise a limit. Because no record the
   # product writes can exceed the limit, the store gains no size refusal,
   # which could never be reached.
+  # Publication case. The item's earlier disk-store test passed on a tree
+  # without the implementation. StoreContract compares a reopened record only
+  # with the record New returned, and CredentialRecoveryStoreContract starts
+  # from a ready-made record and never calls New or Prepare, so a store that
+  # drops the warnings passes both. Rule 5's store evidence is therefore
+  # TestSessionStoreCredentialWarningPublication in
+  # cmd/itos-container/session_store_test.go, with subtests "disk" and
+  # "memory". Both use the real session codec composed as above, and one
+  # frozen snapshot: a canonical approval record, built as sessionStoreFixture
+  # builds its snapshot, whose candidate holds the one approved claude-token
+  # grant at /vault/claude-a.
+  #  - "disk" is sessionStoreFixture's real sd.Store on real protected
+  #    storage, holding that snapshot. It reads the published bytes with
+  #    os.ReadFile from <state>/itos-container/intents/<project>/<token>.json,
+  #    a path the test computes from its own state root. The fixture's
+  #    existing skip conditions stay.
+  #  - "memory" is session porttest's Store with that codec, its Snapshots
+  #    seeded with the same snapshot bytes and its UID, GID and Root set from
+  #    the same fixture. It reads the published bytes from
+  #    Records[port.Reference(project, token)].
+  # Each subtest makes four publications, each with a fresh token: New and
+  # Prepare with the warning Durable, then New and Prepare with the plain one.
+  # The warning Durable is the fixture's Durable whose CredentialWarnings
+  # holds exactly one entry {credential.filesystem, "/vault", "fuse.sshfs"}
+  # with omitted count 0; the plain Durable has an empty list. The test
+  # writes its expectation itself as the literal
+  #    [{"rule":"credential.filesystem","path":"/vault","filesystem":"fuse.sshfs"}]
+  # and never derives an expected value from what New or Prepare returned.
+  # For each publication:
+  #  1. New or Prepare succeeds, and the test closes the intent.
+  #  2. The published bytes are one JSON object. For the warning Durable its
+  #     "credential_warnings" member, decoded with encoding/json, equals the
+  #     literal decoded the same way, and it has no
+  #     "credential_warnings_omitted" member. For the plain Durable it has
+  #     neither member.
+  #  3. Open, then after Close OpenCleanup, of that reference each succeed
+  #     and return a record whose warning list has exactly the test's own
+  #     entries and omitted count: the one entry and 0, or no entry and 0.
+  # Red and green. On a tree where Durable.CredentialWarnings, the record's
+  # list field and the codec's two members exist but a store's New and
+  # Prepare do not copy Durable's list into the record, that store's subtest
+  # fails at check 2 for the warning Durable, because the published bytes
+  # lack "credential_warnings". A codec that writes the members but does not
+  # read them back fails check 3. Both subtests pass once each store's
+  # publication copies the list and the codec writes and reads it.
   # Comparability and encoding. Record keeps == and != (porttest memory
   # store, ValidTransition). It holds the warnings in one field of rule 4's
   # fixed-storage list type (8 entries, the used-entry count and the omitted
@@ -955,8 +1006,10 @@ Feature: Review and remember credential grants without delivering them
   #    (3)" rule lines with a pointer to this block.
   #  - Turn the refusal cases of readiness porttest
   #    credential_stacking_contract.go and credential_export_contract.go into
-  #    warning cases, for both fake and disk. Extend session porttest's
-  #    credential store contract with rules 5 and 6 on fake and disk.
+  #    warning cases, for both fake and disk. Add rule 6's size case and
+  #    rule 5's publication case to cmd/itos-container/session_store_test.go,
+  #    as named above; StoreContract and CredentialRecoveryStoreContract stay
+  #    as they are.
   #  - Leave docs/decisions/STANDING.md unchanged. Its line at 126-128 is
   #    the person's call (decision 0041) and already states this rule.
   #  - Insert this paragraph into decision 0027, directly after the q-64
@@ -1317,8 +1370,9 @@ Feature: Review and remember credential grants without delivering them
   # store's next valid transition (intent to owned, with a full container ID).
   # Last, it attempts three saves: one adding a warning to the ext4 record,
   # one changing the varied record's filesystem text, and one dropping its
-  # warnings. The disk store meets the same rules through the session port
-  # contract (see the slice-61 block). Public run is untouched. Preflight
+  # warnings. The disk store's publication is proven by
+  # TestSessionStoreCredentialWarningPublication, and its saves use the same
+  # Record.ValidTransition (see the slice-61 block). Public run is untouched. Preflight
   # becomes ready only after Engine.Open, so each successful run opens the
   # fake engine once; the last Then compares the assembly's engine.Opens for
   # the varied run with the ext4 run's.
