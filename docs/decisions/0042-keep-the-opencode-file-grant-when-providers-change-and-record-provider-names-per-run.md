@@ -15,6 +15,10 @@ Asked as q-102, about slice-40.
 
 The options are those the question names.
 
+## Amendment for OpenCode 2.2.1 (2026-11-26)
+
+Decision 0043 replaces the whole-file grant for slice-40. Each run receives one approved OpenCode Go key and reports that provider name in its record and status. The original decision below describes the earlier file grant.
+
 ## Decision Outcome
 
 The person confirmed on 2026-11-26 that the approved whole-file grant covers providers added to the host OpenCode auth.json later. Adding a provider requires no fresh approval. Each run records the provider names present for that run. Its status shows those recorded names. Both contain provider names only and never credential values.
