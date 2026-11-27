@@ -10047,3 +10047,19 @@
     from slice-31.
   done_when:
     - run: go test ./features -run '^TestEngineShards$' passes. A red_scenarios dispatch of main's actual CI workflow shows ID-CREDRUN-11 and -12 selected only in the egress shard, each failing at its first behaviour Then after the fixture and doctor control Then passes
+- id: T-97
+  type: test
+  title: A shared raw CredentialFS contract runs unchanged against the I/O-free fake and the disk adapter
+  why: >
+    CredentialContract observes only the domain's CredentialResult, so the raw shapes that run
+    admission will trust are not pinned. A refused Open returns handle 0 and CredentialNode{} and
+    keeps no pin. A failed Entries returns nil, false, false, even after a partial batch. This task
+    adds a raw section in internal/engine/readiness/port/porttest covering invalid and closed
+    handles, missing, open, stat, metadata and identity refusals, and directory failures, with
+    oracles for the result and for retained pins. It states those shapes in the CredentialFS comment
+    in port/credentials.go and proves the oracle rejects a deliberately faulty fake. It also runs
+    T-48's ReadPath and checked-source contracts, so a closed or refused capability cannot read or
+    alias a retained source. These are regression checks of shapes that already hold, not behaviour
+    scenarios. Broken down from slice-31.
+  done_when:
+    - run: go test ./internal/engine/readiness/... ./internal/engine/session/... passes with the new raw contract run against both the fake and the disk adapter, and the oracle fails on the faulty-fake negative control
