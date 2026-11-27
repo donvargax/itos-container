@@ -804,8 +804,15 @@ Feature: Review and remember credential grants without delivering them
   #  - Warnings are not settings. A filesystem change alone never changes a
   #    fingerprint or an approval status, and approval binds no warning.
   # The admission assembly (cmd/itos-container/credential_admission_contract_test.go)
-  # sets doctor.CLI.JSON from whether its argv contains "--json", so the plain
-  # rows below reach the product's plain presentation.
+  # builds doctor.CLI with JSON fixed at true today, so every doctor row runs
+  # in JSON mode. The red step commit must change it to set doctor.CLI.JSON
+  # from whether the row's argv contains "--json", so the plain doctor and
+  # doctor --credentials-only rows reach the product's plain presentation.
+  # The new step "the varied admission succeeds exactly like its ext4 control
+  # apart from its credential warnings" then checks the mode of both runs: for
+  # a doctor row without "--json" it fails when the trimmed standard output
+  # of the control or the varied run is valid JSON (encoding/json Valid), and
+  # for a row with "--json" it fails unless each is one JSON object.
   #
   # Rule 5, run records them. The run preflight's selection carries the
   # warnings as fresh execution evidence, like ProxyImageID. Approval port's
@@ -895,13 +902,24 @@ Feature: Review and remember credential grants without delivering them
   # and report; do not raise a limit. Because no record the
   # product writes can exceed the limit, the store gains no size refusal,
   # which could never be reached.
-  # Comparability. Record keeps == and != (porttest memory store,
-  # ValidTransition). It holds the warnings in two comparable fields, which
-  # publication fills from Durable's list:
-  #  - an 8-entry array with a used-entry count, tagged
-  #    "credential_warnings,omitzero" and marshalled as the array of its used
-  #    entries;
-  #  - an int tagged "credential_warnings_omitted,omitzero".
+  # Comparability and encoding. Record keeps == and != (porttest memory
+  # store, ValidTransition). It holds the warnings in one field of rule 4's
+  # fixed-storage list type (8 entries, the used-entry count and the omitted
+  # count), tagged json:"-", which publication fills from Durable's list. No
+  # port gains a MarshalJSON or UnmarshalJSON method and no port imports
+  # encoding/json: the port allowlist in .golangci.yml has no encoding/json,
+  # as internal/engine/session/disk/refusals.go:162-163 also notes. The
+  # session codec, an adapter, writes and reads the two wire members itself:
+  #  - JSON.Encode marshals a codec-local struct that embeds port.Record and
+  #    adds "credential_warnings" (a slice of codec-local {rule, path,
+  #    filesystem} entries, omitempty) and "credential_warnings_omitted" (an
+  #    int, omitempty), filled from the field's used entries and omitted
+  #    count. encoding/json promotes the embedded record's members first and
+  #    writes the two members last, only when present.
+  #  - JSON.Decode checks both members on manifest.Parser's value as rule 6
+  #    says, unmarshals into port.Record as today (the json:"-" field stays
+  #    zero), then unmarshals the same bytes into a codec-local struct holding
+  #    only the two members and copies them into the record's field.
   # A record without warnings therefore encodes byte for byte as today.
   # Store publication and recovery both refuse warnings on a session whose frozen
   # snapshot holds no credential grant. That rule has a session port contract
