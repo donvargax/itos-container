@@ -2151,7 +2151,7 @@ items:
     depends_on: []
     kind: task
   - id: slice-40
-    title: Deliver the approved whole OpenCode login file writable at its normal path
+    title: Deliver one approved OpenCode Go key to OpenCode 2.2.1
     phase: 1
     owner: donvargax
     status: todo
@@ -2166,7 +2166,7 @@ items:
       engine configuration and logs. Use synthetic markers and fake endpoints for the scenarios.
       Name any unresolved account decision explicitly. Any harness may be the first in the container
       (the person, 2026-11-24), so this slice need not wait for the Codex and Claude slices.
-    refs: [docs/decisions/0042-keep-the-opencode-file-grant-when-providers-change-and-record-provider-names-per-run.md, docs/decisions/0040-share-the-approved-whole-opencode-login-file-at-its-normal-path.md, docs/decisions/0039-slice-40-s-redraft-may-reuse-the-earlier-spec-on-slice-40-old-and-the-partial-implementation-on-slice-40-d9e5a2d.md]
+    refs: [docs/decisions/0043-deliver-one-approved-opencode-go-key-to-opencode-2-2-1.md, docs/decisions/0039-slice-40-s-redraft-may-reuse-the-earlier-spec-on-slice-40-old-and-the-partial-implementation-on-slice-40-d9e5a2d.md]
   - id: slice-41
     title: Start OpenCode headless with isolated home and configuration
     phase: 1
