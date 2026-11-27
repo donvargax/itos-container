@@ -2970,3 +2970,21 @@ items:
       the trust boundary for the local machine, repositories and accounts. Where there is no
       outsider, list the refusal as a candidate for a recorded warning, with its reason, for a
       separate decision on changing behavior.
+  - id: credrun-native-delivery-steps
+    title: credentials-run.feature lands on main with CREDRUN-08 to -10 @wip and their native step definitions, red in CI
+    phase: 1
+    owner: null
+    status: todo
+    depends_on: [slice-30, T-48, T-77, T-84]
+    kind: idea
+    why: >
+      Native red evidence must exist before product code turns it green. Main's egress-shard
+      placement also needs credentials-run.feature to hold genuine @engine rows as soon as the file
+      exists. This task carries the reviewed CREDRUN-08, -09 and -10 onto current main with @wip
+      kept. It revises the header to decision 0035 (the staged claude-token file, never replaced by
+      rotation), to decision 0041 and to the egress placement. It also adds their native step
+      definitions and the shared harness the later children reuse: the native /var/tmp fixture
+      verification, the cooperative hash probe, the marker detectors (raw and base64 at all three
+      offsets) each with a positive control, the inotify checkout observer with its calibrated
+      policy-edit bracket, and the engine-free regression TestCredentialRunPolicyEditBracket. No
+      product code. Broken down from slice-31.
