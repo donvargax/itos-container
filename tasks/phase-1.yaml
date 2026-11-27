@@ -10344,13 +10344,21 @@
     own plan inline as a JSON value, with one canonical allowed name, the ordinary unlisted name
     refused.example on 443 and no barrier step. slice-27's probe writes its barrier and report
     files beside its plan (features/testdata/slice-27/probe/main.go:479, :493-494, :503), so its
-    plan never goes under /workspace. Before the first report the credrun probe makes a private
-    0700 directory with os.MkdirTemp under the worker's /tmp, which is a tmpfs outside the checkout
-    (internal/engine/session/docker/run.go:111). It writes the child plan there as
-    slice-27-plan.json and runs /workspace/slice-27-probe with that file's path as its one argument
-    and that directory as its working directory. Every child write therefore lands in that /tmp
-    directory. After the child exits, the credrun probe reads slice-27-report.json there and relays
-    its summary. The probe writes nothing under /workspace; its only writes are the child's plan in
+    plan never goes under /workspace. It also builds its trust pool only from slice-27-ca.pem
+    beside its plan (main.go:503, :510-512). So in that row the fixture writes the controlled
+    endpoint's public CA certificate, the same PEM bytes slice-27's fixture writes into its checkout
+    (features/egress_native_fixture_test.go:266), into the checkout as
+    /workspace/slice-27-ca.pem, mode 0600, before the observer arms, as it places the probes; it
+    holds no marker and is scanned like every other checkout file. Before the first report the
+    credrun probe makes a private 0700 directory with os.MkdirTemp under the worker's /tmp, which is
+    a tmpfs outside the checkout (internal/engine/session/docker/run.go:111). It reads
+    /workspace/slice-27-ca.pem and writes the same bytes there as slice-27-ca.pem, mode 0600, and
+    writes the child plan there as slice-27-plan.json. It then runs /workspace/slice-27-probe with
+    that plan's path as its one argument and that directory as its working directory. If the CA
+    cannot be read or copied, the probe reports the child's result as 'error' with the errno name
+    and does not run the child. Every child write therefore lands in that /tmp directory. After the
+    child exits, the credrun probe reads slice-27-report.json there and relays its summary. The
+    probe writes nothing under /workspace; its only writes are the child's plan and the CA copy in
     that /tmp directory. It prints one JSON object per line on stdout and waits on
     stdin, which is the barrier the harness holds. Each report has the nonce, the phase (first, read
     or final), euid and egid. For the target it gives one result: 'file' when lstat shows a regular
