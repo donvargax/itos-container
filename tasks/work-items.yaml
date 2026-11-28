@@ -1372,8 +1372,8 @@ items:
   - id: T-98
     title: A run can work on a copy of the checkout instead of a live mount, and hand its result back as commits
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: []
     kind: task
   - id: p1-engine-timing-notice-every-run
