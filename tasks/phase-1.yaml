@@ -10063,3 +10063,27 @@
     scenarios. Broken down from slice-31.
   done_when:
     - run: go test ./internal/engine/readiness/... ./internal/engine/session/... passes with the new raw contract run against both the fake and the disk adapter, and the oracle fails on the faulty-fake negative control
+- id: T-98
+  type: docs
+  title: A run can work on a copy of the checkout instead of a live mount, and hand its result back as commits
+  why: >
+    The person, 2026-11-09, after reading tryboxi (delta sync into a microVM, .git sanitizing, a
+    three-way apply back) and cloudycloud (a clone on a cloud machine, results pushed as a branch):
+    'an alternative way of working'. Not now, and not instead of the mount. A copy mode would clone
+    or bundle the checkout into the sandbox's own volume and return the work as commits (a bundle or
+    a branch the host fetches), never writing the host checkout during the run. That removes by
+    construction the class milestone one hardened one case at a time (inode swaps, host sockets,
+    hard links, control state reached through the mount) and planted .git hooks, lets several runs
+    share one checkout, and is the only shape a microVM or remote provider can use, since those
+    share no filesystem with the host. Costs: sync time on large repositories, no live view in the
+    host editor, and divergence when the person edits the checkout meanwhile (commits merge;
+    uncommitted edits don't). Discobox (github.com/discobox-ai/discobox at 97b2281, Apache-2.0)
+    builds this mode, read 2026-11-23. Its box clones from a read-only origin the pool serves over
+    authenticated git HTTP at a reserved host name, with a day-long token scoped to fetch and bound
+    to one sandbox; uncommitted changes come along only on request (--include-dirty), the agent
+    commits inside the box, and the host fetches the commits back. That fits the rule that pushes
+    stay on the host, and would let decisions 0013, 0019 and 0020 shrink; it changes the contract's
+    checkout-is-the-only-mount line, so it stays the person's call. Read docs/adr/26-10-08-561 in
+    that repository first.
+  done_when:
+    - run: "f=docs/plans/workspace-copy-mode.md && test -f \"$f\" && grep -q 'container-pilot.md:95' \"$f\" && grep -qi 'status: *proposed' \"$f\" && grep -q '2026-11-27' \"$f\" && grep -qi 'outside the current milestone' \"$f\" && grep -qi 'open for the person' \"$f\" && grep -q '0013' \"$f\" && grep -q '0019' \"$f\" && grep -q '0020' \"$f\" && grep -q 'charter.md:157' \"$f\" && grep -q 'STANDING.md:39' \"$f\" && grep -qi 'uncommitted' \"$f\" && test \"$(git diff --name-only \"$(git merge-base origin/main HEAD)\" HEAD)\" = \"$f\""
