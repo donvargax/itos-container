@@ -10085,5 +10085,82 @@
     stay on the host, and would let decisions 0013, 0019 and 0020 shrink; it changes the contract's
     checkout-is-the-only-mount line, so it stays the person's call. Read docs/adr/26-10-08-561 in
     that repository first.
+
+    The rule. This task records the idea as a proposal and builds nothing. The charter says an idea
+    outside the milestone is recorded as such and not specified, and its "Not yet" keeps runtime
+    directions as research. So the deliverable is one new research document,
+    docs/plans/workspace-copy-mode.md, shaped like docs/plans/credential-brokering.md. It changes no
+    code, scenario, step definition, workflow, dependency, decision record, charter passage or
+    contract passage. The plan has these parts, in this order.
+
+    Status. One line that reads "Status: proposed", with the date 2026-11-27, for the person's
+    decision. This task fixes that date for the proposal. If the plan is written on a later day,
+    it also gives the day its sources were read. The same section says the mode is outside the
+    current milestone (milestone two, steps 1 to 5), that it selects nothing to build, and that the
+    live checkout mount stays the default and is not replaced.
+
+    What copy mode is. The sandbox gets a copy of the checkout in container-managed storage instead
+    of the descriptor-backed mount, and the result comes back as commits the host fetches. The run
+    never writes the host checkout. Use the idea's own terms (clone or bundle in; a bundle or branch
+    back) and Discobox's design as the worked example.
+
+    What it changes in the authorities. Cite docs/plans/container-pilot.md:95, the Mounts row ("The
+    checkout is the only host filesystem mount into the worker"). Copy mode needs that row changed,
+    and that change is the person's. Cite docs/charter.md:157 (microVMs come later, on several
+    cloud providers): a microVM or remote provider shares no filesystem with the host, so copy mode
+    is the only checkout shape it can use. Cite docs/decisions/STANDING.md:39 (GitHub credentials
+    stay on the host, and the host pushes and lands): results return as commits the host fetches,
+    and the worker never pushes.
+
+    What it removes and what it keeps. Name decisions 0013 (one link per checkout file), 0019
+    (refusing checkout sockets) and 0020 (the descriptor-backed anchor). For each, say what it
+    guards in mount mode and whether a copy makes it unnecessary, smaller or still needed. All
+    three stay in force for mount mode. Also cover planted .git hooks and configuration: the host
+    takes back objects and refs only, never a hook or config file.
+
+    Costs. Sync time on large repositories, no live view in the host editor, and divergence when
+    the person edits the checkout during a run. Committed work merges, but uncommitted edits do not.
+    Say how Discobox treats uncommitted changes: they come along only on request, with
+    --include-dirty.
+
+    Open for the person. A section of that name lists each question only the person can answer,
+    with one recommendation each (STANDING.md:64). The questions are: whether to adopt the mode,
+    and when; the change to container-pilot.md:95; how the copy enters and the result leaves (a git
+    bundle through the engine's archive API, as internal/engine/session/docker/home.go already
+    copies into a volume, or a git origin served over HTTP as Discobox does, which needs a network
+    route and a token that an offline run does not have); whether uncommitted edits come along;
+    and where fetched results land on the host (for example a namespaced ref, never a checkout or
+    a push).
+
+    Sources. Each source with the date it was read. Discobox is read at 97b2281 on github.com,
+    docs/adr/26-10-08-561 first; that is the only fetch allowed. Tryboxi and cloudycloud are known
+    here only through the person's 2026-11-09 reading as quoted above, so the plan marks any claim
+    about them [unconfirmed] and fetches neither. Mark the plan's own reasoning (analysis), as
+    credential-brokering.md does.
+
+    Citations. The plan cites the lines as they read at base 9aa7933: the
+    Mounts row at container-pilot.md:95, the microVM line at charter.md:157 and the GitHub line at
+    STANDING.md:39. If any of those lines has moved on main when the plan is written, the
+    implementer stops and reports, and does not cite a line that now says something else. The plan
+    makes no decision record: if the person accepts a direction, a record with the next free number
+    follows in a later item.
+
+    Commits and proof. One docs commit with Item: T-98 carries docs/plans/workspace-copy-mode.md
+    alone. The implementer may commit freely in its workspace. The host makes the landing commits
+    and runs itos, submission, publication and review. Nothing touches a proof.code path, so there
+    is no mutation proof, and none is fabricated. The range is prose-only (docs/** and tasks/** are
+    ci.prose.paths). On such a range CI keeps only a task's static checks and those that declare
+    prose: true, and itos work done runs no late check. So the check declares prose: true. It uses
+    only POSIX sh, grep and git, as on ubuntu-latest. The item's branch also carries this spec's
+    commit to tasks/phase-1.yaml, so the range clause leaves out that one path. Without that, the
+    diff would list two files and the check would fail even after correct work. Any other changed
+    path fails the clause: the charter, the contract, a decision or STANDING.md included.
+
+    How the check fails today. test -f exits 1, because docs/plans/workspace-copy-mode.md does not
+    exist. Each grep then fails on a plan that leaves out its phrase or citation. The range clause
+    fails if the work changes any file but the plan and the ledger. The check cannot tell whether
+    the plan's analysis is right or its recommendations sound. The person's review of the plan
+    judges that.
   done_when:
-    - run: "f=docs/plans/workspace-copy-mode.md && test -f \"$f\" && grep -q 'container-pilot.md:95' \"$f\" && grep -qi 'status: *proposed' \"$f\" && grep -q '2026-11-27' \"$f\" && grep -qi 'outside the current milestone' \"$f\" && grep -qi 'open for the person' \"$f\" && grep -q '0013' \"$f\" && grep -q '0019' \"$f\" && grep -q '0020' \"$f\" && grep -q 'charter.md:157' \"$f\" && grep -q 'STANDING.md:39' \"$f\" && grep -qi 'uncommitted' \"$f\" && test \"$(git diff --name-only \"$(git merge-base origin/main HEAD)\" HEAD)\" = \"$f\""
+    - run: "f=docs/plans/workspace-copy-mode.md && test -f \"$f\" && grep -q 'container-pilot.md:95' \"$f\" && grep -qi 'status: *proposed' \"$f\" && grep -q '2026-11-27' \"$f\" && grep -qi 'outside the current milestone' \"$f\" && grep -qi 'open for the person' \"$f\" && grep -q '0013' \"$f\" && grep -q '0019' \"$f\" && grep -q '0020' \"$f\" && grep -q 'charter.md:157' \"$f\" && grep -q 'STANDING.md:39' \"$f\" && grep -qi 'uncommitted' \"$f\" && test \"$(git diff --name-only \"$(git merge-base origin/main HEAD)\" HEAD -- . ':(exclude)tasks/phase-1.yaml')\" = \"$f\""
+      prose: true
