@@ -1369,34 +1369,13 @@ items:
       Cross-compilation and standard go vet would have accepted the overlap test because both path
       APIs are valid. The assertion failed only when Windows produced a drive-letter path. Commit
       91d84d5 fixed the fixture to use the Linux paths the test models.
-  - id: p3-workspace-copy-mode
+  - id: T-98
     title: A run can work on a copy of the checkout instead of a live mount, and hand its result back as commits
     phase: 1
     owner: null
     status: todo
     depends_on: []
-    kind: idea
-    why: >
-      The person, 2026-11-09, after reading tryboxi (delta sync into a microVM, .git sanitizing, a
-      three-way apply back) and cloudycloud (a clone on a cloud machine, results pushed as a
-      branch): 'an alternative way of working'. Not now, and not instead of the mount. A copy mode
-      would clone or bundle the checkout into the sandbox's own volume and return the work as
-      commits (a bundle or a branch the host fetches), never writing the host checkout during the
-      run. That removes by construction the class milestone one hardened one case at a time (inode
-      swaps, host sockets, hard links, control state reached through the mount) and planted .git
-      hooks, lets several runs share one checkout, and is the only shape a microVM or remote
-      provider can use, since those share no filesystem with the host. Costs: sync time on large
-      repositories, no live view in the host editor, and divergence when the person edits the
-      checkout meanwhile (commits merge; uncommitted edits don't).
-
-      Discobox (github.com/discobox-ai/discobox at 97b2281, Apache-2.0) builds this mode, read
-      2026-11-23. Its box clones from a read-only origin the pool serves over authenticated git HTTP
-      at a reserved host name, with a day-long token scoped to fetch and bound to one sandbox;
-      uncommitted changes come along only on request (--include-dirty), the agent commits inside the
-      box, and the host fetches the commits back. That fits the rule that pushes stay on the host,
-      and would let decisions 0013, 0019 and 0020 shrink; it changes the contract's
-      checkout-is-the-only-mount line, so it stays the person's call. Read docs/adr/26-10-08-561 in
-      that repository first.
+    kind: task
   - id: p1-engine-timing-notice-every-run
     title: Every engine job run publishes its slowest scenario timings and the runner's identity as a ::notice annotation, green runs included
     phase: 1
