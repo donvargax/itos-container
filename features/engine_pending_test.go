@@ -15,12 +15,11 @@ import (
 // pendingEngineFeatures may be absent from a shard's files, and then only until the file exists.
 func testPendingEngineFeatures(t *testing.T) {
 	if !maps.Equal(pendingEngineFeatures, map[string]pendingEngineFeature{
-		"credentials-run.feature": {item: "slice-31", shard: "egress"},
-		"claude-home.feature":     {item: "slice-36", shard: "other"},
+		"claude-home.feature": {item: "slice-36", shard: "other"},
 
 		"credentials-run-native.feature": {item: "slice-31", shard: "offline"},
 	}) {
-		t.Fatalf("the pending list is reviewed to hold credentials-run.feature for slice-31 in egress and claude-home.feature for slice-36 in other and credentials-run-native.feature for slice-31 in offline alone: %v", pendingEngineFeatures)
+		t.Fatalf("the pending list is reviewed to hold claude-home.feature for slice-36 in other and credentials-run-native.feature for slice-31 in offline alone: %v", pendingEngineFeatures)
 	}
 	for _, name := range slices.Sorted(maps.Keys(pendingEngineFeatures)) {
 		t.Run(name, func(t *testing.T) { testPendingEngineFeature(t, name, pendingEngineFeatures[name].item) })
@@ -35,7 +34,6 @@ func testPendingNameInWrongShard(t *testing.T) {
 		{"claude-home.feature in offline", "offline.feature", "offline.feature claude-home.feature", "only other may name it"},
 		{"credentials-run-native.feature in egress", "egress.feature", "egress.feature credentials-run-native.feature", "only offline may name it"},
 		{"credentials-run-native.feature in other", "doctor.feature", "doctor.feature credentials-run-native.feature", "only offline may name it"},
-		{"credentials-run.feature in other", "doctor.feature", "doctor.feature credentials-run.feature", "only egress may name it"},
 	} {
 		var workflow engineWorkflow
 		if err := yaml.Unmarshal(baseline, &workflow); err != nil {

@@ -10031,8 +10031,6 @@
     positive control, the inotify checkout observer with its calibrated policy-edit bracket, and the
     engine-free regression TestCredentialRunPolicyEditBracket. No product code. Broken down from
     slice-31.
-  done_when:
-    - run: go test ./features -run '^(TestEngineShards|TestCredentialRunPolicyEditBracket)$' passes on the combined tree. A red_scenarios dispatch of main's actual CI workflow shows ID-CREDRUN-08, -09 and -10 selected only in the egress shard, each failing at its first behaviour Then after the fixture and doctor control Then passes
 - id: T-96
   type: test
   title: CREDRUN-11 and -12 join credentials-run.feature @wip with native recorder and controller-kill step definitions, red in CI
@@ -10062,7 +10060,7 @@
     alias a retained source. These are regression checks of shapes that already hold, not behaviour
     scenarios. Broken down from slice-31.
   done_when:
-    - run: go test ./internal/engine/readiness/... ./internal/engine/session/... passes with the new raw contract run against both the fake and the disk adapter, and the oracle fails on the faulty-fake negative control
+    - run: tools/bin/check-credential-raw-contract
 - id: T-98
   type: docs
   title: A run can work on a copy of the checkout instead of a live mount, and hand its result back as commits
@@ -10085,5 +10083,47 @@
     stay on the host, and would let decisions 0013, 0019 and 0020 shrink; it changes the contract's
     checkout-is-the-only-mount line, so it stays the person's call. Read docs/adr/26-10-08-561 in
     that repository first.
+    The proposal leaves three questions open for the person. Should the mount rule in
+    docs/plans/container-pilot.md:95 change? Should copy mode be offered alongside the mount or
+    only for remote sandboxes? What happens to uncommitted edits?
   done_when:
-    - run: "f=docs/plans/workspace-copy-mode.md && test -f \"$f\" && grep -q 'container-pilot.md:95' \"$f\" && grep -qi 'status: *proposed' \"$f\" && grep -q '2026-11-27' \"$f\" && grep -qi 'outside the current milestone' \"$f\" && grep -qi 'open for the person' \"$f\" && grep -q '0013' \"$f\" && grep -q '0019' \"$f\" && grep -q '0020' \"$f\" && grep -q 'charter.md:157' \"$f\" && grep -q 'STANDING.md:39' \"$f\" && grep -qi 'uncommitted' \"$f\" && test \"$(git diff --name-only \"$(git merge-base origin/main HEAD)\" HEAD)\" = \"$f\""
+    - prose: true
+      run: |
+        set -eu
+        f=docs/plans/workspace-copy-mode.md
+        test -f "$f" && test ! -L "$f"
+        for term in 'docs/plans/container-pilot.md:95' '2026-11-27' 'outside the current milestone' 'open for the person' '0013' '0019' '0020' 'charter.md:157' 'STANDING.md:39' 'uncommitted' 'remote' 'mount'; do
+          grep -Fiq "$term" "$f"
+        done
+        grep -Eiq 'status:[[:space:]]*proposed([[:space:][:punct:]]|$)' "$f"
+        python3 - <<'PYTHON'
+        import json, os, re, subprocess
+        from pathlib import Path
+
+        def git(*args):
+            return subprocess.check_output(["git", *args])
+
+        event_path = os.environ.get("GITHUB_EVENT_PATH")
+        event = json.loads(Path(event_path).read_text()) if event_path else {}
+        base = event.get("pull_request", {}).get("base", {}).get("sha") or event.get("before") or "origin/main"
+        base = git("merge-base", base, "HEAD").decode().strip()
+        plan = "docs/plans/workspace-copy-mode.md"
+        entries = {"tasks/phase-1.yaml": "", "tasks/work-items.yaml": "  "}
+        paths = set(git("diff", "--no-renames", "--name-only", "-z", base, "HEAD").decode().split("\0")[:-1])
+        if plan not in paths or paths - {plan, *entries}:
+            raise SystemExit("Expected the proposal and only its own registry changes")
+        for path in paths.intersection(entries):
+            indent = entries[path]
+            stanza = rf"^{indent}- id: T-98\n(?:{indent}  [^\n]*\n|\n)*"
+            outside = []
+            for rev in (base, "HEAD"):
+                if not git("ls-tree", rev, "--", path).startswith(b"100644 blob "):
+                    raise SystemExit(f"Expected regular registry file {path}")
+                data = git("show", f"{rev}:{path}").decode()
+                rest, count = re.subn(stanza, "", data, flags=re.M)
+                if count != 1:
+                    raise SystemExit(f"Expected one T-98 entry in {path}")
+                outside.append(rest)
+            if outside[0] != outside[1]:
+                raise SystemExit(f"Change outside T-98 in {path}")
+        PYTHON

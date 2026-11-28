@@ -231,14 +231,13 @@ type pendingEngineFeature struct{ item, shard string }
 
 // pendingEngineFeatures is the one reviewed list of engine feature files a shard may name
 // before they exist on this tree (T-77, T-78): basename to the item that brings the file and the
-// one shard that may name it. It holds credentials-run.feature for slice-31 in egress and
-// claude-home.feature for slice-36 in other. A listed name no file under the features
+// one shard that may name it. It holds claude-home.feature for slice-36 in other and
+// credentials-run-native.feature for slice-31 in offline. A listed name no file under the features
 // folder bears is skipped and logged as pending; once the file exists it is ordinary and needs an
 // @engine case, and the item that brings it removes its entry here. Every other absent or
 // @engine-less name is refused.
 var pendingEngineFeatures = map[string]pendingEngineFeature{
-	"credentials-run.feature": {item: "slice-31", shard: "egress"},
-	"claude-home.feature":     {item: "slice-36", shard: "other"},
+	"claude-home.feature": {item: "slice-36", shard: "other"},
 
 	"credentials-run-native.feature": {item: "slice-31", shard: "offline"},
 }
