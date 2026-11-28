@@ -10094,7 +10094,9 @@
     contract passage. The plan has these parts, in this order.
 
     Status. One line that reads "Status: proposed", with the date 2026-11-27, for the person's
-    decision. This task fixes that date for the proposal. If the plan is written on a later day,
+    decision. This one line differs from credential-brokering.md, which puts "## Status" and
+    "Proposed, ..." on separate lines: here "Status:" and "proposed" sit on the same line, or the
+    check fails. This task fixes that date for the proposal. If the plan is written on a later day,
     it also gives the day its sources were read. The same section says the mode is outside the
     current milestone (milestone two, steps 1 to 5), that it selects nothing to build, and that the
     live checkout mount stays the default and is not replaced.
@@ -10151,16 +10153,16 @@
     is no mutation proof, and none is fabricated. The range is prose-only (docs/** and tasks/** are
     ci.prose.paths). On such a range CI keeps only a task's static checks and those that declare
     prose: true, and itos work done runs no late check. So the check declares prose: true. It uses
-    only POSIX sh, grep and git, as on ubuntu-latest. The item's branch also carries this spec's
-    commit to tasks/phase-1.yaml, so the range clause leaves out that one path. Without that, the
-    diff would list two files and the check would fail even after correct work. Any other changed
-    path fails the clause: the charter, the contract, a decision or STANDING.md included.
+    only POSIX sh and grep, as on ubuntu-latest. The work changes docs/plans/workspace-copy-mode.md
+    alone: no other path, the charter, the contract, a decision or STANDING.md included. The check
+    does not test that bound, because docs commits land straight on main (itos.yaml push.direct),
+    so any base taken from origin/main gives an empty diff once the work is pushed. Review of the
+    diff against this entry judges the path scope, as for T-75.
 
     How the check fails today. test -f exits 1, because docs/plans/workspace-copy-mode.md does not
-    exist. Each grep then fails on a plan that leaves out its phrase or citation. The range clause
-    fails if the work changes any file but the plan and the ledger. The check cannot tell whether
-    the plan's analysis is right or its recommendations sound. The person's review of the plan
-    judges that.
+    exist. Each grep then fails on a plan that leaves out its phrase or citation. The check cannot
+    tell whether the plan's analysis is right, its recommendations sound or its diff confined to
+    the one path. The person's review of the plan and review of the diff judge that.
   done_when:
-    - run: "f=docs/plans/workspace-copy-mode.md && test -f \"$f\" && grep -q 'container-pilot.md:95' \"$f\" && grep -qi 'status: *proposed' \"$f\" && grep -q '2026-11-27' \"$f\" && grep -qi 'outside the current milestone' \"$f\" && grep -qi 'open for the person' \"$f\" && grep -q '0013' \"$f\" && grep -q '0019' \"$f\" && grep -q '0020' \"$f\" && grep -q 'charter.md:157' \"$f\" && grep -q 'STANDING.md:39' \"$f\" && grep -qi 'uncommitted' \"$f\" && test \"$(git diff --name-only \"$(git merge-base origin/main HEAD)\" HEAD -- . ':(exclude)tasks/phase-1.yaml')\" = \"$f\""
+    - run: "f=docs/plans/workspace-copy-mode.md && test -f \"$f\" && grep -q 'container-pilot.md:95' \"$f\" && grep -qi 'status: *proposed' \"$f\" && grep -q '2026-11-27' \"$f\" && grep -qi 'outside the current milestone' \"$f\" && grep -qi 'open for the person' \"$f\" && grep -q '0013' \"$f\" && grep -q '0019' \"$f\" && grep -q '0020' \"$f\" && grep -q 'charter.md:157' \"$f\" && grep -q 'STANDING.md:39' \"$f\" && grep -qi 'uncommitted' \"$f\""
       prose: true
