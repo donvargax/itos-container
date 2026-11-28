@@ -59,6 +59,16 @@ type CredentialMount struct {
 // link or opens file data. Entries reads at most 128 names per call, without
 // following links, and maintains one directory cursor per handle. Mounts must
 // return a complete, bounded and validated table, or false, never a prefix.
+//
+// A refused Open returns handle zero, a zero node and a non-OK status, and
+// retains no pin. Stat and Descriptor return their zero value and false on
+// refusal. Entries returns nil, false, false, including after a partial batch.
+// Callers judge refusals by status or the success boolean alone. A successful
+// Descriptor with MountID zero reports unavailable kernel evidence.
+//
+// Stat, Descriptor and Entries refuse zero, closed and never-issued handles.
+// Close ignores those handles. Open refuses closed and never-issued parents,
+// and never reissues a handle within an instance.
 type CredentialFS interface {
 	Open(CredentialHandle, string) (CredentialHandle, CredentialNode, CredentialRead)
 	Stat(CredentialHandle) (CredentialNode, bool)
@@ -101,6 +111,8 @@ type CredentialResult struct{ Issues []CredentialIssue }
 
 // CredentialReadPaths names a retained metadata descriptor for the copying
 // adapter. It opens no data and never returns an original policy pathname.
+// ReadPath returns a distinct name for each live handle and "", false for any
+// handle that is not live.
 type CredentialReadPaths interface {
 	ReadPath(CredentialHandle) (string, bool)
 }
