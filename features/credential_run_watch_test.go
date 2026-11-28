@@ -122,6 +122,9 @@ func (o *credentialEventObserver) read(buffer []byte) error {
 		if err != nil {
 			return err
 		}
+		if n == 0 {
+			return errors.New("inotify read returned no data")
+		}
 		for data := buffer[:n]; len(data) != 0; {
 			if len(data) < credentialWatchHeaderSize {
 				return errors.New("short inotify header")

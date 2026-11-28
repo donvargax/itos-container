@@ -39,6 +39,10 @@ type credentialRunFilesystemIO struct {
 	statx      func(string) (credentialRunFileStat, error)
 }
 
+func credentialRunOpenMounts() (io.ReadCloser, error) {
+	return os.Open("/proc/self/mountinfo")
+}
+
 func readCredentialRunMounts(file io.Reader) ([]credentialRunMount, error) {
 	decode := strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, "\n", `\134`, "\\")
 	var mounts []credentialRunMount

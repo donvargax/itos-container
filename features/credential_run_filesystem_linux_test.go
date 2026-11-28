@@ -1,21 +1,12 @@
 package features
 
-import (
-	"io"
-	"os"
-
-	"golang.org/x/sys/unix"
-)
+import "golang.org/x/sys/unix"
 
 var credentialRunFilesystemSystem = credentialRunFilesystemIO{
 	openMounts: credentialRunOpenMounts,
 	statfs:     credentialRunStatfs,
 	lstat:      credentialRunLstat,
 	statx:      credentialRunStatx,
-}
-
-func credentialRunOpenMounts() (io.ReadCloser, error) {
-	return os.Open("/proc/self/mountinfo")
 }
 
 func credentialRunStatfs(path string) (uint32, error) {
