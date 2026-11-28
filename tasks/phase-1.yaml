@@ -10031,8 +10031,6 @@
     positive control, the inotify checkout observer with its calibrated policy-edit bracket, and the
     engine-free regression TestCredentialRunPolicyEditBracket. No product code. Broken down from
     slice-31.
-  done_when:
-    - run: "out=$(go test ./features -run '^(TestEngineShards|TestCredentialRunPolicyEditBracket|TestCredentialRunNativeStepsDefined)$' -v 2>&1); status=$?; printf '%s\\n' \"$out\" | tail -n 40; [ \"$status\" -eq 0 ] && printf '%s\\n' \"$out\" | grep -qF -- '--- PASS: TestEngineShards/credentials-run_red_inventory (' && printf '%s\\n' \"$out\" | grep -qF -- '--- PASS: TestCredentialRunPolicyEditBracket (' && printf '%s\\n' \"$out\" | grep -qF -- '--- PASS: TestCredentialRunNativeStepsDefined ('"
 - id: T-96
   type: test
   title: CREDRUN-11 and -12 join credentials-run.feature @wip with native recorder and controller-kill step definitions, red in CI
