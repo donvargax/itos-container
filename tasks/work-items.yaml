@@ -1372,7 +1372,7 @@ items:
   - id: T-98
     title: A run can work on a copy of the checkout instead of a live mount, and hand its result back as commits
     phase: 1
-    owner: null
+    owner: donvargax
     status: todo
     depends_on: []
     kind: task
