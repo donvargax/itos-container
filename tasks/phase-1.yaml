@@ -10103,20 +10103,25 @@
         def git(*args):
             return subprocess.check_output(["git", *args])
 
-        event_path = os.environ.get("GITHUB_EVENT_PATH")
-        event = json.loads(Path(event_path).read_text()) if event_path else {}
-        base = event.get("pull_request", {}).get("base", {}).get("sha") or event.get("before") or "origin/main"
-        base = git("merge-base", base, "HEAD").decode().strip()
+        base = os.environ.get("PROOF_BASE_SHA")
+        if not base:
+            event_path = os.environ.get("GITHUB_EVENT_PATH")
+            event = json.loads(Path(event_path).read_text()) if event_path else {}
+            base = event.get("pull_request", {}).get("base", {}).get("sha") or event.get("before")
+            if not base:
+                raise SystemExit("Expected PROOF_BASE_SHA or a GitHub event base")
+            base = git("merge-base", base, "HEAD").decode().strip()
+        candidate = git("write-tree").decode().strip()
         plan = "docs/plans/workspace-copy-mode.md"
         entries = {"tasks/phase-1.yaml": "", "tasks/work-items.yaml": "  "}
-        paths = set(git("diff", "--no-renames", "--name-only", "-z", base, "HEAD").decode().split("\0")[:-1])
+        paths = set(git("diff", "--no-renames", "--name-only", "-z", base, candidate).decode().split("\0")[:-1])
         if plan not in paths or paths - {plan, *entries}:
             raise SystemExit("Expected the proposal and only its own registry changes")
         for path in paths.intersection(entries):
             indent = entries[path]
             stanza = rf"^{indent}- id: T-98\n(?:{indent}  [^\n]*\n|\n)*"
             outside = []
-            for rev in (base, "HEAD"):
+            for rev in (base, candidate):
                 if not git("ls-tree", rev, "--", path).startswith(b"100644 blob "):
                     raise SystemExit(f"Expected regular registry file {path}")
                 data = git("show", f"{rev}:{path}").decode()
