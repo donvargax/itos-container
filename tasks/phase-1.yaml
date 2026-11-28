@@ -10042,9 +10042,418 @@
     synchronized controller kill at the two recorded barriers. This task adds the reviewed scenarios
     beside their topic blocks in the same egress-shard file, with their step definitions committed
     red first and @wip kept, so the recovery slice has real red evidence to turn green. Broken down
-    from slice-31.
+    from slice-31. slice-64 turns both rows green; this task adds no product code, no workflow edit
+    and no new scenario ID. The work is one test commit under features/ only. The implementer may
+    commit freely in its own workspace; the host makes the landing commits and handles itos,
+    submission, publication and review. Agents never get an engine, so only the check below runs
+    locally; the native rows run in CI.
+
+    Where the text comes from. slice-31's branch at 48ce147 is not reachable from this repository's
+    history, so this entry carries the two rows itself, and this text is what lands. The header of
+    features/credentials-run.feature already provides for them ("T-96 adds 11 and 12", the shard
+    counts 3, 2, 1, 2 and 2, and 12's policy unlink after the killed controller is reaped). The
+    header is not edited. The rows follow the header's rules, decision 0025's uncertain-start and
+    staging-recovery text (docs/decisions/0025-credentials-passed-in.md:234-262 and :463-475),
+    LIFECYCLE-03's rule that independent inspection or wait supplies an exit that happened,
+    LIFECYCLE-16's controller-kill barriers, and slice-64's registry text. Where those leave a value
+    open, this spec settles it below on 2026-11-28 as proposed, and slice-64 implements to it.
+
+    The file. Append to features/credentials-run.feature, after ID-CREDRUN-10's last line, one
+    blank line and exactly the text below, so the file still ends in one newline. Each line is
+    shown here with two extra leading spaces.
+
+        # T-96: a lost start acknowledgement after mount acquisition (decision 0025,
+        # LIFECYCLE-03's rule). The recorder forwards the first start and withholds
+        # the engine's accepted reply until the controller's own call limit ends that
+        # request, then closes the connection unanswered and refuses any repeated
+        # start. The run's workload is the probe in detached mode: it reports nothing,
+        # ignores SIGTERM, SIGINT and SIGHUP, and exits 23 only on the harness's
+        # SIGUSR1. The recorder holds the controller's first worker-ending request,
+        # for at most half the engine tier's call budget, until the harness has seen
+        # the staged path absent, an exec in that worker has read the source hash
+        # from the fixed path, and the workload has exited 23 by itself. That exit is
+        # observed, never one the controller caused. The removal column refuses every
+        # worker DELETE with a synthetic 503 until run exits; a fresh stop then
+        # completes the cleanup run could not.
+        @wip @slice-31 @ID-CREDRUN-11 @engine @linux
+        Scenario Outline: A lost start acknowledgement after mount acquisition is reconciled from the original worker
+          Given a CI Claude checkout with a private synthetic source and matching "offline" approval
+          And the cooperative credential probe and every marker detector have independent positive controls
+          And the run probe waits detached with its own positive control and a separate exec read plan is prepared
+          When the product inspects with JSON doctor then runs the detached probe while the recorder loses the accepted start reply and answers worker removal "<removal>" then runs fresh status and any stop it requires
+          Then the native fixture verification passed and JSON doctor reported every readiness check and the Claude source ready
+          And the engine accepted exactly one create and one start of one worker and that start reply never reached the controller
+          And the staged Claude path was absent before the first worker-ending request was forwarded and an exec in the running worker then read the exact source hash from the fixed Claude path as the non-root host UID
+          And the workload exited 23 by itself and run returned 23 without a repeated start a replacement worker or a synthesized exit
+          And run reports "<run cleanup>" cleanup for its registered session
+          And fresh status reports that session with controller absent workload exit 23 credential staging "absent" and cleanup "<status cleanup>" in plain and JSON output
+          And the final status after any required fresh stop reports complete cleanup and no worker staging or other owned resource remains
+          And no provisioning surface of the recovery contains the raw marker or any base64-offset encoding
+          And the source approval and unrelated resources are unchanged and the checkout differs only by the scenario's journaled policy edits
+
+          Examples:
+            | removal                  | run cleanup | status cleanup |
+            | normally                 | complete    | complete       |
+            | with 503 until run exits | incomplete  | pending        |
+
+        # T-96: controller loss while the staged copy is still present (decision
+        # 0025: stop removes staging by the intent's directory name after owner,
+        # mode and expected-name checks). The recorder holds the engine's accepted
+        # reply at the named barrier, and the harness SIGKILLs only the run
+        # controller within that call and reaps it. The policy is then unlinked by
+        # the journaled bracket before any fresh command, so status and stop work
+        # from original protected authority alone. The detached workload never
+        # exits by itself and stop runs with no controller present, so no workload
+        # exit exists to report.
+        @wip @slice-31 @ID-CREDRUN-12 @engine @linux
+        Scenario Outline: A fresh controller recovers the staged credential after the run controller is killed at a held engine reply
+          Given a CI Claude checkout with a private synthetic source and matching "offline" approval
+          And the cooperative credential probe and every marker detector have independent positive controls
+          And the run probe waits detached with its own positive control and a separate exec read plan is prepared
+          When the product inspects with JSON doctor then runs the detached probe until the recorder holds the engine's reply "<barrier>" and the harness kills only the controller with SIGKILL
+          And after reaping the controller the fixture unlinks the policy then the product runs fresh status then fresh stop then fresh status again
+          Then the native fixture verification passed and JSON doctor reported every readiness check and the Claude source ready
+          And the controller was killed while the engine had accepted the held "<barrier>" call and the worker "<worker state>"
+          And fresh status before stop reports the original session with controller absent cleanup pending no workload exit credential staging "present" and the exact stop retry in plain and JSON output
+          And fresh stop removes the original worker and its host staging directory and confirms complete cleanup
+          And fresh status after stop reports complete cleanup credential staging "absent" and no workload exit or stop retry
+          And no start restart or create followed the kill and status and stop read neither the source nor the active approval without a current policy
+          And no provisioning surface of the recovery contains the raw marker or any base64-offset encoding
+          And the source approval and unrelated resources are unchanged and the checkout differs only by the scenario's journaled policy edits
+
+          Examples:
+            | barrier                            | worker state                                                          |
+            | after accepted create before reply | was created and never started                                         |
+            | after accepted start before reply  | ran and an exec read the exact source hash from the still staged copy |
+
+    Shard and definitions edits, in the same commit. In features/credential_run_definitions_test.go,
+    credentialRunIDs becomes {"@ID-CREDRUN-08", "@ID-CREDRUN-09", "@ID-CREDRUN-10",
+    "@ID-CREDRUN-11", "@ID-CREDRUN-12"}, written on one line in that order. The 'credentials-run red
+    inventory' subtest of TestEngineShards then requires the egress shard to select count 10 (3, 2,
+    1, 2 and 2 rows), exactly those five IDs and no skip, and every other shard to select 0 with a
+    skip naming 'other engine shard'; its message says ten rows and five IDs.
+    TestCredentialRunNativeStepsDefined requires exactly 10 selected pickles and 121 selected steps
+    (13 in each 08 row, 9 in each 09 row, 12 in 10, and 13 in each 11 and 12 row), each matching
+    exactly one expression of the whole registry. Every new step is registered from
+    (w *world) credentialRunSteps (features/credential_run_steps_test.go:13), or from one method it
+    calls. Leave .github/workflows/ci.yml, decision 0024, the header and rows 08 to 10 unchanged.
+
+    T-95 contracts this task reuses, as they are on main. Start files are
+    features/credential_run_journal_test.go, credential_run_process_test.go,
+    credential_run_fixture_test.go, credential_run_steps_test.go, credential_run_observer_test.go,
+    credential_run_assertions_test.go and testdata/credentials-run/probe/main.go.
+      - newCredentialRunJournal(socket string) (*credentialRunJournal, error) listens on a Unix
+        socket and relays every request through an httputil.ReverseProxy to /var/run/docker.sock
+        (doctorTransport). It records each exchange as credentialRunExchange{Method, Path, Query,
+        RequestHeaders, ResponseHeaders, RequestBody, ResponseBody, Status, Truncated}, bodies kept
+        up to 4 MiB. snapshot() returns them in arrival order. scan(func(surface string, data
+        []byte) error) fails on any exchange with Status 0 or a truncated body, then scans each
+        exchange's metadata, request body and response body. Hijacked attach streams are relayed,
+        not recorded.
+      - The probe's plan is credentialRunPlan{Nonce, Target string; Forbidden []string; Child
+        json.RawMessage}, written by (p *credentialRunProject) plan(forbidden, child) as JSON to
+        <checkout>/credrun-plan-<n>.json, n counting from 1 per project. (p
+        *credentialRunProject) start(n) runs exactly 'run -- /workspace/credrun-probe
+        /workspace/credrun-plan-<n>.json' with a 90-second context, stdin piped and held open.
+      - A report is one JSON line on the probe's stdout, credentialRunReport{Nonce, Phase, UID,
+        GID, Target, Forbidden, Writes, CredentialEntries, ShmEntries, CredentialListing,
+        ShmListing, TokenEnv, MarkerInArgsOrEnv, Child, ChildError}. Phase is first, read or
+        final. Target and each Forbidden value are credentialRunAccess{Kind, Hash, Mode, Errno,
+        UID}, Kind being file, absent, denied or error. credentialReport(out, nonce, phase) finds
+        the one report with that nonce and phase. hasFile(hash) requires the nonce, the host
+        euid and egid, Kind file, that sha256, Mode "0400" and the host UID as owner. The
+        non-detached probe prints first, then obeys stdin lines 'read' and 'exit <n>' (a final
+        report, then exit n).
+      - (w *world) homeNativeInvoke(args ...string) homeNativeResult runs one product command in
+        the project's checkout and environment with a 40-second deadline; homeNativeResult{exit
+        int; out, errout []byte; err error} has err set only for a harness failure (start
+        failure or the deadline), never for a nonzero exit.
+      - (w *world) homeNativeRegistration(worker map[string]any) (string, map[string]any,
+        error) takes a worker's inspect object. Its io.itos-container.intent label carries the
+        intent token; the session ID is the one directory under <XDG_STATE_HOME>/itos-container/
+        sessions/<recoveryIndexKey()>/ whose record.json 'intent' basename, without .json, equals
+        that token, whose 'id' equals the directory name and whose 'project' is the project.
+      - (w *world) credentialApprovalWatch() (func(), error) arms inotify on every path in
+        w.credentialApproval.observedInputs and w.credentials.paths, plus the read control
+        slice-30-read-control. The returned func reads the events: any event on a watched path
+        other than the control sets w.credentialApproval.accessError, and so does a missing
+        control event.
+      - (f *credentialRunFixture) newShmEntries() returns the /dev/shm names matching
+        itos-container-<32 lowercase hex> that were not there when the fixture opened.
+      - (n *egressNative) owned(ctx) ([]string, error) lists "container <id>", "network <id>" and
+        "volume <name>" for every resource labelled io.itos-container.project=<project>, stopped
+        containers included.
+      - (c *credentialRunCheckout) editPolicy(op string, data []byte, between func(after bool)
+        error) error makes one calibrated, bracketed, journaled rename ('rename') or unlink
+        ('unlink', data nil) of <checkout>/itos-container.yaml and judges the events. It returns
+        credentialRunBracketRejection when the bracket check or the final identity fails, and a
+        plain error for a fixture failure. Each mutation is appended to c.mutations.
+      - (f *credentialRunFixture) arm() takes each checkout's tree snapshot (checkoutBefore) and
+        arms or re-proves its observer; every When calls it first.
+      - credentialRunReady, credentialRunSurfaces and finish serve rows 08 to 10 and stay as they
+        are. The new rows use the new collection and surface steps below, which may share helpers
+        factored out of credentialRunSurfaces only if rows 08 to 10 keep exactly their assertions.
+
+    Recorder. features/credential_run_journal_test.go grows into the fault recorder; the faults go
+    in a new file, credential_run_recorder_test.go. newCredentialRunRecorder(socket, upstream string,
+    hold time.Duration) (*credentialRunJournal, error) takes the upstream daemon socket and the
+    ending-hold bound. newCredentialRunJournal(socket) becomes newCredentialRunRecorder(socket,
+    "/var/run/docker.sock", engineCallBudget/2), which is 500 ms in the engine tier. An unarmed
+    recorder behaves exactly as today. credentialRunExchange gains At time.Time, the request's
+    arrival at the recorder, and Fault string, the fault applied to it or "". Every exchange,
+    faulted ones included, records the status and body the engine answered, or the recorder's own
+    synthetic answer, so scan never sees Status 0 for a call the engine completed. Paths match
+    after removing one leading /v<digits>.<digits> segment. The worker W is the Id in the body of
+    the first POST /containers/create the engine answers 201. A start is POST /containers/W/start.
+    A worker-ending request is POST /containers/W/kill (any signal), POST /containers/W/stop or
+    DELETE /containers/W (any query). Requests for any other ID are never faulted.
+      - type credentialRunFaults struct {LoseStart, FailRemoval bool; Barrier string;
+        StagedAbsent func() (bool, error)}. Barrier is "", "after accepted create before reply" or
+        "after accepted start before reply". (j *credentialRunJournal) arm(credentialRunFaults) is
+        called once, before the product run starts.
+      - LoseStart. The first start of W is sent upstream by the recorder itself. If the engine
+        answers 204, the recorder records StartAccepted, sends W once on accepted() (a channel of
+        capacity 1), and writes nothing to the client. It waits until that request's context ends
+        or engineCreateOutcomeAllowance (10 s) passes, then hijacks and closes the client
+        connection. StartReplyWithheld is true when the request's context ended first, that is,
+        when the controller gave up on its own with no reply byte. Any other engine answer is
+        relayed unchanged. While LoseStart or a Barrier is armed, every later start of W is
+        answered 409 with body "CREDRUN_REPEATED_START_REFUSED\n" and is not forwarded. Starts
+        counts every start of W, refused ones included.
+      - Ending hold, armed by LoseStart. When the first worker-ending request for W arrives, the
+        recorder records Arrived and StagedAbsentAtArrival from StagedAbsent(). It holds the
+        request before forwarding until release() is called, the hold bound passes since
+        Arrived, or the request's context ends, and then forwards it, recording Forwarded and
+        whether it was Released or Expired. Later worker-ending requests are not held.
+        (j *credentialRunJournal) release() is idempotent: it ends a hold in progress at once and
+        stops any later hold.
+      - FailRemoval. Each DELETE /containers/W before clear() is answered 503 with body
+        "CREDRUN_SYNTHETIC_REMOVE\n" and is not forwarded; RefusedRemovals counts them. If the
+        first worker-ending request is such a DELETE, it is held first and then answered 503.
+      - Barrier. For the create barrier, the first create the engine answers 201; for the start
+        barrier, the first start of W the engine answers 204. The recorder records W and
+        BarrierAt, sends W once on held() (capacity 1), and writes nothing to the client. It
+        records BarrierEnded when that request's context ends. After clear(), if the client is
+        still connected, it hijacks and closes the connection without a reply.
+      - (j *credentialRunJournal) clear() is idempotent: it disarms every fault for later
+        requests and ends any barrier hold.
+      - (j *credentialRunJournal) faultLog() returns credentialRunFaultLog{Worker string;
+        Creates, Starts, RefusedRemovals int; StartAccepted time.Time; StartReplyWithheld bool;
+        Barrier string; BarrierAt, BarrierEnded time.Time; Ending *credentialRunEnding}, where
+        Creates counts creates the engine answered 201 and credentialRunEnding is {Method, Path
+        string; Arrived, Forwarded time.Time; StagedAbsentAtArrival, Released, Expired bool}.
+
+    TestCredentialRunRecoveryRecorder is an ordinary go test in its own file,
+    credential_run_recorder_regression_test.go. It uses no engine and no product. Its fake
+    upstream is an in-process http.Server on a Unix socket under os.MkdirTemp("", "crr-"), kept
+    short for sun_path. The fake answers POST /v1.47/containers/create with 201 and {"Id": <64
+    hex>}, start, kill and stop with 204, DELETE with 204 and GET .../json with 200 {}, and logs
+    each call's path and arrival time. The recorder under test listens on a second socket in that
+    directory with a 100 ms hold. Subtests:
+      - unarmed_passthrough: every call is relayed unchanged and journaled with At and the fake's
+        status, and faultLog() is empty.
+      - lost_start: a client whose start times out at 200 ms gets an error and no status line;
+        accepted() yields the ID; StartReplyWithheld is true; the fake saw one start; a second
+        start gets 409 with the refusal body; the fake still saw one; Starts is 2.
+      - ending_released: the first kill is held. The fake receives it only after release(),
+        which is called at 30 ms; Released is true and Expired false; StagedAbsentAtArrival
+        equals what the supplied func returned; a second kill reaches the fake unheld.
+      - ending_expired: with no release, the first kill reaches the fake no earlier than 100 ms
+        after Arrived, and Expired is true.
+      - removal_refused_until_clear: a DELETE gets 503 with the synthetic body and never reaches
+        the fake; after clear() the next DELETE reaches it and gets 204; RefusedRemovals is 1.
+      - barrier_create and barrier_start: held() yields the ID, the client gets no reply, and
+        when the client cancels at 100 ms BarrierEnded is set and the journal keeps the fake's
+        201 or 204; the fake saw the call exactly once.
+      - prefix_and_identity: unversioned paths match too, and calls for another container ID are
+        never held, refused or counted.
+    It tests the harness, so it passes before and after slice-64 and is not scenario red evidence.
+
+    Detached probe and exec read. The probe's plan, and credentialRunPlan with it, gains
+    Detached bool. With Detached true and Child empty, the probe checks the plan as it does today,
+    then calls signal.Ignore for SIGTERM, SIGINT and SIGHUP and signal.Notify for SIGUSR1. It
+    writes nothing to stdout or stderr, reads neither stdin nor the target, and blocks until
+    SIGUSR1, on which it exits 23. It never exits otherwise. As PID 1 with SIGTERM ignored, only
+    SIGUSR1 and SIGKILL end it. A Detached plan with a Child is a usage error (exit 2). Rows 08 to
+    10 are unchanged, since their plans carry Detached false. The third Given, (w *world)
+    credentialRunDetachedPlans, writes two more plans to the project's checkout before any When
+    arms the observer. Plan 2 is {Nonce, Target, Detached: true}. Plan 3 is {Nonce, Target,
+    Forbidden: [host source, its sibling]}. The run uses plan 2, exactly 'run --
+    /workspace/credrun-probe /workspace/credrun-plan-2.json', through p.start(2). The exec uses
+    plan 3. Plan 1, written by the reused first Given, is unused in these rows and harmless. The
+    same Given then runs a disposable control container, created and removed by the harness
+    exactly as positiveProbe does (cached image, network none, read-only root, all capabilities
+    dropped, no-new-privileges, host UID:GID, the probe, a detached plan, an exec plan and a 0400
+    marker control file bound read-only at the fixed path). The control requires all of these:
+    the container is still running 200 ms after start, and again 300 ms after the harness sends
+    it SIGTERM; an exec of '/credrun-probe /credrun-exec-plan.json' as UID:GID, given stdin
+    "exit 0\n", prints first and final reports that pass hasFile for the control file's hash
+    and exits 0; after SIGUSR1 it exits with code 23 within 5 seconds; and its container log is
+    empty. Any miss fails that Given at its own step as a fixture blocker. Every exec in these rows
+    is made by the harness with its own client on /var/run/docker.sock, never through the
+    recorder: ExecCreate for W with User UID:GID, Cmd ["/workspace/credrun-probe",
+    "/workspace/credrun-plan-3.json"] and stdin, stdout and stderr attached. Then exec start
+    with "exit 0\n" on stdin, output demultiplexed by stdcopy with a 1 MiB limit, both reports
+    parsed with plan 3's nonce, and exec inspect requiring exit code 0. The harness's SIGUSR1 goes
+    the same way, with ContainerKill(W, "SIGUSR1"). The probe stays hash-only and writes nothing
+    under /workspace.
+
+    11's When, (w *world) credentialRunLostStart(removal string). It calls f.arm() and runs JSON
+    doctor. It arms the recorder with LoseStart, FailRemoval when removal is "with 503 until run
+    exits", and StagedAbsent as len(newShmEntries()) == 0, then runs p.start(2).
+      - It waits for accepted(), the run's exit, or engineReadinessAllowance (35 s). An exit first
+        is the product's outcome (today policy.version, exit 2): it records the exit and streams,
+        skips everything that needs a worker, and returns nil. If neither happens within the
+        allowance while run is still live, that is a harness failure.
+      - On acceptance it inspects W with its own client (workerRaw), resolves the session with
+        homeNativeRegistration, takes the staged path from the mount whose Destination is the
+        fixed path, and creates the exec instance at once.
+      - It polls every 10 ms for the staged path's absence. If the first worker-ending request is
+        forwarded first, by expiry, with the path still present, that is a product observation:
+        the exec is skipped and recorded as not run, and the When goes on.
+      - Once absence is seen and its own inspect shows W running, it starts the exec, sends
+        SIGUSR1 and polls inspect until W has exited with code 23. Then it calls release(). The
+        deadline for those three steps is the held request's Arrived plus the hold bound if one is
+        held, else 5 seconds. A failure or a missed deadline there is a harness failure, returned
+        at the When with the step's name and elapsed time. If W is no longer running when the exec
+        would start, because the product's request was already forwarded, that is a product
+        observation.
+      - It waits for run's exit (a waitErr is a harness failure) and calls clear().
+      - It runs plain and JSON status. If the JSON session shows stop_candidate true, it runs a
+        fresh 'stop <session>' and then plain and JSON status again; otherwise the first status is
+        the final one. It records owned(), newShmEntries(), the staged directory's presence and
+        the approval record's bytes.
+
+    12's first When, (w *world) credentialRunKilledAtBarrier(barrier string). It calls f.arm(),
+    runs JSON doctor, arms the recorder with that Barrier, and runs p.start(2). It waits for held(),
+    the run's exit, or 35 s, with the same classification as 11. credentialRunProcess keeps its
+    *os.Process. On held() the When kills that process with SIGKILL at once, before any other call,
+    records killAt, and reaps it within 10 seconds; a kill or reap failure is a harness failure. If
+    BarrierEnded precedes killAt, the controller left the held call by its own limit before the
+    kill, and the When fails as a harness timing failure. It then calls clear(). Through its own
+    client it inspects W (workerRaw, Status, Running, StartedAt), resolves the session, and takes
+    the staged path from the inspect's Mounts, or from HostConfig.Mounts for a created worker. It
+    records newShmEntries(). In the start row, with W running, it runs the exec with a 5-second
+    deadline. A failure there is a harness failure.
+
+    12's second When, (w *world) credentialRunFreshRecovery(). If no kill happened it returns nil.
+    Otherwise it calls f.arm() and then editPolicy("unlink", nil, nil): a rejection is recorded as
+    in T-95, and any other error is returned. It sets observedInputs to the active approval
+    record and arms credentialApprovalWatch. It runs plain and JSON status, a fresh 'stop
+    <session>', and plain and JSON status again, then finishes the watch. After each of those
+    commands it records whether the policy path is still absent. It records owned(),
+    newShmEntries(), the staged directory's presence, a harness inspect of W (404 expected), the
+    approval record's bytes, and the journal entries with At after killAt.
+
+    Status and stop format the Thens read. JSON status is one schema-1 object
+    {"schema": 1, "ok": true, "problems": [], "sessions": [...]} with exit 0
+    (internal/engine/session/presentation/recovery.go:91-97). The Thens require exactly one session
+    with "id" equal to the registered session and read only these members: "project" (the
+    project), "fingerprint" (the seeded approval's), "controller" (present, absent or unknown),
+    "cleanup" (complete, pending or unknown), "workload_exit" (an integer or null), "stop_candidate"
+    (a bool), "retry" (null, or exactly ["itos", "container", "stop", <id>]) and slice-64's
+    "credential_staging" (present, absent or unknown). Other members, such as credentials, anchor
+    or T-48's staging, are ignored. In plain status the session's summary line is
+    'session <id> project <project> fingerprint <fp> state <s> resource <r> controller <c> cleanup
+    <cl> workload_exit <n|unknown> stop_candidate <true|false>'
+    (internal/engine/session/presentation/recovery.go:106). slice-64 adds exactly one line
+    'session <id> credential staging: <present|absent|unknown>' for a session with a grant, after
+    that summary line and before the session's retry line. Because it carries the session ID, it
+    is matched by that ID, not by its position. The retry line 'Use the same effective project:
+    itos container stop <id>' is present exactly when cleanup is not complete. Plain and JSON must
+    agree for each member both show. Run's own retry line is the same text
+    (internal/slices/run/command/command.go:342).
+
+    Thens. Each row's first Then is T-95's credentialRunReady, which passes today. Today run exits
+    2 with policy.version at /version before any engine contact, so the next step fails in both
+    rows with credentialRunFailure's message naming run's exit and rule but no marker: 11's 'the
+    engine accepted exactly one create and one start ...' and 12's 'the controller was killed ...'.
+    Each Then asserts exactly what its text says, from the records above:
+      - 11, engine accepted: Creates 1, Starts 1, StartAccepted set, StartReplyWithheld true, no
+        container create after the first, and the registered session non-empty.
+      - 11, staged absence and exec: the absence was observed after StartAccepted and before
+        Ending.Forwarded, Expired is false, and the exec started after the absence and finished
+        before Forwarded; a nil Ending fails it. Its first report passes hasFile for the source
+        hash, Forbidden shows both host paths absent or denied, and the exec exited 0.
+      - 11, exit: the harness saw W exit 23 before release(), run's exit is 23, Starts and Creates
+        are still 1, and run's stderr lacks run.workload-exit-unknown.
+      - 11, run cleanup "complete": run's stderr has neither run.cleanup-temporary nor
+        run.cleanup-ownership. "incomplete": RefusedRemovals is at least 1, and run's stderr has
+        run.cleanup-temporary and the retry line for the session. The start timeout's own rule is
+        LIFECYCLE-03's and is not asserted here.
+      - 11, fresh status, taken after run exited: exit 0, controller absent, workload_exit 23,
+        credential_staging absent, and cleanup equal to the column. For complete,
+        stop_candidate is false, retry null and no retry line is printed. For pending,
+        stop_candidate is true and the retry is exact, in both forms. Plain shows workload_exit 23
+        and 'credential staging: absent'.
+      - 11, final status: in the pending row, stop exited 0 and its plain summary line shows
+        cleanup complete. The final status shows cleanup complete, workload_exit 23,
+        credential_staging absent, stop_candidate false and retry null. owned() and
+        newShmEntries() are empty and the staged directory is gone.
+      - 12, kill: the process ended by SIGKILL from the harness (its WaitStatus signal), BarrierAt
+        precedes killAt, and Barrier equals the column. The create row requires the worker created
+        and never started: Status created, Running false, a zero StartedAt and no start of W in the
+        whole journal. The start row requires W running at the kill, Starts 1, the staged path
+        present in newShmEntries(), and an exec first report that passes hasFile for the source hash
+        with exit 0.
+      - 12, status before stop: exit 0, controller absent, cleanup pending, workload_exit null
+        (plain 'unknown'), stop_candidate true, the exact retry and 'credential staging: present',
+        in both forms.
+      - 12, stop: exit 0 with its plain summary line showing cleanup complete. The harness inspect
+        of W answers 404, the staged directory taken at the kill is gone, and newShmEntries() and
+        owned() are empty.
+      - 12, status after stop: cleanup complete, credential_staging absent, workload_exit null,
+        stop_candidate false, retry null and no retry line.
+      - 12, no relaunch and no rereads: no journal entry with At after killAt is a start, restart
+        or unpause of W or a container create. accessError is nil, and the policy path stayed
+        absent through every fresh command.
+      - Surfaces, both rows: f.journal.scan, the JSON doctor transcript, run's stdout and stderr,
+        every status and stop transcript, workerRaw, every exec's stdout and stderr, and every
+        regular file under the checkout, the selected state root and the fixed account state root
+        all pass the marker scan. The checkout observer judges clean, no edit was rejected, and
+        c.mutations holds exactly 0 entries in 11 and 1 unlink in 12. A missing transcript, report
+        or capture fails it.
+      - Unchanged, both rows: the source and its sibling pass credentialOriginalFile, and the
+        approval record's bytes, fingerprint and generation are unchanged. Engine resources equal
+        f.originalResources, and the checkout tree equals checkoutBefore, minus itos-container.yaml
+        in 12 only.
+    A missing record fails a Then; it never passes one. A failure message names the surface or
+    value, never a marker or a full record.
+
+    Timing and classification. The ending hold is the settled half call budget, counted from the
+    request's arrival, so the controller's own 1-second call still has half its limit for the
+    engine. If the bound expires, the recorder forwards the request and records Expired. That is a
+    product observation when the staged path was still present: the product terminated before
+    unlinking, and 11's absence Then fails. It is a harness failure at the When when the path was
+    absent and the harness's exec, signal or exit check missed the bound (T-93). The exec is
+    created at acceptance and started at the first observed absence, so the window opens at the
+    unlink, not at the request. Keep each new file under revive's 600-line limit by splitting it,
+    never by squeezing lines. Engine timing for these rows is judged in CI under decision 0024's
+    180-second warning and 600-second hang guard; this task claims none.
+
+    Red evidence at landing (T-91). The host dispatches main's actual ci.yml with red_scenarios
+    '@ID-CREDRUN-11 @ID-CREDRUN-12' on the published red commit. The run must show the four rows
+    selected only in the egress shard, and each row's report must show every Given and When
+    passed, credentialRunReady passed, and the next step failed at its assertion. An undefined or
+    ambiguous step, or a fixture blocker, is not red evidence. The rows stay @wip and red on main;
+    slice-64 turns them green. The check below fails today:
+    TestCredentialRunRecoveryRecorder does not exist, so its PASS line is missing, and the feature
+    has neither tag line. On a tree with the rows but missing, undefined or ambiguous steps,
+    TestCredentialRunNativeStepsDefined fails, and so does the check.
   done_when:
-    - run: go test ./features -run '^TestEngineShards$' passes. A red_scenarios dispatch of main's actual CI workflow shows ID-CREDRUN-11 and -12 selected only in the egress shard, each failing at its first behaviour Then after the fixture and doctor control Then passes
+    - run: |
+        set -eu
+        out=$(go test ./features -run '^(TestEngineShards|TestCredentialRunPolicyEditBracket|TestCredentialRunNativeStepsDefined|TestCredentialRunRecoveryRecorder)$' -v 2>&1) && status=0 || status=$?
+        printf '%s\n' "$out" | tail -n 40
+        [ "$status" -eq 0 ]
+        for name in 'TestEngineShards/credentials-run_red_inventory' TestCredentialRunPolicyEditBracket TestCredentialRunNativeStepsDefined TestCredentialRunRecoveryRecorder; do
+          printf '%s\n' "$out" | grep -qF -- "--- PASS: $name ("
+        done
+        for id in 11 12; do
+          [ "$(grep -cxF "  @wip @slice-31 @ID-CREDRUN-$id @engine @linux" features/credentials-run.feature)" -eq 1 ]
+        done
+        grep -qF '"@ID-CREDRUN-10", "@ID-CREDRUN-11", "@ID-CREDRUN-12"}' features/credential_run_definitions_test.go
+      timeout: 900
 - id: T-97
   type: test
   title: A shared raw CredentialFS contract runs unchanged against the I/O-free fake and the disk adapter
