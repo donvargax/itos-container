@@ -2947,15 +2947,15 @@ items:
   - id: T-96
     title: CREDRUN-11 and -12 join credentials-run.feature @wip with native recorder and controller-kill step definitions, red in CI
     phase: 1
-    owner: null
-    status: todo
+    owner: donvargax
+    status: doing
     depends_on: [T-95, T-84]
     kind: task
   - id: T-97
     title: A shared raw CredentialFS contract runs unchanged against the I/O-free fake and the disk adapter
     phase: 1
     owner: donvargax
-    status: doing
+    status: todo
     depends_on: [slice-30, T-48, T-77]
     kind: task
   - id: slice-62

@@ -494,6 +494,10 @@ func (w *world) credentialRunSurfaces() error {
 		}
 		roots = append(roots, p.w.doctor.checkout)
 	}
+	return f.scanCredentialRunTrees(roots...)
+}
+
+func (f *credentialRunFixture) scanCredentialRunTrees(roots ...string) error {
 	for _, root := range roots {
 		if err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 			if err != nil || !entry.Type().IsRegular() {

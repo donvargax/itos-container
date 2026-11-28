@@ -11,6 +11,7 @@ import (
 )
 
 func (w *world) credentialRunSteps(sc lifecycleStepRegistrar) {
+	w.credentialRunRecoverySteps(sc)
 	sc.Step(`^a CI Claude checkout with a private synthetic source and matching "([^"]*)" approval$`, w.credentialRunSingle)
 	sc.Step(`^the cooperative credential probe and every marker detector have independent positive controls$`, w.credentialRunControls)
 	sc.Step(`^the product inspects with doctor and matching terminal approve then runs the credential probe through active status and workload exit (\d+)$`, w.credentialRunSingleWhen)

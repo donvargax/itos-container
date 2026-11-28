@@ -30,6 +30,7 @@ type credentialRunPlan struct {
 	Nonce, Target string
 	Forbidden     []string
 	Child         json.RawMessage
+	Detached      bool `json:",omitempty"`
 }
 
 type credentialRunFixture struct {
@@ -48,6 +49,7 @@ type credentialRunFixture struct {
 	rotatedInfo                                       os.FileInfo
 	sourceAfterRotation                               string
 	later                                             *credentialRunProcess
+	recovery                                          credentialRunRecovery
 }
 
 type credentialRunProject struct {
@@ -200,7 +202,10 @@ func (p *credentialRunProject) engine(cli *client.Client) *egressNative {
 }
 
 func (p *credentialRunProject) plan(forbidden []string, child json.RawMessage) error {
-	plan := credentialRunPlan{Nonce: egressNonce(), Target: credentialRunTarget, Forbidden: forbidden, Child: child}
+	return p.writePlan(credentialRunPlan{Nonce: egressNonce(), Target: credentialRunTarget, Forbidden: forbidden, Child: child})
+}
+
+func (p *credentialRunProject) writePlan(plan credentialRunPlan) error {
 	p.plans = append(p.plans, plan)
 	path := filepath.Join(p.w.doctor.checkout, credentialPlanName(len(p.plans)))
 	return os.WriteFile(path, approvalJSON(plan), 0600)
@@ -422,6 +427,9 @@ func (w *world) closeCredentialRun() error {
 		return nil
 	}
 	var result error
+	if f.journal != nil {
+		f.journal.clear()
+	}
 	for _, p := range f.projects {
 		for _, run := range p.runs {
 			run.cancel()

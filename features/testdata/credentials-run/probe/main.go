@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -20,6 +21,7 @@ type plan struct {
 	Nonce, Target string
 	Forbidden     []string
 	Child         json.RawMessage
+	Detached      bool
 }
 
 type access struct {
@@ -48,6 +50,16 @@ func main() {
 	var p plan
 	if err != nil || json.Unmarshal(data, &p) != nil || p.Nonce == "" || p.Target != "/run/itos-container/credentials/claude-token" {
 		os.Exit(2)
+	}
+	if p.Detached {
+		if len(p.Child) != 0 {
+			os.Exit(2)
+		}
+		signal.Ignore(syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
+		wakeup := make(chan os.Signal, 1)
+		signal.Notify(wakeup, syscall.SIGUSR1)
+		<-wakeup
+		os.Exit(23)
 	}
 	input := bufio.NewScanner(os.Stdin)
 	if len(p.Child) != 0 && (!input.Scan() || input.Text() != "network-ready") {

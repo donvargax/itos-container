@@ -235,3 +235,67 @@ Feature: Deliver the approved Claude token to one owned run
     Then that later run has a fresh session and its probe reports a nonce-bearing denial from the fixed Claude path
     And that later run executes without source reads staging credential mounts or residual token access
     And every run confirms its owned cleanup without modifying any original source or leaking a marker through provisioning
+
+  # T-96: a lost start acknowledgement after mount acquisition (decision 0025,
+  # LIFECYCLE-03's rule). The recorder forwards the first start and withholds
+  # the engine's accepted reply until the controller's own call limit ends that
+  # request, then closes the connection unanswered and refuses any repeated
+  # start. The run's workload is the probe in detached mode: it reports nothing,
+  # ignores SIGTERM, SIGINT and SIGHUP, and exits 23 only on the harness's
+  # SIGUSR1. The recorder holds the controller's first worker-ending request,
+  # for at most half the engine tier's call budget, until the harness has seen
+  # the staged path absent, an exec in that worker has read the source hash
+  # from the fixed path, and the workload has exited 23 by itself. That exit is
+  # observed, never one the controller caused. The removal column refuses every
+  # worker DELETE with a synthetic 503 until run exits; a fresh stop then
+  # completes the cleanup run could not.
+  @wip @slice-31 @ID-CREDRUN-11 @engine @linux
+  Scenario Outline: A lost start acknowledgement after mount acquisition is reconciled from the original worker
+    Given a CI Claude checkout with a private synthetic source and matching "offline" approval
+    And the cooperative credential probe and every marker detector have independent positive controls
+    And the run probe waits detached with its own positive control and a separate exec read plan is prepared
+    When the product inspects with JSON doctor then runs the detached probe while the recorder loses the accepted start reply and answers worker removal "<removal>" then runs fresh status and any stop it requires
+    Then the native fixture verification passed and JSON doctor reported every readiness check and the Claude source ready
+    And the engine accepted exactly one create and one start of one worker and that start reply never reached the controller
+    And the staged Claude path was absent before the first worker-ending request was forwarded and an exec in the running worker then read the exact source hash from the fixed Claude path as the non-root host UID
+    And the workload exited 23 by itself and run returned 23 without a repeated start a replacement worker or a synthesized exit
+    And run reports "<run cleanup>" cleanup for its registered session
+    And fresh status reports that session with controller absent workload exit 23 credential staging "absent" and cleanup "<status cleanup>" in plain and JSON output
+    And the final status after any required fresh stop reports complete cleanup and no worker staging or other owned resource remains
+    And no provisioning surface of the recovery contains the raw marker or any base64-offset encoding
+    And the source approval and unrelated resources are unchanged and the checkout differs only by the scenario's journaled policy edits
+
+    Examples:
+      | removal                  | run cleanup | status cleanup |
+      | normally                 | complete    | complete       |
+      | with 503 until run exits | incomplete  | pending        |
+
+  # T-96: controller loss while the staged copy is still present (decision
+  # 0025: stop removes staging by the intent's directory name after owner,
+  # mode and expected-name checks). The recorder holds the engine's accepted
+  # reply at the named barrier, and the harness SIGKILLs only the run
+  # controller within that call and reaps it. The policy is then unlinked by
+  # the journaled bracket before any fresh command, so status and stop work
+  # from original protected authority alone. The detached workload never
+  # exits by itself and stop runs with no controller present, so no workload
+  # exit exists to report.
+  @wip @slice-31 @ID-CREDRUN-12 @engine @linux
+  Scenario Outline: A fresh controller recovers the staged credential after the run controller is killed at a held engine reply
+    Given a CI Claude checkout with a private synthetic source and matching "offline" approval
+    And the cooperative credential probe and every marker detector have independent positive controls
+    And the run probe waits detached with its own positive control and a separate exec read plan is prepared
+    When the product inspects with JSON doctor then runs the detached probe until the recorder holds the engine's reply "<barrier>" and the harness kills only the controller with SIGKILL
+    And after reaping the controller the fixture unlinks the policy then the product runs fresh status then fresh stop then fresh status again
+    Then the native fixture verification passed and JSON doctor reported every readiness check and the Claude source ready
+    And the controller was killed while the engine had accepted the held "<barrier>" call and the worker "<worker state>"
+    And fresh status before stop reports the original session with controller absent cleanup pending no workload exit credential staging "present" and the exact stop retry in plain and JSON output
+    And fresh stop removes the original worker and its host staging directory and confirms complete cleanup
+    And fresh status after stop reports complete cleanup credential staging "absent" and no workload exit or stop retry
+    And no start restart or create followed the kill and status and stop read neither the source nor the active approval without a current policy
+    And no provisioning surface of the recovery contains the raw marker or any base64-offset encoding
+    And the source approval and unrelated resources are unchanged and the checkout differs only by the scenario's journaled policy edits
+
+    Examples:
+      | barrier                            | worker state                                                          |
+      | after accepted create before reply | was created and never started                                         |
+      | after accepted start before reply  | ran and an exec read the exact source hash from the still staged copy |

@@ -11,7 +11,7 @@ import (
 	"github.com/cucumber/godog"
 )
 
-var credentialRunIDs = []string{"@ID-CREDRUN-08", "@ID-CREDRUN-09", "@ID-CREDRUN-10"}
+var credentialRunIDs = []string{"@ID-CREDRUN-08", "@ID-CREDRUN-09", "@ID-CREDRUN-10", "@ID-CREDRUN-11", "@ID-CREDRUN-12"}
 
 func testCredentialRunRedInventory(t *testing.T, include []shardEntry) {
 	t.Helper()
@@ -25,8 +25,8 @@ func testCredentialRunRedInventory(t *testing.T, include []shardEntry) {
 			t.Fatal(err)
 		}
 		if entry.Shard == "egress" {
-			if selection.count != 6 || selection.skip != "" || !slices.Equal(selection.ids, credentialRunIDs) {
-				t.Errorf("egress must select six credential run rows and three IDs: count=%d ids=%v skip=%q", selection.count, selection.ids, selection.skip)
+			if selection.count != 10 || selection.skip != "" || !slices.Equal(selection.ids, credentialRunIDs) {
+				t.Errorf("egress must select ten credential run rows and five IDs: count=%d ids=%v skip=%q", selection.count, selection.ids, selection.skip)
 			}
 		} else if selection.count != 0 || !strings.Contains(selection.skip, "other engine shard") {
 			t.Errorf("shard %s must leave credential run rows to egress: count=%d skip=%q", entry.Shard, selection.count, selection.skip)
@@ -91,8 +91,8 @@ func TestCredentialRunNativeStepsDefined(t *testing.T) {
 			}
 		}
 	}
-	if rows != 6 || steps != 69 {
-		t.Fatalf("checked %d rows and %d steps, expected 6 rows and 69 steps", rows, steps)
+	if rows != 10 || steps != 121 {
+		t.Fatalf("checked %d rows and %d steps, expected 10 rows and 121 steps", rows, steps)
 	}
 }
 
@@ -122,5 +122,23 @@ func credentialRunLedgerFeature(t *testing.T) []byte {
 		feature.WriteString(content)
 		feature.WriteByte('\n')
 	}
-	return []byte(strings.TrimRight(feature.String(), "\n") + "\n")
+	_, recovery, ok := strings.Cut(string(ledger), "\n- id: T-96\n")
+	if !ok {
+		t.Fatal("T-96 is missing from the task ledger")
+	}
+	recovery, _, _ = strings.Cut(recovery, "\n- id: ")
+	first := strings.Index(recovery, "        # T-96: a lost start acknowledgement")
+	last := strings.Index(recovery, "\n    Shard and definitions edits")
+	if first < 0 || last <= first {
+		t.Fatal("T-96's reviewed rows are missing from the task ledger")
+	}
+	// Keep a blank line between the two portions regardless of the ledger spacing.
+	base := strings.TrimRight(feature.String(), "\n")
+	feature.Reset()
+	feature.WriteString(base + "\n\n")
+	for line := range strings.SplitSeq(strings.TrimRight(recovery[first:last], "\n"), "\n") {
+		feature.WriteString(strings.TrimPrefix(line, "      "))
+		feature.WriteByte('\n')
+	}
+	return []byte(feature.String())
 }

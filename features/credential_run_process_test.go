@@ -70,6 +70,8 @@ type credentialRunProcess struct {
 	ctx                                     context.Context
 	cancel                                  context.CancelFunc
 	input                                   io.WriteCloser
+	process                                 *os.Process
+	processState                            *os.ProcessState
 	done                                    chan struct{}
 	out, diagnostic                         offlineBuffer
 	waitErr                                 error
@@ -111,9 +113,11 @@ func (p *credentialRunProject) start(index int) (*credentialRunProcess, error) {
 		cancel()
 		return nil, err
 	}
+	run.process = cmd.Process
 	p.runs = append(p.runs, run)
 	go func() {
 		err := cmd.Wait()
+		run.processState = cmd.ProcessState
 		run.exit = cmd.ProcessState.ExitCode()
 		var status *exec.ExitError
 		if err != nil && !errors.As(err, &status) {
