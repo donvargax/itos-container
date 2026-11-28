@@ -3,7 +3,7 @@ package features
 import (
 	"fmt"
 	"io"
-	"path/filepath"
+	"path"
 	"slices"
 	"strings"
 	"testing"
@@ -23,15 +23,13 @@ func TestCredentialRunMountInfo(t *testing.T) {
 }
 
 func TestCredentialRunFilesystemVerification(t *testing.T) {
-	cwd, err := filepath.Abs(".")
-	if err != nil {
-		t.Fatal(err)
-	}
-	root := filepath.VolumeName(cwd) + string(filepath.Separator)
-	parent := filepath.Join(root, "fixture")
-	checkout := filepath.Join(parent, "checkout")
+	const root = "/"
+	const parent = "/fixture"
+	const checkout = "/fixture/checkout"
 	fixtureMount := fmt.Sprintf("7 1 8:1 %s %s rw - ext4 /dev/test rw\n", root, root)
-	foreignMount := fmt.Sprintf("8 7 0:1 %s %s rw - tmpfs tmpfs rw\n", root, filepath.Join(checkout, "nested"))
+	foreignMount := func(mountPoint string) string {
+		return fmt.Sprintf("8 7 0:1 %s %s rw - tmpfs tmpfs rw\n", root, mountPoint)
+	}
 	tests := []struct {
 		name      string
 		shmMode   uint32
@@ -45,7 +43,8 @@ func TestCredentialRunFilesystemVerification(t *testing.T) {
 		{name: "writable ancestor", change: func(stat *credentialRunFileStat) { stat.mode |= 0o020 }, errorPath: parent},
 		{name: "symlink ancestor", change: func(stat *credentialRunFileStat) { stat.mode = credentialRunSymlink }, errorPath: parent},
 		{name: "absent mount ID", change: func(stat *credentialRunFileStat) { stat.mask = 0 }, errorPath: parent},
-		{name: "foreign nested mount", extra: foreignMount, errorPath: checkout},
+		{name: "foreign nested mount", extra: foreignMount(path.Join(checkout, "nested")), errorPath: checkout},
+		{name: "foreign sibling mount", extra: foreignMount(checkout + "-sibling")},
 		{name: "duplicate mount ID", extra: fixtureMount, errorPath: checkout},
 	}
 	for _, tt := range tests {

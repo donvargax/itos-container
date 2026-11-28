@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
+	"path"
 	"strconv"
 	"strings"
 )
@@ -62,6 +62,13 @@ func readCredentialRunMounts(file io.Reader) ([]credentialRunMount, error) {
 	return mounts, lines.Err()
 }
 
+// Mountinfo contains Linux paths even when the verifier is exercised on another OS.
+func credentialRunMountCovers(mountPoint, target string) bool {
+	mountPoint, target = path.Clean(mountPoint), path.Clean(target)
+	return path.IsAbs(mountPoint) &&
+		(target == mountPoint || strings.HasPrefix(target, strings.TrimSuffix(mountPoint, "/")+"/"))
+}
+
 func verifyCredentialRunFilesystem(paths []string) error {
 	return checkCredentialRunFilesystem(credentialRunFilesystemSystem, uint32(os.Geteuid()), paths)
 }
@@ -85,11 +92,11 @@ func checkCredentialRunFilesystem(filesystem credentialRunFilesystemIO, euid uin
 		return fmt.Errorf("%s type %#x uid %d", shm, shmType, shmStat.uid)
 	}
 	for _, root := range paths {
-		for path := root; ; path = filepath.Dir(path) {
-			fsType, fsErr := filesystem.statfs(path)
-			stat, statErr := filesystem.statx(path)
+		for ancestor := root; ; ancestor = path.Dir(ancestor) {
+			fsType, fsErr := filesystem.statfs(ancestor)
+			stat, statErr := filesystem.statx(ancestor)
 			kind := allowed[fsType]
-			bad := func() error { return fmt.Errorf("%s type %#x uid %d", path, fsType, stat.uid) }
+			bad := func() error { return fmt.Errorf("%s type %#x uid %d", ancestor, fsType, stat.uid) }
 			if fsErr != nil || statErr != nil || kind == "" || stat.mask&credentialRunMountID == 0 ||
 				(stat.uid != euid && stat.uid != 0) ||
 				(stat.mode&0022 != 0 && (stat.uid != 0 || stat.mode&credentialRunSticky == 0)) ||
@@ -100,19 +107,19 @@ func checkCredentialRunFilesystem(filesystem credentialRunFilesystemIO, euid uin
 			for _, m := range mounts {
 				if m.id == stat.mountID {
 					named++
-					if !filepath.IsAbs(m.root) || !credentialRunUnderOrEqual(path, m.path) || m.kind != kind {
+					if !path.IsAbs(m.root) || !credentialRunMountCovers(m.path, ancestor) || m.kind != kind {
 						return bad()
 					}
 				}
-				if (credentialRunUnderOrEqual(root, m.path) || credentialRunUnderOrEqual(m.path, root)) &&
+				if (credentialRunMountCovers(m.path, root) || credentialRunMountCovers(root, m.path)) &&
 					m.kind != "ext4" && m.kind != "btrfs" && m.kind != "xfs" {
-					return fmt.Errorf("%s type %s uid %d", path, m.kind, stat.uid)
+					return fmt.Errorf("%s type %s uid %d", ancestor, m.kind, stat.uid)
 				}
 			}
 			if named != 1 {
 				return bad()
 			}
-			if path == filepath.Dir(path) {
+			if ancestor == path.Dir(ancestor) {
 				break
 			}
 		}

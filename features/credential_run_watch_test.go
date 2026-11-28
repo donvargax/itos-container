@@ -27,6 +27,7 @@ type credentialWatchIO struct {
 	read     func(int, []byte) (int, error)
 	poll     func(int, int) (int, error)
 	close    func(int) error
+	walkDir  func(string, fs.WalkDirFunc) error
 }
 
 type credentialEventObserver struct {
@@ -46,7 +47,9 @@ type credentialObserverSnapshot struct {
 }
 
 func newCredentialRunObserver(checkout, control string) (credentialRunObserver, error) {
-	return startCredentialRunObserver(credentialWatchSystem, true, checkout, control)
+	watchIO := credentialWatchSystem
+	watchIO.walkDir = filepath.WalkDir
+	return startCredentialRunObserver(watchIO, true, checkout, control)
 }
 
 func newCredentialRunStagingObserver() (credentialRunObserver, error) {
@@ -82,7 +85,7 @@ func startCredentialRunObserver(watchIO credentialWatchIO, recursive bool, roots
 }
 
 func (o *credentialEventObserver) watchTree(root string, created bool) error {
-	return filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+	return o.watchIO.walkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if created && os.IsNotExist(err) {
 			return nil
 		}
