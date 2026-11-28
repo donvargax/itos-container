@@ -2955,7 +2955,7 @@ items:
     title: A shared raw CredentialFS contract runs unchanged against the I/O-free fake and the disk adapter
     phase: 1
     owner: donvargax
-    status: todo
+    status: doing
     depends_on: [slice-30, T-48, T-77]
     kind: task
   - id: slice-62

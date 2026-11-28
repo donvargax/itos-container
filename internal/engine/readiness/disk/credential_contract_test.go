@@ -1,6 +1,7 @@
 package disk
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"io/fs"
@@ -36,10 +37,48 @@ func TestCredentialObservationContract(t *testing.T) {
 	}
 }
 
+type rawCredentialReporter = porttest.Reporter
+type rawCredentialFixture = porttest.CredentialFiles
+type rawCredentialBatch = porttest.CredentialBatch
+
+func newRawCredentialFixture() *rawCredentialFixture { return porttest.CredentialFixture() }
+
+func requireCurrentCredentialRawSuite(t *testing.T) {
+	t.Helper()
+	body := func(path string) []byte {
+		t.Helper()
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, body, found := bytes.Cut(data, []byte("\nimport (\n"))
+		if !found {
+			t.Fatalf("raw contract imports missing in %s", path)
+		}
+		return body
+	}
+	if !bytes.Equal(body("credential_raw_suite_test.go"), body("../port/porttest/credential_raw_suite_test.go")) {
+		t.Fatal("disk raw contract is stale. Run go generate ./internal/engine/readiness/port/porttest")
+	}
+}
+
+func TestCredentialRawContract(t *testing.T) {
+	requireCurrentCredentialRawSuite(t)
+	if runtime.GOOS != "linux" {
+		t.Skip("native descriptor calls require Linux")
+	}
+	credentialRawContract(t, func(raw *porttest.CredentialFiles) (credentialRawFS, func() int) {
+		raw.Parser = ParseCredentialMounts
+		raw.FDParser = ParseCredentialMountID
+		fixture := credentialNativeFixture(t, raw)
+		return fixture, func() int { return len(fixture.handles) }
+	})
+}
+
 // Only raw OS observations are substituted. The disk adapter still acquires
 // native O_PATH handles, compares pre-open identities, parses kernel text and
 // performs its descriptor/readdir mapping. No mount or privileged chown occurs.
-func credentialNativeFixture(t *testing.T, raw *porttest.CredentialFiles) port.CredentialFS {
+func credentialNativeFixture(t *testing.T, raw *porttest.CredentialFiles) credentialContractFiles {
 	t.Helper()
 	root := t.TempDir()
 	byFD := map[int]port.CredentialHandle{}
@@ -182,7 +221,10 @@ func credentialNativeFixture(t *testing.T, raw *porttest.CredentialFiles) port.C
 		}
 		return []byte(fmt.Sprintf("mnt_id:\t%d\n", d.MountID)), ok
 	}
-	ops.entries = func(file *os.File, _ int) ([]os.DirEntry, error) {
+	ops.entries = func(file *os.File, count int) ([]os.DirEntry, error) {
+		if count != 128 {
+			t.Errorf("directory read count = %d, want 128", count)
+		}
 		h := byFD[fdFrom(file.Name(), "/proc/self/fd/")]
 		names, done, ok := raw.Entries(h)
 		if !ok {
@@ -198,7 +240,7 @@ func credentialNativeFixture(t *testing.T, raw *porttest.CredentialFiles) port.C
 		return entries, nil
 	}
 	files.ops = &ops
-	return credentialContractFiles{CredentialFS: files, closeRaw: func(h port.CredentialHandle) {
+	return credentialContractFiles{CredentialFiles: files, closeRaw: func(h port.CredentialHandle) {
 		if p := files.handles[h]; p != nil {
 			fd := int(p.file.Fd())
 			raw.Close(byFD[fd])
@@ -211,13 +253,13 @@ func credentialNativeFixture(t *testing.T, raw *porttest.CredentialFiles) port.C
 // Keep the raw observation handles' lifetimes aligned with the native handles
 // they describe, including early closes during pathname revalidation.
 type credentialContractFiles struct {
-	port.CredentialFS
+	*CredentialFiles
 	closeRaw func(port.CredentialHandle)
 }
 
 func (f credentialContractFiles) Close(h port.CredentialHandle) {
 	f.closeRaw(h)
-	f.CredentialFS.Close(h)
+	f.CredentialFiles.Close(h)
 }
 
 type credentialEntryName string
