@@ -10244,9 +10244,11 @@
         string; Arrived, Forwarded time.Time; StagedAbsentAtArrival, Released, Expired bool}.
 
     TestCredentialRunRecoveryRecorder is an ordinary go test in its own file,
-    credential_run_recorder_regression_test.go. It uses no engine and no product. Its fake
-    upstream is an in-process http.Server on a Unix socket under os.MkdirTemp("", "crr-"), kept
-    short for sun_path. The fake answers POST /v1.47/containers/create with 201 and {"Id": <64
+    credential_run_recorder_regression_linux_test.go, so the manual Windows Tests job never builds
+    it. It uses no engine and no product. Its fake upstream is an in-process http.Server on a Unix
+    socket under os.MkdirTemp("/tmp", "crr-"), the root fixtureSocketRoot() uses, never TMPDIR:
+    a long TMPDIR or test name would push the path past Linux's 108-byte sun_path limit and fail
+    net.Listen before any assertion. The fake answers POST /v1.47/containers/create with 201 and {"Id": <64
     hex>}, start, kill and stop with 204, DELETE with 204 and GET .../json with 200 {}, and logs
     each call's path and arrival time. The recorder under test listens on a second socket in that
     directory with a 100 ms hold. Subtests:
