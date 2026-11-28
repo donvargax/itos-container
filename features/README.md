@@ -154,8 +154,7 @@ checkout of the exact `${{ env.TO }}` head, preflight, fixture preparation and c
 `checkout-overlap.feature`, `claude-home.feature`, `doctor.feature`, `hardlinks.feature`,
 `recovery.feature`, `run_terminal.feature`, `session.feature`, `sockets.feature`; `claude-home.feature` is slice-36's and is skipped and
 logged as pending until the file exists) and **egress** (`egress.feature`,
-`credentials-run.feature`, which slice-31 brings and the shard skips and logs as pending until the
-file exists, and `egress_lifecycle.feature`, which joins it when it exists). `pendingEngineFeatures`
+`credentials-run.feature`, and `egress_lifecycle.feature`, which joins it when it exists). `pendingEngineFeatures`
 in `features_test.go` is the one reviewed list of such names, each with its item and its one permitted shard; any other absent or `@engine`-less name
 is refused. Nothing crosses runners, `fail-fast` is off
 so a red shard hides no other, no feature is ever split, and shards run on main pushes, non-draft

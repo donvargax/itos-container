@@ -63,8 +63,7 @@ var shardOtherFiles = []string{
 }
 
 // egressShardFiles is the egress shard's complete pinned set: credentials-run.feature
-// (T-77's placement, held whether or not the file is on this tree yet: see
-// pendingEngineFeatures), egress.feature, plus egress_lifecycle.feature while the engine
+// (T-77's placement, now on the tree), egress.feature, plus egress_lifecycle.feature while the engine
 // inventory has it, so slice-28's file joins this shard when it lands on this tree
 // (T-59's placement). The list is sorted, as shardFileIssue compares it. The pin is this explicit
 // allowlist, never the inventory's leftover: a new engine file is not allowed to hide
@@ -281,6 +280,9 @@ func TestEngineShards(t *testing.T) {
 				t.Errorf("shard %s must leave home rows to offline: count=%d skip=%q", entry.Shard, selection.count, selection.skip)
 			}
 		}
+	})
+	t.Run("credentials-run red inventory", func(t *testing.T) {
+		testCredentialRunRedInventory(t, workflow.Jobs[shardJobID].Strategy.Matrix.Include)
 	})
 	t.Run("selector", testShardSelector)
 	t.Run("multiline egress report", func(t *testing.T) {
@@ -519,8 +521,9 @@ func testBrokenShardWorkflows(t *testing.T) {
 		{"a feature in two shards", "feature in two shards", replaceFeatures("lifecycle", "lifecycle.feature", "lifecycle.feature offline.feature")},
 		{"a feature twice in one shard", "feature in two shards", replaceFeatures("offline", "offline.feature", "offline.feature offline.feature")},
 		{"an unknown feature", "unknown engine feature", replaceFeatures("other", "doctor.feature", "doctor.feature absent.feature")},
-		{"a pending file in the other shard", "pending feature", replaceFeatures("other", "doctor.feature", "doctor.feature credentials-run.feature")},
-		{"the pending file missing from egress", "shard egress files", replaceFeatures("egress", "credentials-run.feature", "")},
+		{"a pending file in the other shard", "pending feature", replaceFeatures("other", "doctor.feature", "doctor.feature credentials-run-native.feature")},
+		{"credentials-run.feature in two shards", "feature in two shards", replaceFeatures("other", "doctor.feature", "doctor.feature credentials-run.feature")},
+		{"credentials-run.feature missing from egress", "shard egress files", replaceFeatures("egress", "credentials-run.feature", "")},
 		{"a path", "feature path", replaceFeatures("other", "doctor.feature", "features/doctor.feature")},
 		{"an absolute path", "feature path", replaceFeatures("other", "doctor.feature", "/doctor.feature")},
 		{"an empty shard", "empty shard", editShard(func(j *workflowJob) { j.Strategy.Matrix.Include[2].Features = " " })},
