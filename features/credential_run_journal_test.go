@@ -22,10 +22,13 @@ type credentialRunExchange struct {
 	RequestBody, ResponseBody       []byte
 	Status                          int
 	Truncated                       bool
+	At                              time.Time
+	Fault                           string
 }
 
 type credentialRunJournal struct {
 	mu        sync.Mutex
+	faults    credentialRunRecorder
 	exchanges []*credentialJournalEntry
 	server    *http.Server
 	transport *http.Transport
@@ -33,6 +36,7 @@ type credentialRunJournal struct {
 
 type credentialJournalEntry struct {
 	metadata          credentialRunExchange
+	firstStart        bool
 	request, response credentialJournalBody
 }
 
@@ -63,11 +67,17 @@ func (b *credentialJournalBody) snapshot() ([]byte, bool) {
 type credentialJournalKey struct{}
 
 func newCredentialRunJournal(socket string) (*credentialRunJournal, error) {
+	return newCredentialRunRecorder(socket, "/var/run/docker.sock", engineCallBudget/2)
+}
+
+func newCredentialRunRecorder(socket, upstream string, hold time.Duration) (*credentialRunJournal, error) {
 	listener, err := net.Listen("unix", socket)
 	if err != nil {
 		return nil, err
 	}
-	j := &credentialRunJournal{transport: doctorTransport("/var/run/docker.sock")}
+	j := &credentialRunJournal{transport: doctorTransport(upstream), faults: credentialRunRecorder{hold: hold,
+		accepted: make(chan string, 1), held: make(chan string, 1), released: make(chan struct{}), cleared: make(chan struct{}), endingArrived: make(chan struct{}), barrierEnded: make(chan struct{}),
+	}}
 	j.transport.DisableCompression = true
 	proxy := &httputil.ReverseProxy{
 		Transport: j.transport, FlushInterval: -1, ErrorLog: log.New(io.Discard, "", 0),
@@ -78,6 +88,9 @@ func newCredentialRunJournal(socket string) (*credentialRunJournal, error) {
 		},
 		ModifyResponse: func(r *http.Response) error {
 			entry := r.Request.Context().Value(credentialJournalKey{}).(*credentialJournalEntry)
+			if err := j.recordFaultReply(entry, r); err != nil {
+				return err
+			}
 			j.mu.Lock()
 			defer j.mu.Unlock()
 			entry.metadata.Status, entry.metadata.ResponseHeaders = r.StatusCode, r.Header.Clone()
@@ -88,7 +101,13 @@ func newCredentialRunJournal(socket string) (*credentialRunJournal, error) {
 			}
 			return nil
 		},
-		ErrorHandler: func(w http.ResponseWriter, r *http.Request, _ error) {
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, cause error) {
+			if errors.Is(cause, errCredentialReplyWithheld) {
+				if conn, _, err := http.NewResponseController(w).Hijack(); err == nil {
+					_ = conn.Close()
+				}
+				return
+			}
 			entry := r.Context().Value(credentialJournalKey{}).(*credentialJournalEntry)
 			const message = "fixture engine transport failed\n"
 			j.mu.Lock()
@@ -105,7 +124,7 @@ func newCredentialRunJournal(socket string) (*credentialRunJournal, error) {
 		ReadHeaderTimeout: 10 * time.Second,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			entry := &credentialJournalEntry{metadata: credentialRunExchange{
-				Method: r.Method, Path: r.URL.EscapedPath(), Query: r.URL.RawQuery, RequestHeaders: r.Header.Clone(),
+				At: time.Now(), Method: r.Method, Path: r.URL.EscapedPath(), Query: r.URL.RawQuery, RequestHeaders: r.Header.Clone(),
 			}}
 			entry.metadata.RequestHeaders.Set("Host", r.Host)
 			if r.Body != nil && r.Body != http.NoBody {
@@ -116,6 +135,9 @@ func newCredentialRunJournal(socket string) (*credentialRunJournal, error) {
 			j.mu.Lock()
 			j.exchanges = append(j.exchanges, entry)
 			j.mu.Unlock()
+			if j.applyFault(w, r, entry) {
+				return
+			}
 			proxy.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), credentialJournalKey{}, entry)))
 		}),
 	}
@@ -159,6 +181,7 @@ func (j *credentialRunJournal) scan(scan func(string, []byte) error) error {
 }
 
 func (j *credentialRunJournal) close() error {
+	j.clear()
 	j.transport.CloseIdleConnections()
 	return j.server.Close()
 }
