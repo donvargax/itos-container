@@ -10083,11 +10083,43 @@
     to one sandbox; uncommitted changes come along only on request (--include-dirty), the agent
     commits inside the box, and the host fetches the commits back. That fits the rule that pushes
     stay on the host, and would let decisions 0013, 0019 and 0020 shrink; it changes the contract's
-    checkout-is-the-only-mount line, so it stays the person's call. Read docs/adr/26-10-08-561 in
-    that repository first.
-    The proposal leaves three questions open for the person. Should the mount rule in
-    docs/plans/container-pilot.md:95 change? Should copy mode be offered alongside the mount or
-    only for remote sandboxes? What happens to uncommitted edits?
+    checkout-is-the-only-mount line, so it stays the person's call.
+
+    The task is one new document, docs/plans/workspace-copy-mode.md, a regular file (not a symlink)
+    written as a proposal for the person, in the shape of docs/plans/credential-brokering.md. It
+    selects nothing to build and changes no code, scenario, step, dependency, decision record,
+    charter, contract, standing line, workflow or other registry entry; the check refuses any
+    changed path but the document and T-98's own entries. The person's design-point rule
+    (docs/decisions/STANDING.md:66) asks for a status and a date, so the document opens with a
+    status line reading 'Status: proposed, 2026-11-27'. That date is the one this task's check
+    fixes for the proposal; the document claims no other event on it. It says that copy mode is
+    outside the current milestone: milestone two, steps 1 to 5 (docs/charter.md:47), does not need
+    it, and the charter records such an idea without specifying it (docs/charter.md:123). It
+    places copy mode beside the settled call that microVMs come later, on several cloud providers
+    (docs/charter.md:157), since a remote sandbox has no host filesystem to mount, and beside the
+    settled call that GitHub credentials stay on the host and the host pushes and lands
+    (docs/decisions/STANDING.md:39): the worker returns commits as a bundle or a fetchable branch
+    and never pushes. It compares the two ways in (a bundle written into the sandbox's volume, or a
+    read-only origin served to the box as Discobox does, which a local run would have to reach
+    through the egress allowlist) and the ways back, and names for each of decisions 0013 (shared
+    checkout inodes), 0019 (checkout sockets) and 0020 (the descriptor-backed anchor) what a copy
+    would make unnecessary and what would still be needed while the mount mode remains. Discobox's
+    docs/adr/26-10-08-561 may be read at github.com for this; if it cannot be read, the summary
+    above is the source, cited as read on 2026-11-23 at 97b2281, and nothing beyond it is claimed.
+
+    The document leaves three questions open for the person, under a heading that says so in those
+    words ('open for the person'), each with one recommendation marked proposed. First, should the
+    mount rule in docs/plans/container-pilot.md:95 change? Recommended: leave it as it is until a
+    copy mode is scheduled, then amend it so that a copy-mode run has no host mount at all. Second,
+    should copy mode be offered alongside the mount, or only for remote sandboxes? Recommended:
+    remote sandboxes first, with local copy mode a later option beside the mount, never in place
+    of it. Third, what happens to uncommitted edits in the host checkout? Recommended: they are not
+    copied unless the person asks for it on that run, and the run's result comes back only as
+    commits, so an uncommitted host edit is never overwritten.
+
+    The check fails today because the document does not exist. Commit type docs. The implementer
+    may commit freely in its workspace; the host makes the landing commits and handles itos,
+    submission, publication and review.
   done_when:
     - prose: true
       run: |
